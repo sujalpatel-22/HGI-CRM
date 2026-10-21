@@ -119,7 +119,7 @@ jobs:
           cp android/app/build/outputs/apk/debug/app-debug.apk "dist/HGI-Billing-$V-debug.apk"
           (cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt)
           # full generated Android Studio project (without build outputs) for local builds
-          tar --exclude='android/app/build' --exclude='android/build' --exclude='android/.gradle' --exclude='android/app/src/main/assets/public' \
+          tar --exclude='build' --exclude='.gradle' --exclude='.idea' --exclude='android/app/src/main/assets/public' \
             -czf "dist/HGI-Billing-$V-android-project.tgz" android
 
       - uses: actions/upload-artifact@v4
