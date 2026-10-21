@@ -21,12 +21,20 @@ console.log(`▶ ${label}: ${device.model()} · Android SDK ${sdk} · WebView ${
 const shot = async n => fs.writeFileSync(path.join(OUT, `${label}-${n}.png`), await device.screenshot());
 
 async function launch() {
-  await device.shell(`am force-stop ${PKG}`);
-  await device.shell(`am start -W -n ${PKG}/.MainActivity`);
-  const webview = await device.webView({ pkg: PKG }, { timeout: 90000 });
-  const page = await webview.page();
-  await page.waitForFunction(() => window.HGI_READY === true, null, { timeout: 90000 });
-  return page;
+  // the DevTools socket of a freshly started WebView is sometimes not picked up on slow CI emulators → retry
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await device.shell(`am force-stop ${PKG}`);
+      await device.shell(`am start -W -n ${PKG}/.MainActivity`);
+      const webview = await device.webView({ pkg: PKG }, { timeout: 60000 });
+      const page = await webview.page();
+      await page.waitForFunction(() => window.HGI_READY === true, null, { timeout: 60000 });
+      return page;
+    } catch (e) {
+      if (attempt >= 3) throw e;
+      console.log(`    (launch attempt ${attempt} failed: ${String(e).split('\n')[0]} — retrying)`);
+    }
+  }
 }
 
 let page = await launch();
@@ -55,14 +63,11 @@ await page.waitForTimeout(500);
 const phone = await page.evaluate(() => window.innerWidth < 768);
 check(!(await page.isVisible('#onboarding')) && (await page.isVisible('#bottom-nav')) === phone, `onboarding done, ${phone ? 'bottom tab bar' : 'tablet top navigation'} shown`);
 await shot('02-dashboard');
-console.log('    layout:', JSON.stringify(await page.evaluate(() => {
-  const r = e => { if (!e) return null; const b = e.getBoundingClientRect(); return [e.tagName + (e.id ? '#' + e.id : '') + '.' + String(e.className).slice(0, 60), Math.round(b.x), Math.round(b.y), Math.round(b.width), Math.round(b.height)]; };
-  const at = [10, 30, 50, 70].map(y => r(document.elementFromPoint(innerWidth / 2, y)));
-  const hdr = document.querySelector('#app-container > header');
-  return { vw: innerWidth, vh: innerHeight, dpr: devicePixelRatio, sat: getComputedStyle(document.documentElement).getPropertyValue('--safe-area-inset-top'),
-    at, header: r(hdr), kids: hdr ? [...hdr.querySelectorAll('*')].slice(0, 12).map(r) : null, logoSrc: (document.getElementById('header-logo') || {}).src?.slice(0, 40),
-    bodyKids: [...document.body.children].map(r).filter(x => x[4] > 0) };
-})));
+const ui = (await device.shell('uiautomator dump /sdcard/hgi-ui.xml >/dev/null 2>&1; cat /sdcard/hgi-ui.xml')).toString();
+check(ui.includes('<hierarchy') && !/class="android.widget.TextView"[^>]*text="HGI Billing"|text="HGI Billing"[^>]*class="android.widget.TextView"/.test(ui) && !ui.includes('action_bar'), 'no native title bar over the app (web header is at the top)');
+const hdr = await page.evaluate(() => { const h = document.querySelector('#app-container > header'); return { pad: parseFloat(getComputedStyle(h).paddingTop), sat: getComputedStyle(document.documentElement).getPropertyValue('--safe-area-inset-top').trim() }; });
+console.log('    header padding-top (status bar inset):', JSON.stringify(hdr));
+check(hdr.pad >= 12, `navy header extends under the status bar (padding ${hdr.pad}px)`);
 
 // invoice
 await page.evaluate(() => newDocument('INV'));

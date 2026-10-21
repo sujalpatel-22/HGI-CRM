@@ -10,8 +10,11 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(HgiNativePlugin.class);
-        // Capacitor 8 SystemBars (insetsHandling = css) expects edge-to-edge to be enabled by the app
-        EdgeToEdge.enable(this);
         super.onCreate(savedInstanceState);
+        // Edge-to-edge only AFTER BridgeActivity has switched from the splash (launch) theme to
+        // AppTheme.NoActionBar. Doing it before super.onCreate() creates the window decor with the
+        // launch theme, which leaves a native title bar (with the stretched splash image) over the app
+        // on Android 12+. The web header pads itself with the status-bar inset (SystemBars, css mode).
+        EdgeToEdge.enable(this);
     }
 }

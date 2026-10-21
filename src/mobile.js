@@ -89,7 +89,13 @@
     const dark = pref === 'dark' || (pref === 'system' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
     document.documentElement.classList.toggle('dark', dark);
     const meta = document.querySelector('meta[name="theme-color"]'); if (meta) meta.content = dark ? '#0b1220' : '#0b3a6f';
-    try { if (isNative && cap.Plugins.SystemBars) cap.Plugins.SystemBars.setStyle({ style: 'DARK' }); } catch (e) { /* optional */ }
+    try {
+      const sb = isNative && cap.Plugins.SystemBars;
+      if (sb) {   // light icons over the navy header; nav-bar icons follow the bottom tab bar colour
+        Promise.resolve(sb.setStyle({ style: 'DARK', bar: 'StatusBar' })).catch(() => {});
+        Promise.resolve(sb.setStyle({ style: dark ? 'DARK' : 'LIGHT', bar: 'NavigationBar' })).catch(() => {});
+      }
+    } catch (e) { /* optional */ }
   }
   if (window.matchMedia) matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
 
