@@ -6,8 +6,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+# contents: write only so the job can publish its logs + APK/AAB to the ci-output-* branches
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: android-${{ github.ref }}
@@ -17,7 +18,7 @@ jobs:
   build:
     name: Build web + signed APK/AAB
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
     outputs:
       signing: ${{ steps.signing.outputs.mode }}
     steps:
@@ -28,23 +29,18 @@ jobs:
           node-version: 22
 
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: |
+          mkdir -p logs
+          npm install --no-audit --no-fund 2>&1 | tee logs/01-npm-install.log
+          npm ls --depth=0 2>&1 | tee logs/01-npm-versions.log || true
 
       - name: Build web app (offline bundle)
-        run: npm run build:web
+        run: npm run build:web 2>&1 | tee logs/02-build-web.log
 
       - name: Web tests (Chromium — phone, tablet, desktop)
         run: |
-          npx playwright install --with-deps chromium
-          npm run test:web
-
-      - name: Upload web test screenshots
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: web-test-screenshots
-          path: tests/out/
-          if-no-files-found: ignore
+          npx playwright install --with-deps chromium > logs/03-playwright-install.log 2>&1
+          npm run test:web 2>&1 | tee logs/03-web-tests.log
 
       - uses: actions/setup-java@v4
         with:
@@ -55,9 +51,10 @@ jobs:
 
       - name: Generate & patch Android project
         run: |
-          npx cap add android
-          node tools/patch-android.mjs
-          npx cap sync android
+          npx cap add android 2>&1 | tee logs/04-cap-add.log
+          node tools/patch-android.mjs 2>&1 | tee logs/04-patch.log
+          npx cap sync android 2>&1 | tee logs/04-cap-sync.log
+          cat android/variables.gradle > logs/04-variables.gradle.txt || true
 
       - name: Signing key
         id: signing
@@ -90,16 +87,18 @@ jobs:
 
       - name: Gradle build (debug APK, release APK, release AAB)
         working-directory: android
-        run: ./gradlew --no-daemon assembleDebug assembleRelease bundleRelease
+        run: ./gradlew --no-daemon --stacktrace assembleDebug assembleRelease bundleRelease 2>&1 | tee ../logs/05-gradle.log
 
       - name: Verify signatures & package
         run: |
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
           APK=android/app/build/outputs/apk/release/app-release.apk
           AAB=android/app/build/outputs/bundle/release/app-release.aab
-          "$BT/apksigner" verify --verbose --print-certs "$APK"
-          jarsigner -verify "$AAB" | tail -1
-          "$BT/aapt2" dump badging "$APK" | grep -E "package:|sdkVersion|targetSdkVersion|application-label:"
+          {
+            "$BT/apksigner" verify --verbose --print-certs "$APK"
+            jarsigner -verify -verbose:summary "$AAB" | tail -3
+            "$BT/aapt2" dump badging "$APK" | grep -E "package:|sdkVersion|targetSdkVersion|application-label:|uses-permission"
+          } 2>&1 | tee logs/06-verify.log
           "$BT/aapt2" dump badging "$APK" | grep -q "targetSdkVersion:'36'" || (echo "::error::targetSdk must be 36 for Google Play" && exit 1)
 
       - name: Collect artifacts
@@ -111,12 +110,28 @@ jobs:
           cp android/app/build/outputs/bundle/release/app-release.aab "dist/HGI-Billing-$V$TAG.aab"
           cp android/app/build/outputs/apk/debug/app-debug.apk "dist/HGI-Billing-$V-debug.apk"
           (cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt)
+          # full generated Android Studio project (without build outputs) for local builds
+          tar --exclude='android/app/build' --exclude='android/build' --exclude='android/.gradle' --exclude='android/app/src/main/assets/public' \
+            -czf "dist/HGI-Billing-$V-android-project.tgz" android
 
       - uses: actions/upload-artifact@v4
+        if: success()
         with:
           name: hgi-billing-android
           path: dist/
           if-no-files-found: error
+
+      - name: Publish logs & build files to branch ci-output-build
+        if: always()
+        run: |
+          OUT=$RUNNER_TEMP/ci-out; rm -rf "$OUT"; mkdir -p "$OUT"
+          cp -r logs "$OUT/" 2>/dev/null || true
+          [ -d dist ] && cp -r dist "$OUT/" || true
+          [ -d tests/out ] && mkdir -p "$OUT/web-screens" && cp tests/out/*.png "$OUT/web-screens/" 2>/dev/null || true
+          echo "run=$GITHUB_RUN_ID number=$GITHUB_RUN_NUMBER sha=$GITHUB_SHA ref=$GITHUB_REF status=${{ job.status }} signing=${{ steps.signing.outputs.mode }}" > "$OUT/STATUS.txt"
+          cd "$OUT" && git init -q -b ci-output-build && git add -A
+          git -c user.name="hgi-ci" -c user.email="hgi-ci@users.noreply.github.com" commit -qm "build output run $GITHUB_RUN_ID (${{ job.status }})"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" ci-output-build
 
   emulator-test:
     name: Emulator API ${{ matrix.api }} (${{ matrix.profile }})
@@ -156,11 +171,16 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -memory 3072
           script: |
-            adb install -r dist/*-debug.apk
-            HGI_TEST_LABEL=api${{ matrix.api }}-${{ matrix.profile }} node tests/android-smoke.mjs
-      - uses: actions/upload-artifact@v4
+            mkdir -p tests/out-android
+            adb install -r dist/*-debug.apk 2>&1 | tee tests/out-android/install.log
+            HGI_TEST_LABEL=api${{ matrix.api }}-${{ matrix.profile }} node tests/android-smoke.mjs > tests/out-android/smoke.log 2>&1; R=$?; cat tests/out-android/smoke.log; adb logcat -d > tests/out-android/logcat.txt 2>&1; exit $R
+      - name: Publish results to branch ci-output-emu-api${{ matrix.api }}
         if: always()
-        with:
-          name: emulator-api${{ matrix.api }}-${{ matrix.profile }}
-          path: tests/out-android/
-          if-no-files-found: ignore
+        run: |
+          OUT=$RUNNER_TEMP/ci-out; rm -rf "$OUT"; mkdir -p "$OUT"
+          cp -r tests/out-android "$OUT/" 2>/dev/null || true
+          echo "run=$GITHUB_RUN_ID api=${{ matrix.api }} profile=${{ matrix.profile }} status=${{ job.status }}" > "$OUT/STATUS.txt"
+          B=ci-output-emu-api${{ matrix.api }}
+          cd "$OUT" && git init -q -b "$B" && git add -A
+          git -c user.name="hgi-ci" -c user.email="hgi-ci@users.noreply.github.com" commit -qm "emulator api${{ matrix.api }} run $GITHUB_RUN_ID (${{ job.status }})"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" "$B"
