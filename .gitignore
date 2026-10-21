@@ -1,7 +1,7 @@
-node_modules/
-www/
-android/
-dist/
+/node_modules/
+/www/
+/android/
+/dist/
 tests/out/
 tests/out-android/
 *.jks
