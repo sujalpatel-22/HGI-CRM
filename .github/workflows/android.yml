@@ -47,7 +47,15 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - uses: android-actions/setup-android@v3
+      - name: Android SDK 36 (runner's preinstalled SDK)
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" | tee logs/04-sdk.log
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          [ -x "$SDKM" ] || SDKM=$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager | sort -V | tail -1)
+          echo "sdkmanager: $SDKM" | tee -a logs/04-sdk.log
+          (yes || true) | "$SDKM" --licenses > /dev/null 2>&1 || true
+          "$SDKM" --install "platforms;android-36" "build-tools;36.0.0" "platform-tools" 2>&1 | tail -5 | tee -a logs/04-sdk.log
+          ls "$ANDROID_HOME/platforms" "$ANDROID_HOME/build-tools" 2>&1 | tee -a logs/04-sdk.log
 
       - name: Generate & patch Android project
         run: |
