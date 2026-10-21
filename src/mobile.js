@@ -9,12 +9,14 @@
   const APP_VERSION = '7.0.0';
   const cap = window.Capacitor;
   const isNative = !!(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform());
-  const Native = isNative && cap.registerPlugin ? cap.registerPlugin('HgiNative') : null;
+  // Without a bundler the native bridge exposes registered plugins on Capacitor.Plugins
+  const Native = isNative ? ((cap.Plugins && cap.Plugins.HgiNative) || (typeof cap.registerPlugin === 'function' ? cap.registerPlugin('HgiNative') : null)) : null;
+  if (isNative && !Native) console.error('[HGI] HgiNative plugin not available');
   const AppPlugin = isNative && cap.Plugins ? cap.Plugins.App : null;
   const i18n = window.HGI_I18N || { setLang() {}, t: s => s, LANGS: { en: 'English' }, translateTree() {} };
   const t = s => i18n.t(s);
   const mq = window.matchMedia ? window.matchMedia('(max-width: 767px)') : { matches: false, addEventListener() {} };
-  window.HGI_APP = { version: APP_VERSION, isNative };
+  window.HGI_APP = { version: APP_VERSION, isNative, hasNativePlugin: !!Native };
 
   /* ------------------------------------------------------------------ helpers */
   const wrap = (name, after, before) => {
@@ -218,7 +220,7 @@
       const has = storeGet('local', STORAGE_KEY);
       if (has) return;
       const r = await Native.readState({ key: 'state' });
-      if (r && r.data) { storeSet('local', STORAGE_KEY, r.data); console.log('[HGI] restored data from on-device mirror'); }
+      if (r && r.data) { storeSet('local', STORAGE_KEY, r.data); window.__restoredFromMirror = true; console.log('[HGI] restored data from on-device mirror'); }
     } catch (e) { /* first run */ }
   }
 

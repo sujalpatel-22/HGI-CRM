@@ -37,6 +37,8 @@ await page.waitForTimeout(1500);
 await shot('01-start');
 
 check(await page.evaluate(() => window.HGI_APP && window.HGI_APP.isNative === true), 'runs as native Capacitor app');
+check(await page.evaluate(() => window.HGI_APP.hasNativePlugin === true), 'HgiNative plugin reachable from JavaScript');
+check(await page.evaluate(async () => { await Capacitor.Plugins.HgiNative.writeState({ key: 'selftest', data: 'ok-123' }); const r = await Capacitor.Plugins.HgiNative.readState({ key: 'selftest' }); return r.data === 'ok-123'; }), 'native writeState/readState round trip');
 check(await page.evaluate(() => typeof window.QRCode === 'function' && typeof window.Chart === 'function'), 'bundled QR + Chart libraries loaded (offline)');
 check(await page.evaluate(async () => { await document.fonts.ready; return getComputedStyle(document.querySelector('.fa-solid') || document.body).fontFamily.includes('Font Awesome'); }), 'bundled Font Awesome icons');
 check(await page.evaluate(() => getComputedStyle(document.body).fontFamily.includes('Inter') && document.fonts.check('12px Inter')), 'bundled Inter font');
@@ -50,7 +52,8 @@ await page.fill('#ob-name', 'Emulator Test Traders'); await page.fill('#ob-gstin
 await page.fill('#ob-addr', 'GIDC Naroda, Ahmedabad'); await page.fill('#ob-pin', '382330');
 await page.click('#ob-next'); await page.fill('#ob-upi', 'test@upi'); await page.click('#ob-next'); await page.click('#ob-next');
 await page.waitForTimeout(500);
-check(!(await page.isVisible('#onboarding')) && await page.isVisible('#bottom-nav'), 'onboarding done, bottom navigation visible');
+const phone = await page.evaluate(() => window.innerWidth < 768);
+check(!(await page.isVisible('#onboarding')) && (await page.isVisible('#bottom-nav')) === phone, `onboarding done, ${phone ? 'bottom tab bar' : 'tablet top navigation'} shown`);
 await shot('02-dashboard');
 
 // invoice
@@ -71,7 +74,10 @@ check(await page.evaluate(() => [...document.querySelectorAll('#invoice-preview-
 await shot('04-preview');
 const sdkNum = Number(sdk);
 await device.shell(`rm -rf "/sdcard/Download/HGI Billing"`);
-const saveRes = await page.evaluate(async () => { try { HGI_M.savePdf(); await new Promise(r => setTimeout(r, 6000)); return 'ok'; } catch (e) { return String(e); } });
+const saveRes = await page.evaluate(async () => { try { await HGI_M.savePdf(); return 'ok'; } catch (e) { return String(e); } });
+await page.waitForTimeout(1500);
+const toastText = await page.evaluate(() => document.getElementById('toast-container').innerText);
+console.log('    save toast:', toastText.replace(/\n/g, ' / '));
 if (sdkNum >= 29) {
   const ls = (await device.shell(`ls -l "/sdcard/Download/HGI Billing/"`)).toString();
   const m = ls.match(/\s(\d{4,})\s.*\.pdf/);
@@ -97,7 +103,7 @@ page = await launch();
 check(await page.evaluate(() => state.invoices.length === 1 && state.company.name === 'Emulator Test Traders'), 'data persists after app restart');
 await page.evaluate(() => localStorage.clear());
 page = await launch();
-check(await page.evaluate(() => state.invoices.length === 1), 'data restored from on-device mirror when WebView storage is wiped');
+check(await page.evaluate(() => state.invoices.length === 1 && window.__restoredFromMirror === true), 'data restored from on-device mirror when WebView storage is wiped');
 
 // dark mode + Hindi
 await page.evaluate(() => { HGI_M.setTheme('dark'); HGI_M.setLang('hi'); }); await page.waitForTimeout(800);
