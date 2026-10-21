@@ -101,7 +101,11 @@ check(await page.evaluate(() => !document.getElementById('tab-dashboard').classL
 await page.evaluate(() => saveState()); await page.waitForTimeout(1500);
 page = await launch();
 check(await page.evaluate(() => state.invoices.length === 1 && state.company.name === 'Emulator Test Traders'), 'data persists after app restart');
-await page.evaluate(() => localStorage.clear());
+// simulate the WebView's storage being wiped (e.g. WebView update/reset): delete its Local Storage on disk while
+// the app is stopped (debug build → run-as), keep the app's own files dir where the native mirror lives
+await page.evaluate(() => localStorage.clear()); await page.waitForTimeout(500);
+await device.shell(`am force-stop ${PKG}`);
+await device.shell(`run-as ${PKG} sh -c 'rm -rf app_webview/Default/"Local Storage" app_webview/"Local Storage"; ls files'`).then(b => console.log('    files dir:', b.toString().trim()));
 page = await launch();
 check(await page.evaluate(() => state.invoices.length === 1 && window.__restoredFromMirror === true), 'data restored from on-device mirror when WebView storage is wiped');
 
