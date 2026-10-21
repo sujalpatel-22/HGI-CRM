@@ -55,6 +55,14 @@ await page.waitForTimeout(500);
 const phone = await page.evaluate(() => window.innerWidth < 768);
 check(!(await page.isVisible('#onboarding')) && (await page.isVisible('#bottom-nav')) === phone, `onboarding done, ${phone ? 'bottom tab bar' : 'tablet top navigation'} shown`);
 await shot('02-dashboard');
+console.log('    layout:', JSON.stringify(await page.evaluate(() => {
+  const r = e => { if (!e) return null; const b = e.getBoundingClientRect(); return [e.tagName + (e.id ? '#' + e.id : '') + '.' + String(e.className).slice(0, 60), Math.round(b.x), Math.round(b.y), Math.round(b.width), Math.round(b.height)]; };
+  const at = [10, 30, 50, 70].map(y => r(document.elementFromPoint(innerWidth / 2, y)));
+  const hdr = document.querySelector('#app-container > header');
+  return { vw: innerWidth, vh: innerHeight, dpr: devicePixelRatio, sat: getComputedStyle(document.documentElement).getPropertyValue('--safe-area-inset-top'),
+    at, header: r(hdr), kids: hdr ? [...hdr.querySelectorAll('*')].slice(0, 12).map(r) : null, logoSrc: (document.getElementById('header-logo') || {}).src?.slice(0, 40),
+    bodyKids: [...document.body.children].map(r).filter(x => x[4] > 0) };
+})));
 
 // invoice
 await page.evaluate(() => newDocument('INV'));
