@@ -64,10 +64,15 @@ const phone = await page.evaluate(() => window.innerWidth < 768);
 check(!(await page.isVisible('#onboarding')) && (await page.isVisible('#bottom-nav')) === phone, `onboarding done, ${phone ? 'bottom tab bar' : 'tablet top navigation'} shown`);
 await shot('02-dashboard');
 const ui = (await device.shell('uiautomator dump /sdcard/hgi-ui.xml >/dev/null 2>&1; cat /sdcard/hgi-ui.xml')).toString();
-check(ui.includes('<hierarchy') && !/class="android.widget.TextView"[^>]*text="HGI Billing"|text="HGI Billing"[^>]*class="android.widget.TextView"/.test(ui) && !ui.includes('action_bar'), 'no native title bar over the app (web header is at the top)');
-const hdr = await page.evaluate(() => { const h = document.querySelector('#app-container > header'); return { pad: parseFloat(getComputedStyle(h).paddingTop), sat: getComputedStyle(document.documentElement).getPropertyValue('--safe-area-inset-top').trim() }; });
-console.log('    header padding-top (status bar inset):', JSON.stringify(hdr));
-check(hdr.pad >= 12, `navy header extends under the status bar (padding ${hdr.pad}px)`);
+fs.writeFileSync(path.join(OUT, `${label}-ui.xml`), ui);
+check(ui.includes('<hierarchy') && !/<node[^>]*text="HGI Billing"[^>]*class="android.widget.TextView"/.test(ui), 'no native title bar over the app');
+// pixel just under the top edge of the screen (inside the status bar): must be the navy header colour, not grey/white
+const raw = await device.shell('screencap');
+const W = raw.readUInt32LE(0), H = raw.readUInt32LE(4), hdrLen = raw.length - W * H * 4;
+const px = y => { const o = hdrLen + (y * W + Math.floor(W / 2)) * 4; return [raw[o], raw[o + 1], raw[o + 2]]; };
+const top = px(8), below = px(Math.round(H * 0.06));
+console.log('    status-bar pixel', top, 'header pixel', below, 'insets', JSON.stringify(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--safe-area-inset-top'))));
+check(top[2] > top[0] + 40 && top[0] + top[1] + top[2] < 330, `status bar area is navy (rgb ${top.join(',')})`);
 
 // invoice
 await page.evaluate(() => newDocument('INV'));

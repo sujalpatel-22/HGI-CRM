@@ -1,6 +1,12 @@
 package in.hariguru.billing;
 
 import android.content.ContentResolver;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.LayerDrawable;
+import android.view.Gravity;
+import android.view.View;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
@@ -56,6 +62,33 @@ public class HgiNativePlugin extends Plugin {
     private static String safeName(String name, String fallback) {
         String n = name == null ? "" : name.replaceAll("[\\\\/:*?\"<>|]+", "_").trim();
         return n.isEmpty() ? fallback : n;
+    }
+
+    /**
+     * Colours shown behind the status bar (top half) and the navigation bar (bottom half) when the
+     * WebView is laid out between the system bars (Capacitor does that on WebView &lt; 140). Keeps the
+     * area above the navy header navy and the area below the tab bar the tab bar's colour.
+     */
+    @PluginMethod
+    public void setBarColors(PluginCall call) {
+        final int top, bottom;
+        try {
+            top = Color.parseColor(call.getString("top", "#062a52"));
+            bottom = Color.parseColor(call.getString("bottom", "#ffffff"));
+        } catch (IllegalArgumentException e) {
+            call.reject("bad colour");
+            return;
+        }
+        getActivity().runOnUiThread(() -> {
+            View decor = getActivity().getWindow().getDecorView();
+            int half = Math.max(getContext().getResources().getDisplayMetrics().heightPixels,
+                                getContext().getResources().getDisplayMetrics().widthPixels) / 2 + 1;
+            LayerDrawable ld = new LayerDrawable(new Drawable[] { new ColorDrawable(bottom), new ColorDrawable(top) });
+            ld.setLayerGravity(1, Gravity.TOP | Gravity.FILL_HORIZONTAL);
+            ld.setLayerHeight(1, half);
+            decor.setBackground(ld);
+            call.resolve();
+        });
     }
 
     @PluginMethod

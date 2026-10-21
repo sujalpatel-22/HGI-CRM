@@ -84,6 +84,11 @@
   }
 
   /* ------------------------------------------------------------------ theme */
+  function rgbHex(c) {
+    const m = String(c || '').match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?/);
+    if (!m || (m[4] !== undefined && Number(m[4]) === 0)) return null;
+    return '#' + [m[1], m[2], m[3]].map(n => Number(n).toString(16).padStart(2, '0')).join('');
+  }
   function applyTheme() {
     const pref = ui().theme || 'system';
     const dark = pref === 'dark' || (pref === 'system' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
@@ -94,6 +99,11 @@
       if (sb) {   // light icons over the navy header; nav-bar icons follow the bottom tab bar colour
         Promise.resolve(sb.setStyle({ style: 'DARK', bar: 'StatusBar' })).catch(() => {});
         Promise.resolve(sb.setStyle({ style: dark ? 'DARK' : 'LIGHT', bar: 'NavigationBar' })).catch(() => {});
+      }
+      if (Native && Native.setBarColors) {
+        const nav = document.getElementById('bottom-nav');
+        const bottom = (nav && getComputedStyle(nav).display !== 'none') ? rgbHex(getComputedStyle(nav).backgroundColor) : rgbHex(getComputedStyle(document.body).backgroundColor);
+        Promise.resolve(Native.setBarColors({ top: '#062a52', bottom: bottom || (dark ? '#0f1728' : '#ffffff') })).catch(() => {});
       }
     } catch (e) { /* optional */ }
   }
