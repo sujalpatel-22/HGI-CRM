@@ -1,0 +1,166 @@
+name: Android build & test
+
+on:
+  push:
+    branches: [main, "android-*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build web + signed APK/AAB
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    outputs:
+      signing: ${{ steps.signing.outputs.mode }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build web app (offline bundle)
+        run: npm run build:web
+
+      - name: Web tests (Chromium — phone, tablet, desktop)
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:web
+
+      - name: Upload web test screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-test-screenshots
+          path: tests/out/
+          if-no-files-found: ignore
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Generate & patch Android project
+        run: |
+          npx cap add android
+          node tools/patch-android.mjs
+          npx cap sync android
+
+      - name: Signing key
+        id: signing
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          KS="$RUNNER_TEMP/release.jks"
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$KS"
+            echo "HGI_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+            echo "HGI_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+            echo "HGI_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
+            echo "mode=release-key" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::No ANDROID_KEYSTORE_BASE64 secret — signing with a throw-away TEST key. Do NOT upload this build to Google Play."
+            PW=$(openssl rand -hex 16)
+            keytool -genkeypair -v -keystore "$KS" -storepass "$PW" -keypass "$PW" -alias hgi-test -keyalg RSA -keysize 2048 -validity 365 \
+              -dname "CN=HGI Billing TEST, O=HARIGURU INDUSTRIES, C=IN" -noprompt
+            echo "HGI_KEYSTORE_PASSWORD=$PW" >> "$GITHUB_ENV"
+            echo "HGI_KEY_ALIAS=hgi-test" >> "$GITHUB_ENV"
+            echo "HGI_KEY_PASSWORD=$PW" >> "$GITHUB_ENV"
+            echo "mode=test-key" >> "$GITHUB_OUTPUT"
+          fi
+          echo "HGI_KEYSTORE_FILE=$KS" >> "$GITHUB_ENV"
+          echo "HGI_VERSION_CODE=$(( 100 + GITHUB_RUN_NUMBER ))" >> "$GITHUB_ENV"
+          echo "HGI_VERSION_NAME=$(node -p "require('./package.json').version")" >> "$GITHUB_ENV"
+
+      - name: Gradle build (debug APK, release APK, release AAB)
+        working-directory: android
+        run: ./gradlew --no-daemon assembleDebug assembleRelease bundleRelease
+
+      - name: Verify signatures & package
+        run: |
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          AAB=android/app/build/outputs/bundle/release/app-release.aab
+          "$BT/apksigner" verify --verbose --print-certs "$APK"
+          jarsigner -verify "$AAB" | tail -1
+          "$BT/aapt2" dump badging "$APK" | grep -E "package:|sdkVersion|targetSdkVersion|application-label:"
+          "$BT/aapt2" dump badging "$APK" | grep -q "targetSdkVersion:'36'" || (echo "::error::targetSdk must be 36 for Google Play" && exit 1)
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p dist
+          V="$HGI_VERSION_NAME-$HGI_VERSION_CODE"
+          TAG=$([ "${{ steps.signing.outputs.mode }}" = "release-key" ] && echo "" || echo "-TESTKEY")
+          cp android/app/build/outputs/apk/release/app-release.apk "dist/HGI-Billing-$V$TAG.apk"
+          cp android/app/build/outputs/bundle/release/app-release.aab "dist/HGI-Billing-$V$TAG.aab"
+          cp android/app/build/outputs/apk/debug/app-debug.apk "dist/HGI-Billing-$V-debug.apk"
+          (cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hgi-billing-android
+          path: dist/
+          if-no-files-found: error
+
+  emulator-test:
+    name: Emulator API ${{ matrix.api }} (${{ matrix.profile }})
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { api: 30, profile: pixel_2, target: google_apis }   # Android 11, 5" phone
+          - { api: 33, profile: pixel_6, target: google_apis }   # Android 13, 6.4" phone
+          - { api: 35, profile: pixel_c, target: google_apis }   # Android 15, 10" tablet
+          - { api: 36, profile: pixel_7, target: google_apis }   # Android 16 (target SDK)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund --no-save playwright@1.56.0 && npx playwright install android
+      - uses: actions/download-artifact@v4
+        with:
+          name: hgi-billing-android
+          path: dist
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run smoke test on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          target: ${{ matrix.target }}
+          arch: x86_64
+          profile: ${{ matrix.profile }}
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -memory 3072
+          script: |
+            adb install -r dist/*-debug.apk
+            HGI_TEST_LABEL=api${{ matrix.api }}-${{ matrix.profile }} node tests/android-smoke.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: emulator-api${{ matrix.api }}-${{ matrix.profile }}
+          path: tests/out-android/
+          if-no-files-found: ignore

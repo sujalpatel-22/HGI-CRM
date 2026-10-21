@@ -1,0 +1,10 @@
+node_modules/
+www/
+android/
+dist/
+tests/out/
+tests/out-android/
+*.jks
+*.keystore
+*.base64.txt
+.env

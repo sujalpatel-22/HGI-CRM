@@ -1,0 +1,150 @@
+#!/usr/bin/env node
+// End-to-end test of the bundled web app (www/) in Chromium at phone, tablet and desktop sizes.
+// Runs in CI after `npm run build:web`. Exit code 1 on any failure. Screenshots → tests/out/
+import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
+import { chromium } from 'playwright';
+
+const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+const WWW = path.join(root, 'www');
+const OUT = path.join(root, 'tests', 'out');
+fs.mkdirSync(OUT, { recursive: true });
+const LOCAL_TW = process.env.HGI_LOCAL_TAILWIND_RUNTIME;   // dev-only: path to the Tailwind v3 play runtime when the CLI isn't available
+
+const TYPES = { html: 'text/html', js: 'text/javascript', css: 'text/css', woff2: 'font/woff2', woff: 'font/woff', ttf: 'font/ttf', png: 'image/png', svg: 'image/svg+xml', json: 'application/json' };
+const server = http.createServer((req, res) => {
+  const p = path.join(WWW, decodeURIComponent(new URL(req.url, 'http://x').pathname.replace(/^\/$/, '/index.html')));
+  if (!p.startsWith(WWW) || !fs.existsSync(p) || fs.statSync(p).isDirectory()) { res.writeHead(404); return res.end(); }
+  res.writeHead(200, { 'Content-Type': TYPES[p.split('.').pop()] || 'application/octet-stream' });
+  fs.createReadStream(p).pipe(res);
+});
+await new Promise(r => server.listen(0, '127.0.0.1', r));
+const base = `http://127.0.0.1:${server.address().port}/`;
+
+const VIEWPORTS = [
+  { name: 'phone-small-360', width: 360, height: 640, mobile: true },
+  { name: 'phone-large-412', width: 412, height: 915, mobile: true },
+  { name: 'tablet-800', width: 800, height: 1280, mobile: false },
+  { name: 'desktop-1366', width: 1366, height: 900, mobile: false }
+];
+let failures = 0, passes = 0;
+const check = (cond, msg) => { if (cond) { passes++; console.log('   ✓', msg); } else { failures++; console.log('   ✗', msg); } };
+
+const browser = await chromium.launch();
+for (const vp of VIEWPORTS) {
+  console.log(`\n▶ ${vp.name}`);
+  const ctx = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, deviceScaleFactor: vp.mobile ? 2 : 1, isMobile: vp.mobile, hasTouch: vp.mobile });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', e => errors.push(String(e)));
+  page.on('console', m => { if (m.type() === 'error' && !/favicon|ERR_FILE_NOT_FOUND/.test(m.text())) errors.push('console: ' + m.text()); });
+  page.on('dialog', d => d.accept(d.type() === 'prompt' ? (d.message().includes('Stock received') ? '10' : '') : undefined));
+  if (LOCAL_TW) await page.route('**/vendor/chart.umd.js', r => r.fulfill({ body: fs.readFileSync(LOCAL_TW, 'utf8'), contentType: 'text/javascript' }));
+  const shot = n => page.screenshot({ path: path.join(OUT, `${vp.name}-${n}.png`), fullPage: false });
+  const noHScroll = async label => { const o = await page.evaluate(() => document.scrollingElement.scrollWidth - window.innerWidth); check(o <= 1, `${label}: no horizontal scrolling (overflow ${o}px)`); };
+
+  await page.goto(base); await page.waitForFunction(() => window.HGI_READY === true, null, { timeout: 20000 });
+  // web build keeps the username/password login
+  await page.fill('#login-username', 'admin'); await page.fill('#login-password', '123'); await page.click('#login-overlay button[type=submit]');
+  await page.waitForTimeout(400);
+  check(await page.isVisible('#onboarding'), 'onboarding wizard shown on first run');
+  await shot('01-onboarding');
+  await page.click('#ob-next');                                                   // welcome → business
+  await page.fill('#ob-name', 'Shree Test Traders'); await page.fill('#ob-gstin', '24AAPFU0939F1ZV'); await page.dispatchEvent('#ob-gstin', 'input');
+  await page.fill('#ob-addr', 'Plot 12, GIDC Naroda, Ahmedabad'); await page.fill('#ob-pin', '382330');
+  await page.click('#ob-next'); await page.click('#ob-next'); await page.click('#ob-next');
+  await page.waitForTimeout(300);
+  check(!(await page.isVisible('#onboarding')), 'onboarding completes');
+  check(await page.evaluate(() => state.company.name === 'Shree Test Traders' && state.company.stateCode === '24' && state.company.pan === 'AAPFU0939F'), 'onboarding saved company, state code & PAN from GSTIN');
+  check((await page.isVisible('#bottom-nav')) === vp.mobile, `bottom navigation ${vp.mobile ? 'visible' : 'hidden'}`);
+  await shot('02-dashboard'); await noHScroll('dashboard');
+
+  // GST engine unchanged (same numbers as v6 regression)
+  const calc = await page.evaluate(() => { const c = computeDoc({ supplyType: 'B2B', pos: '24', items: [{ qty: 10, rate: 1000, gst: 18, hsn: '848390', unit: 'NOS' }, { qty: 5, rate: 400, gst: 5, hsn: '870899', unit: 'PCS' }], discount: 600, pfCharges: 300, otherCharges: 0 });
+    return [c.taxable, c.cgst, c.grandTotal, c.roundoff]; });
+  check(JSON.stringify(calc) === JSON.stringify([11700, 926.25, 13553, 0.5]), `GST engine unchanged ${JSON.stringify(calc)}`);
+
+  // stock tracking on the sample product
+  await page.evaluate(() => { const p = state.products[0]; p.trackStock = true; p.openingStock = 10; p.minStock = 2; saveState(); renderItemList(); });
+
+  // invoice
+  await page.evaluate(() => newDocument('INV'));
+  await page.fill('#inv-buyer-name', 'Shree Ram Engineering'); await page.fill('#inv-buyer-gstin', '27AAPFU0939F1ZV'); await page.dispatchEvent('#inv-buyer-gstin', 'input');
+  await page.fill('#inv-buyer-address', 'MIDC Bhosari, Pune'); await page.fill('#inv-buyer-pin', '411026');
+  const row = page.locator('#invoice-items-body tr').first();
+  await row.locator('.item-desc').fill('Industrial Machine Components'); await row.locator('.item-desc').dispatchEvent('change');
+  await row.locator('.item-qty').fill('12');
+  await page.waitForTimeout(400);
+  await shot('03-invoice-form'); await noHScroll('invoice form');
+  const stockWarn = await page.evaluate(() => [...document.querySelectorAll('#check-list > div')].some(d => d.textContent.includes('only 10 available')));
+  check(stockWarn, 'stock check warns when selling more than available');
+  const saved = await page.evaluate(() => saveCurrentInvoice());
+  check(saved === true, 'invoice saved');
+  check(await page.evaluate(() => stockOf(state.products[0]) === -2), 'stock reduced by invoiced quantity');
+
+  // preview, scaling and print/PDF
+  await page.evaluate(() => renderPreview()); await page.waitForTimeout(500);
+  const sc = await page.evaluate(() => { const w = document.querySelector('.page-scale-wrap'); return { wrap: w ? w.getBoundingClientRect().width : 0, vw: window.innerWidth }; });
+  check(sc.wrap > 0 && sc.wrap <= sc.vw, `invoice preview fits the screen (${Math.round(sc.wrap)} ≤ ${sc.vw})`);
+  await page.evaluate(() => document.getElementById('preview-section').scrollIntoView()); await shot('04-preview'); await noHScroll('preview');
+  await page.evaluate(() => renderPreviewPages(selectedCopies()));
+  await page.emulateMedia({ media: 'print' });
+  const pdf = await page.pdf({ format: 'A4', printBackground: true });
+  await page.emulateMedia({ media: 'screen' });
+  const pages = (pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length;
+  check(pages === 3, `print: 3 copies → 3 A4 pages (got ${pages})`);
+  fs.writeFileSync(path.join(OUT, `${vp.name}-invoice.pdf`), pdf);
+
+  // quotation → invoice
+  await page.evaluate(() => newDocument('QUO'));
+  await page.fill('#inv-buyer-name', 'Patel Hardware'); await page.fill('#inv-buyer-address', 'Ring Road, Surat');
+  await page.fill('#inv-buyer-state-code', '24'); await page.dispatchEvent('#inv-buyer-state-code', 'input');
+  const qrow = page.locator('#invoice-items-body tr').first();
+  await qrow.locator('.item-desc').fill('Precision Fabrication Assemblies'); await qrow.locator('.item-desc').dispatchEvent('change');
+  await page.waitForTimeout(300);
+  check(await page.evaluate(() => saveCurrentInvoice()) === true, 'quotation saved');
+  const qid = await page.evaluate(() => state.invoices.find(d => d.docType === 'QUO').id);
+  check(await page.evaluate(id => displayStatus(state.invoices.find(d => d.id === id)) === 'Open', qid), 'quotation status Open');
+  check(await page.evaluate(() => buildReturns(todayISO().slice(0, 7)).b2cs ? Object.keys(buildReturns(todayISO().slice(0, 7)).b2cs).length === 0 : true), 'quotation not in GST returns');
+  await page.evaluate(id => convertQuote(id), qid); await page.waitForTimeout(300);
+  check(await page.evaluate(() => currentDocType() === 'INV' && $('inv-buyer-name').value === 'Patel Hardware'), 'convert loads quotation into a new invoice');
+  check(await page.evaluate(() => saveCurrentInvoice()) === true, 'converted invoice saved');
+  check(await page.evaluate(id => displayStatus(state.invoices.find(d => d.id === id)) === 'Converted', qid), 'quotation marked Converted');
+
+  // register as cards on phones
+  await page.evaluate(() => switchTab('invoices')); await page.waitForTimeout(300);
+  if (vp.mobile) check(await page.evaluate(() => getComputedStyle(document.querySelector('#invoices-list-tbody tr')).display === 'block'), 'register rows shown as cards');
+  await shot('05-register'); await noHScroll('register');
+  for (const tab of ['items', 'customers', 'returns', 'settings']) { await page.evaluate(t => switchTab(t), tab); await page.waitForTimeout(200); await noHScroll(tab); }
+  await page.evaluate(() => switchTab('items')); await shot('06-items');
+
+  // dark mode keeps the invoice paper white
+  await page.evaluate(() => HGI_M.setTheme('dark')); await page.evaluate(() => { switchTab('invoices'); viewInvoiceDetail(state.invoices.find(d => d.docType === 'INV').id); }); await page.waitForTimeout(700);
+  const dark = await page.evaluate(() => ({ html: document.documentElement.classList.contains('dark'), paper: getComputedStyle(document.querySelector('.a4-page')).backgroundColor, body: getComputedStyle(document.body).backgroundColor }));
+  check(dark.html && dark.paper === 'rgb(255, 255, 255)' && dark.body !== 'rgb(255, 255, 255)', `dark mode: chrome dark, invoice paper white (${dark.paper})`);
+  await page.evaluate(() => switchTab('dashboard')); await shot('07-dark');
+  await page.evaluate(() => HGI_M.setTheme('light'));
+
+  // Hindi UI; invoice stays English
+  await page.evaluate(() => HGI_M.setLang('hi')); await page.waitForTimeout(300);
+  const hi = await page.evaluate(() => ({ nav: document.querySelector('#bottom-nav button[data-tab="customers"] span').textContent, h: document.querySelector('#tab-dashboard h2').textContent }));
+  check(hi.nav === 'ग्राहक' && hi.h === 'व्यापार सारांश', `Hindi labels applied (${hi.nav} / ${hi.h})`);
+  await page.evaluate(() => { renderPreview(); }); await page.waitForTimeout(400);
+  check(await page.evaluate(() => document.querySelector('#invoice-preview-container').textContent.includes('TAX INVOICE')), 'invoice print stays in English');
+  await page.evaluate(() => switchTab('dashboard')); await shot('08-hindi');
+  await page.evaluate(() => HGI_M.setLang('gu')); await page.waitForTimeout(200);
+  check(await page.evaluate(() => document.querySelector('#tab-dashboard h2').textContent) === 'વ્યવસાય સારાંશ', 'Gujarati labels applied');
+  await page.evaluate(() => HGI_M.setLang('en'));
+
+  // data persists across reload
+  const count = await page.evaluate(() => state.invoices.length);
+  await page.reload(); await page.waitForFunction(() => window.HGI_READY === true, null, { timeout: 20000 }).catch(e => console.log('   reload errors:', errors.slice(-5)));
+  check(await page.evaluate(() => state.invoices.length) === count, `data persists after reload (${count} documents)`);
+
+  check(errors.length === 0, `no JavaScript errors${errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''}`);
+  await ctx.close();
+}
+await browser.close(); server.close();
+console.log(`\n${passes} passed, ${failures} failed`);
+process.exit(failures ? 1 : 0);

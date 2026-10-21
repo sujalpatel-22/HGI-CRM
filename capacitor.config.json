@@ -1,0 +1,16 @@
+{
+  "appId": "in.hariguru.billing",
+  "appName": "HGI Billing",
+  "webDir": "www",
+  "android": {
+    "minWebViewVersion": 80,
+    "allowMixedContent": false,
+    "captureInput": true
+  },
+  "plugins": {
+    "SystemBars": {
+      "insetsHandling": "css",
+      "style": "DEFAULT"
+    }
+  }
+}

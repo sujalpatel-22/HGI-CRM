@@ -1,0 +1,31 @@
+{
+  "name": "hgi-billing-app",
+  "version": "7.0.0",
+  "private": true,
+  "description": "HARIGURU INDUSTRIES — GST Billing, Quotations & Inventory (Android app, Capacitor)",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build:web": "node tools/build-web.mjs",
+    "test:web": "node tests/web-smoke.mjs",
+    "android:add": "cap add android",
+    "android:patch": "node tools/patch-android.mjs",
+    "android:sync": "cap sync android",
+    "android:prepare": "npm run build:web && (test -d android || cap add android) && node tools/patch-android.mjs && cap sync android",
+    "test:android": "node tests/android-smoke.mjs"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/app": "^8.0.0",
+    "@capacitor/core": "^8.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.0.0",
+    "@fontsource/inter": "^5.1.0",
+    "@fortawesome/fontawesome-free": "6.7.2",
+    "chart.js": "4.4.1",
+    "playwright": "1.56.0",
+    "qrcode-generator": "1.4.4",
+    "tailwindcss": "3.4.17"
+  }
+}
