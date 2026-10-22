@@ -5,7 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="theme-color" content="#0b3a6f">
   <meta name="color-scheme" content="light dark">
-  <title>HARIGURU INDUSTRIES - GST Billing & ERP</title>
+  <!-- Offline app: everything is bundled. Scripts/styles only from the app itself (inline handlers need 'unsafe-inline');
+       no remote code, no plugins, no frames, no form posts. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
+  <meta name="referrer" content="no-referrer">
+  <title>HGI Billing — GST Invoicing</title>
   <link rel="icon" type="image/png" href="{{FAVICON}}">
   <link rel="stylesheet" href="vendor/tailwind.css">
   <link rel="stylesheet" href="vendor/fontawesome/css/all.min.css">
@@ -896,6 +900,9 @@
       catch (e) { storageOk = false; }
       return storageOk;
     }
+    // '<${IMG} src=…>' instead of a literal img tag inside JS strings: browsers' speculative HTML preload scanner
+    // otherwise requests URLs like '${logo}' from the inline script text (seen with a CSP meta tag present).
+    const IMG = 'img';
     const round2 = n => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
     const money = n => '₹' + (Number(n) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const amt = n => (Number(n) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1186,14 +1193,22 @@
        RECEIVABLES
        ===================================================================== */
     const liveDocs = () => state.invoices.filter(d => !d.cancelled && d.docType !== 'QUO');
+    // credit/debit-note totals per invoice, indexed once per data revision (was a full scan per call → O(n²) lists)
+    let notesIdx = null, notesIdxKey = '';
     function notesAgainst(inv) {
-      let cn = 0, dn = 0;
-      state.invoices.forEach(n => {
-        if (n.cancelled || n.refId !== inv.id) return;
-        if (n.docType === 'CRN') cn += n.grandTotal || 0;
-        if (n.docType === 'DBN') dn += n.grandTotal || 0;
-      });
-      return { cn: round2(cn), dn: round2(dn) };
+      const key = `${state.ui && state.ui.rev}|${state.invoices.length}`;
+      if (!notesIdx || notesIdxKey !== key || notesIdx.arr !== state.invoices) {
+        const m = new Map();
+        state.invoices.forEach(n => {
+          if (n.cancelled || !n.refId || (n.docType !== 'CRN' && n.docType !== 'DBN')) return;
+          const e = m.get(n.refId) || { cn: 0, dn: 0 };
+          if (n.docType === 'CRN') e.cn += n.grandTotal || 0; else e.dn += n.grandTotal || 0;
+          m.set(n.refId, e);
+        });
+        notesIdx = { map: m, arr: state.invoices }; notesIdxKey = key;
+      }
+      const e = notesIdx.map.get(inv.id);
+      return e ? { cn: round2(e.cn), dn: round2(e.dn) } : { cn: 0, dn: 0 };
     }
     function settledOf(inv) { return round2((inv.payments || []).reduce((a, p) => a + (Number(p.amount) || 0) + (Number(p.tds) || 0), 0)); }
     function balanceOf(inv) {
@@ -2040,7 +2055,7 @@
         return `<div class="a4-page theme-classic"><div class="main-invoice-body space-y-1.5">
           <div class="flex justify-between text-[9px] font-bold"><span>${esc(copyLabel)}</span><span>${d.irn ? 'e-Invoice' : ''}</span></div>
           <div class="box p-2 flex items-center gap-3">
-            ${logo ? `<div class="w-20 flex justify-center shrink-0"><img src="${logo}" style="max-height:56px;max-width:80px;object-fit:contain"></div>` : ''}
+            ${logo ? `<div class="w-20 flex justify-center shrink-0"><${IMG} src="${logo}" style="max-height:56px;max-width:80px;object-fit:contain"></div>` : ''}
             <div class="flex-1 text-center min-w-0">
               <div class="font-bold text-lg uppercase leading-tight">${esc(co.name)}</div>
               ${legal ? `<div class="text-[9px]">(${esc(legal)})</div>` : ''}
@@ -2051,7 +2066,7 @@
             </div>
             <div class="text-right shrink-0">
               <div class="font-bold border-2 border-black px-2 py-0.5 text-sm uppercase inline-block">${title}</div>
-              ${irnQR ? `<div class="mt-1"><img src="${irnQR}" style="width:80px;height:80px;display:inline-block"></div>` : ''}
+              ${irnQR ? `<div class="mt-1"><${IMG} src="${irnQR}" style="width:80px;height:80px;display:inline-block"></div>` : ''}
             </div>
           </div>
           ${irnBlock ? `<div class="box p-1">${irnBlock}</div>` : ''}
@@ -2073,7 +2088,7 @@
             <td class="box p-1.5 w-3/5 align-top space-y-1.5">
               <div><strong>Amount Chargeable (in words):</strong><div class="font-bold text-[11px]">${esc(words)}</div></div>
               ${d.docType === 'INV' ? `<div class="border-t border-black pt-1 flex gap-3"><div class="flex-1"><strong>Bank Details</strong>${bank}</div>
-                ${upiQR ? `<div class="text-center shrink-0"><img src="${upiQR}" style="width:78px;height:78px"><div class="text-[8px] font-bold">SCAN TO PAY ${money(balance)}</div></div>` : ''}</div>` : ''}
+                ${upiQR ? `<div class="text-center shrink-0"><${IMG} src="${upiQR}" style="width:78px;height:78px"><div class="text-[8px] font-bold">SCAN TO PAY ${money(balance)}</div></div>` : ''}</div>` : ''}
             </td>
             <td class="box p-0 w-2/5 align-top"><table class="w-full text-[10.5px]">
               ${tRows.map(([k, v, b]) => `<tr class="border-b border-black ${b ? 'font-bold' : ''}"><td class="p-1">${k}</td><td class="p-1 num">${v}</td></tr>`).join('')}
@@ -2102,7 +2117,7 @@
         <div class="flex justify-between text-[9px] font-bold uppercase tracking-wider text-slate-500"><span>${esc(copyLabel)}</span><span>${d.irn ? 'e-Invoice' : ''}</span></div>
         <div class="modern-header flex justify-between items-start gap-4">
           <div class="flex gap-3 items-start min-w-0">
-            ${logo ? `<div class="logo-tile"><img src="${logo}"></div>` : ''}
+            ${logo ? `<div class="logo-tile"><${IMG} src="${logo}"></div>` : ''}
             <div class="min-w-0">
               <div class="font-bold text-xl uppercase tracking-wider leading-tight">${esc(co.name)}</div>
               ${legal ? `<div class="text-[9px] text-blue-100">${esc(legal)}</div>` : ''}
@@ -2119,7 +2134,7 @@
             ${d.docType === 'INV' ? `<div class="text-blue-100"><strong>Due:</strong> ${fmtDate(getDueDate(d))}</div>` : d.docType === 'QUO' ? `<div class="text-blue-100"><strong>Valid till:</strong> ${fmtDate(getDueDate(d))}</div>` : ''}
           </div>
         </div>
-        ${d.irn ? `<div class="modern-card flex gap-3 items-center">${irnQR ? `<img src="${irnQR}" style="width:72px;height:72px">` : ''}<div class="flex-1">${irnBlock}</div></div>` : ''}
+        ${d.irn ? `<div class="modern-card flex gap-3 items-center">${irnQR ? `<${IMG} src="${irnQR}" style="width:72px;height:72px">` : ''}<div class="flex-1">${irnBlock}</div></div>` : ''}
         <div class="grid grid-cols-2 gap-2">
           <div class="modern-card">${partyBlock('Details of Receiver (Billed To)', buyer)}</div>
           <div class="modern-card">${partyBlock('Details of Consignee (Shipped To)', ship)}</div>
@@ -2133,7 +2148,7 @@
           <div class="space-y-2">
             <div class="modern-card bg-slate-100"><div class="text-[9px] font-bold text-slate-500 uppercase">Amount in Words</div><div class="font-bold text-[11px] text-slate-900">${esc(words)}</div></div>
             ${d.docType === 'INV' ? `<div class="modern-card flex gap-3 text-[9.5px]"><div class="flex-1"><div class="text-[9px] font-bold text-slate-500 uppercase border-b mb-1">Bank Details</div>${bank}</div>
-              ${upiQR ? `<div class="text-center shrink-0"><img src="${upiQR}" style="width:76px;height:76px" class="bg-white p-0.5 border rounded"><div class="text-[7.5px] font-bold text-slate-500 mt-0.5">SCAN TO PAY ${money(balance)}</div></div>` : ''}</div>` : ''}
+              ${upiQR ? `<div class="text-center shrink-0"><${IMG} src="${upiQR}" style="width:76px;height:76px" class="bg-white p-0.5 border rounded"><div class="text-[7.5px] font-bold text-slate-500 mt-0.5">SCAN TO PAY ${money(balance)}</div></div>` : ''}</div>` : ''}
           </div>
           <div class="modern-card space-y-0.5 text-[10.5px]">
             ${tRows.map(([k, v, b]) => `<div class="flex justify-between ${b ? 'font-bold border-t border-slate-200 pt-0.5' : 'text-slate-600'}"><span>${k}</span><span class="num">${v}</span></div>`).join('')}
@@ -2550,12 +2565,18 @@
         return true;
       });
     }
-    function renderInvoiceList() {
+    // long registers render in pages of 150 rows ("Show more"); totals always cover the whole filtered list
+    const LIST_PAGE = 150;
+    let listLimit = LIST_PAGE, listKey = '';
+    function showMoreDocs() { listLimit += LIST_PAGE; renderInvoiceList(true); }
+    function renderInvoiceList(keepLimit) {
       const list = getFilteredInvoices();
+      const key = ['inv-search', 'inv-filter-type', 'inv-filter-status', 'inv-filter-from', 'inv-filter-to'].map(id => ($(id) || {}).value || '').join('|');
+      if (key !== listKey && !keepLimit) { listLimit = LIST_PAGE; listKey = key; }
       let tTax = 0, tGst = 0, tGrand = 0, tBal = 0;
-      $('invoices-list-tbody').innerHTML = list.map(d => {
-        const s = d.cancelled ? 0 : signed(d);
-        tTax += s * (d.taxable || 0); tGst += s * ((d.cgst || 0) + (d.sgst || 0) + (d.igst || 0)); tGrand += s * (d.grandTotal || 0); tBal += balanceOf(d);
+      list.forEach(d => { const s = d.cancelled ? 0 : signed(d); tTax += s * (d.taxable || 0); tGst += s * ((d.cgst || 0) + (d.sgst || 0) + (d.igst || 0)); tGrand += s * (d.grandTotal || 0); tBal += balanceOf(d); });
+      const more = list.length - Math.min(list.length, listLimit);
+      $('invoices-list-tbody').innerHTML = list.slice(0, listLimit).map(d => {
         const id = d.id, inv = d.docType === 'INV';
         return `
         <tr class="hover:bg-slate-50 ${d.cancelled ? 'opacity-50' : ''}">
@@ -2582,7 +2603,8 @@
             <button onclick="deleteInvoice('${id}')" class="text-rose-600 hover:text-rose-800 p-1" title="Delete"><i class="fa-solid fa-trash"></i></button>
           </td>
         </tr>`;
-      }).join('') || '<tr><td colspan="11" class="p-6 text-center text-slate-400">No documents match these filters</td></tr>';
+      }).join('') + (more > 0 ? `<tr class="show-more-row"><td colspan="11" class="p-3 text-center"><button type="button" id="btn-show-more-docs" onclick="showMoreDocs()" class="px-4 py-2.5 rounded-lg border font-semibold text-sm">Show ${Math.min(more, LIST_PAGE)} more of ${more}</button></td></tr>` : '')
+        || '<tr><td colspan="11" class="p-6 text-center text-slate-400">No documents match these filters</td></tr>';
       $('invoices-list-tfoot').innerHTML = list.length ? `<tr><td class="p-3" colspan="5">Net total (${list.length} docs, CN deducted, cancelled excluded)</td>
         <td class="p-3">${money(tTax)}</td><td class="p-3">${money(tGst)}</td><td class="p-3">${money(tGrand)}</td><td class="p-3 text-rose-600">${money(tBal)}</td><td colspan="2"></td></tr>` : '';
     }
@@ -3006,7 +3028,7 @@
           if (!confirm(`Restore backup of "${parsed.company.name || 'unnamed business'}" with ${parsed.invoices.length} documents?\n\nThis REPLACES the data now in the app. A safety copy of the current data is kept so you can undo.`)) return;
           snapshotBeforeRestore();
           const restored = migrateState(parsed);
-          restored.ui = { ...(restored.ui || {}), rev: Math.max(Number(restored.ui && restored.ui.rev) || 0, Number(state.ui && state.ui.rev) || 0), restoredAt: new Date().toISOString() };
+          restored.ui = { ...(restored.ui || {}), onboarded: true, rev: Math.max(Number(restored.ui && restored.ui.rev) || 0, Number(state.ui && state.ui.rev) || 0), restoredAt: new Date().toISOString() };
           state = restored; saveState(); initApp(state); toast('Backup restored successfully');
         } catch (err) { toast('Failed to read the backup file', 'error'); }
         finally { event.target.value = ''; }

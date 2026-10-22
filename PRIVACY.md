@@ -1,6 +1,6 @@
 # Privacy Policy — HGI Billing (Android)
 
-_Last updated: 22 October 2026_
+_Last updated: 23 October 2026_
 
 HGI Billing is published by HARIGURU INDUSTRIES, Ahmedabad, Gujarat, India ("we").
 
@@ -11,7 +11,9 @@ upload, sell or share your data, and it contains no advertising or analytics SDK
 **When data leaves the device.** Only when you choose to:
 - when you share a PDF, CSV or backup file (WhatsApp, e-mail, Drive, etc.);
 - when you open a link (for example a WhatsApp message or a UPI payment);
-- through Android's own device backup, if you have enabled it in Android settings. This is handled by Google under your Google account.
+- when you move to a new phone using Android's phone-to-phone transfer (Android 12 and newer), which copies the app's data directly between your devices.
+
+The app's data is **excluded from Google cloud backup**. Take your own backups with *Share Backup*.
 
 **Permissions.** The app needs no special permissions. Saving to *Downloads* uses Android's standard storage API, without access to your other files.
 

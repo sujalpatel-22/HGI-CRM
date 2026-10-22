@@ -39,6 +39,38 @@ const manifestPath = path.join(main, 'AndroidManifest.xml');
 let manifest = fs.readFileSync(manifestPath, 'utf8');
 if (!manifest.includes('androidx.core.content.FileProvider')) throw new Error('Capacitor template changed: FileProvider missing from AndroidManifest.xml');
 manifest = manifest.replace(/android:configChanges="([^"]*)"/, (m, v) => `android:configChanges="${v.includes('density') ? v : v + '|density'}"`);
+// Backups: invoices are financial records. No silent Google cloud backup of the app's data; phone-to-phone
+// transfer (Android 12+ device transfer) is still allowed. Users back up explicitly with "Share Backup".
+fs.writeFileSync(path.join(main, 'res', 'xml', 'data_extraction_rules.xml'), `<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <include domain="root" path="." />
+        <include domain="file" path="." />
+        <include domain="database" path="." />
+        <include domain="sharedpref" path="." />
+    </device-transfer>
+</data-extraction-rules>
+`);
+fs.writeFileSync(path.join(main, 'res', 'xml', 'backup_rules.xml'), `<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <exclude domain="root" path="." />
+    <exclude domain="file" path="." />
+    <exclude domain="database" path="." />
+    <exclude domain="sharedpref" path="." />
+</full-backup-content>
+`);
+manifest = manifest.replace(/<application\b([^>]*)>/, (m, attrs) => {
+  let a = attrs.replace(/\s+android:(fullBackupContent|dataExtractionRules)="[^"]*"/g, '');
+  a += ' android:fullBackupContent="@xml/backup_rules" android:dataExtractionRules="@xml/data_extraction_rules"';
+  if (!/android:usesCleartextTraffic=/.test(a)) a += ' android:usesCleartextTraffic="false"';
+  return `<application${a}>`;
+});
 fs.writeFileSync(manifestPath, manifest);
 
 // 5. Release signing + version from environment (CI secrets) — nothing secret is committed

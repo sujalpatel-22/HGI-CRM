@@ -1,6 +1,6 @@
 {
   "name": "hgi-billing-app",
-  "version": "7.1.0",
+  "version": "7.2.0",
   "private": true,
   "description": "HARIGURU INDUSTRIES — GST Billing, Quotations & Inventory (Android app, Capacitor)",
   "type": "module",

@@ -20,6 +20,7 @@ const wv = (await device.shell('dumpsys package com.google.android.webview | gre
 console.log(`▶ ${label}: ${device.model()} · Android SDK ${sdk} · WebView ${wv}`);
 const shot = async n => fs.writeFileSync(path.join(OUT, `${label}-${n}.png`), await device.screenshot());
 
+let lastLaunchAttempts = 1;
 async function launch() {
   // the DevTools socket of a freshly started WebView is sometimes not picked up on slow CI emulators → retry
   for (let attempt = 1; ; attempt++) {
@@ -29,6 +30,7 @@ async function launch() {
       const webview = await device.webView({ pkg: PKG }, { timeout: 60000 });
       const page = await webview.page();
       await page.waitForFunction(() => window.HGI_READY === true, null, { timeout: 60000 });
+      lastLaunchAttempts = attempt;
       return page;
     } catch (e) {
       if (attempt >= 3) throw e;
@@ -126,14 +128,15 @@ check(await page.evaluate(() => state.invoices.length === 1 && state.company.nam
 await page.evaluate(async () => { const s = JSON.parse(JSON.stringify(state)); s.company.tagline = 'from-newer-mirror'; s.ui.rev = (Number(state.ui.rev) || 0) + 100;
   await Capacitor.Plugins.HgiNative.writeState({ key: 'state', data: JSON.stringify(s) }); });
 page = await launch();
-check(await page.evaluate(() => state.company.tagline === 'from-newer-mirror' && window.__restoredFromMirror === true && state.invoices.length === 1), 'newer on-device copy wins over older WebView storage');
+check(await page.evaluate(retried => state.company.tagline === 'from-newer-mirror' && (window.__restoredFromMirror === true || retried) && state.invoices.length === 1, lastLaunchAttempts > 1), 'newer on-device copy wins over older WebView storage');
 // simulate the WebView's storage being wiped (e.g. WebView update/reset): delete its Local Storage on disk while
 // the app is stopped (debug build → run-as), keep the app's own files dir where the native mirror lives
 await page.evaluate(() => localStorage.clear()); await page.waitForTimeout(500);
 await device.shell(`am force-stop ${PKG}`);
 await device.shell(`run-as ${PKG} sh -c 'rm -rf app_webview/Default/"Local Storage" app_webview/"Local Storage"; ls files'`).then(b => console.log('    files dir:', b.toString().trim()));
 page = await launch();
-check(await page.evaluate(() => state.invoices.length === 1 && window.__restoredFromMirror === true), 'data restored from on-device mirror when WebView storage is wiped');
+// (if the first launch attempt timed out, that attempt already restored the data — the retry then finds it in WebView storage)
+check(await page.evaluate(retried => state.invoices.length === 1 && (window.__restoredFromMirror === true || retried), lastLaunchAttempts > 1), 'data restored from on-device mirror when WebView storage is wiped');
 
 // Demo Mode: opt-in, separate storage + separate native mirror file; real data untouched; exit deletes sample data
 // confirmation dialogs are covered by the web test; native AlertDialogs can't be driven reliably over DevTools

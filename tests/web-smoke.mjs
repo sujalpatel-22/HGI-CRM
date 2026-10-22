@@ -77,6 +77,11 @@ for (const vp of VIEWPORTS) {
   check(!(await page.isVisible('#onboarding')), 'onboarding completes');
   check(await page.evaluate(() => state.company.name === 'Shree Test Traders' && state.company.stateCode === '24' && state.company.pan === 'AAPFU0939F'), 'onboarding saved company, state code & PAN from GSTIN');
   check((await page.isVisible('#bottom-nav')) === vp.mobile, `bottom navigation ${vp.mobile ? 'visible' : 'hidden'}`);
+  if (vp.name === 'desktop-1366') {
+    check(await page.evaluate(async () => { let netBlocked = false; try { await fetch('https://example.com/csp-probe', { mode: 'no-cors' }); } catch (e) { netBlocked = true; }
+      return !!document.querySelector('meta[http-equiv="Content-Security-Policy"]') && netBlocked; }), 'Content-Security-Policy active (remote connections blocked)');
+    errors.splice(0, errors.length, ...errors.filter(e => !e.includes('csp-probe')));   // the probe's own expected violation
+  }
   check((await page.isVisible('#quick-actions')) === vp.width < 768, `dashboard quick actions ${vp.width < 768 ? 'shown' : 'hidden'} at ${vp.width}px`);
   await shot('02-dashboard'); await noHScroll('dashboard');
 
@@ -271,6 +276,10 @@ for (const vp of VIEWPORTS) {
   await page.fill('#inv-transport', 'Shree Logistics');
   await page.evaluate(() => saveCurrentInvoice());
   check(await page.evaluate(() => state.invoices.find(d => d.id === 'D').transport === 'Shree Logistics'), 'IRN-registered invoice: transport details can still be updated');
+  // credit-note index stays correct as notes change
+  check(await page.evaluate(() => balanceOf(state.invoices.find(d => d.id === 'B')) === 0), 'credit note reduces the invoice balance');
+  await page.evaluate(() => cancelInvoice('C'));
+  check(await page.evaluate(() => state.invoices.find(d => d.id === 'C').cancelled && balanceOf(state.invoices.find(d => d.id === 'B')) === state.invoices.find(d => d.id === 'B').grandTotal), 'cancelling the credit note restores the balance');
   // discount larger than value
   check(await page.evaluate(() => runChecks({ ...state.invoices[0], discount: 5000, items: [{ desc: 'Widget', hsn: '847130', gst: 18, qty: 1, unit: 'NOS', rate: 1000 }] }).some(x => x.lvl === 'error' && /Discount/.test(x.msg))), 'discount above item value is a compliance error');
   // products: duplicate name blocked, rename keeps stock history
@@ -284,11 +293,19 @@ for (const vp of VIEWPORTS) {
   await restore({ company: { name: 'X' }, invoices: [{ foo: 1 }] });
   check(await n() === 4, 'invalid backup file rejected (data unchanged)');
   await restore({ company: { name: 'Restored Co', stateCode: '24' }, invoices: [], products: [], customers: [] });
-  check(await page.evaluate(() => state.company.name === 'Restored Co' && state.invoices.length === 0 && !!localStorage.getItem('hgi_billing_v7_prod_before_restore')), 'valid backup restored, safety copy kept');
+  check(await page.evaluate(() => state.company.name === 'Restored Co' && state.invoices.length === 0 && !!localStorage.getItem('hgi_billing_v7_prod_before_restore') && !document.getElementById('onboarding')), 'valid backup restored (no setup wizard), safety copy kept');
   await page.evaluate(() => switchTab('settings'));
   check(await page.isVisible('#prefs-undo-restore'), 'Undo restore offered in Settings');
   await page.evaluate(() => HGI_M.undoRestore()); await page.waitForTimeout(400);
   check(await page.evaluate(() => state.company.name === 'Guard Test Co' && state.invoices.length === 4), 'undo restore brings back the previous data');
+  // long registers are paged
+  await page.evaluate(() => { for (let i = 10; i < 410; i++) state.invoices.push({ id: 'X' + i, docType: 'INV', num: `${i}/26-27`, date: '2026-09-01', supplyType: 'B2C', pos: '24', buyerName: 'Bulk ' + i,
+    items: [{ desc: 'Widget Pro', hsn: '847130', gst: 18, qty: 1, unit: 'NOS', rate: 10 }], payments: [], grandTotal: 12, taxable: 10, cgst: 0.9, sgst: 0.9 }); saveState(); switchTab('invoices'); });
+  const pg = await page.evaluate(() => ({ rows: document.querySelectorAll('#invoices-list-tbody tr:not(.show-more-row)').length, more: !!document.getElementById('btn-show-more-docs'), foot: document.getElementById('invoices-list-tfoot').textContent }));
+  check(pg.rows === 150 && pg.more && /404 docs/.test(pg.foot), `register shows 150 rows + "Show more", totals cover all (${pg.rows})`);
+  await page.click('#btn-show-more-docs');
+  check(await page.evaluate(() => document.querySelectorAll('#invoices-list-tbody tr:not(.show-more-row)').length === 300), 'Show more adds the next page');
+  await page.evaluate(() => { state.invoices = state.invoices.filter(d => !d.id.startsWith('X')); saveState(); renderAll(); });
   // revision number increases with every save
   const r1 = await page.evaluate(() => state.ui.rev); await page.evaluate(() => saveState());
   check(await page.evaluate(r => state.ui.rev === r + 1 && JSON.parse(localStorage.getItem('hgi_billing_v7_prod')).ui.rev === r + 1, r1), 'each save stamps a higher revision');

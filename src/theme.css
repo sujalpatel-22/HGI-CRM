@@ -221,3 +221,5 @@ html.dark #live-total b { color: var(--c-text); }
 
 /* respect reduced motion */
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+.show-more-row td::before { display: none !important; }
+.show-more-row button { background: var(--c-surface); border-color: var(--c-line-strong); color: var(--c-text-2); }

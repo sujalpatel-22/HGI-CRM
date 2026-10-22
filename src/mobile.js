@@ -6,7 +6,7 @@
    ===================================================================== */
 (function () {
   'use strict';
-  const APP_VERSION = '7.1.0';
+  const APP_VERSION = '7.2.0';
   const cap = window.Capacitor;
   const isNative = !!(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform());
   // Without a bundler the native bridge exposes registered plugins on Capacitor.Plugins
@@ -53,7 +53,17 @@
       if (!td.hasAttribute('colspan')) td.setAttribute('data-label', heads[i] || '');
     })));
   }
+  // icon-only buttons get an accessible name (screen readers / TalkBack)
+  function ariaIcons(root) {
+    (root || document).querySelectorAll('button:not([aria-label])').forEach(b => {
+      if (b.textContent.trim()) return;
+      const ic = b.querySelector('i'); const cls = ic ? Array.from(ic.classList).find(c => ACTION_NAMES[c]) : null;
+      const name = b.getAttribute('title') || (cls ? ACTION_NAMES[cls] : '');
+      if (name) b.setAttribute('aria-label', name);
+    });
+  }
   function labelAll() {
+    ariaIcons(document.querySelector('main'));
     ['invoices-list-tbody', 'items-list-tbody', 'customers-list-tbody', 'dash-recent-table'].forEach(id => { const tb = document.getElementById(id); if (tb) labelTable(tb.closest('table')); });
     const items = document.getElementById('invoice-items-body');
     if (items) {
@@ -292,6 +302,7 @@
     parsed.ui = { ...(parsed.ui || {}), rev: Math.max(Number(parsed.ui && parsed.ui.rev) || 0, Number(state.ui.rev) || 0) };
     delete parsed.ui.restoredAt;
     state = migrateState(parsed); saveState(); initApp(state);
+    const ob = document.getElementById('onboarding'); if (ob && !needsOnboarding()) ob.remove();
     try { localStorage.removeItem(STORAGE_KEY + '_before_restore'); } catch (e) { /* ignore */ }
     toast('Previous data is back');
   }
