@@ -199,7 +199,9 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Run smoke test on emulator
+      - name: Run smoke test on emulator (attempt 1)
+        id: emu1
+        continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: ${{ matrix.api }}
@@ -211,14 +213,39 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -memory 3072
           script: |
             mkdir -p tests/out-android
+            adb uninstall in.hariguru.billing > /dev/null 2>&1 || true
             adb install -r dist/*-debug.apk 2>&1 | tee tests/out-android/install.log
             HGI_TEST_LABEL=api${{ matrix.api }}-${{ matrix.profile }} node tests/android-smoke.mjs > tests/out-android/smoke.log 2>&1; R=$?; cat tests/out-android/smoke.log; adb logcat -d > tests/out-android/logcat.txt 2>&1; exit $R
+      - name: Run smoke test on emulator (attempt 2 — emulator boot on hosted runners is sometimes flaky)
+        id: emu2
+        if: steps.emu1.outcome == 'failure'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          target: ${{ matrix.target }}
+          arch: x86_64
+          profile: ${{ matrix.profile }}
+          disable-animations: true
+          emulator-boot-timeout: 900
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -memory 3072
+          script: |
+            [ -d tests/out-android ] && mv tests/out-android tests/out-android/../out-android-attempt1 || true
+            mkdir -p tests/out-android
+            adb uninstall in.hariguru.billing > /dev/null 2>&1 || true
+            adb install -r dist/*-debug.apk 2>&1 | tee tests/out-android/install.log
+            HGI_TEST_LABEL=api${{ matrix.api }}-${{ matrix.profile }} node tests/android-smoke.mjs > tests/out-android/smoke.log 2>&1; R=$?; cat tests/out-android/smoke.log; adb logcat -d > tests/out-android/logcat.txt 2>&1; exit $R
+      - name: Emulator result
+        if: always()
+        run: |
+          echo "attempt1=${{ steps.emu1.outcome }} attempt2=${{ steps.emu2.outcome }}"
+          [ "${{ steps.emu1.outcome }}" = "success" ] || [ "${{ steps.emu2.outcome }}" = "success" ]
       - name: Publish results to branch ci-output-emu-api${{ matrix.api }}
         if: always()
         run: |
           OUT=$RUNNER_TEMP/ci-out; rm -rf "$OUT"; mkdir -p "$OUT"
           cp -r tests/out-android "$OUT/" 2>/dev/null || true
-          echo "run=$GITHUB_RUN_ID api=${{ matrix.api }} profile=${{ matrix.profile }} status=${{ job.status }}" > "$OUT/STATUS.txt"
+          cp -r tests/out-android-attempt1 "$OUT/" 2>/dev/null || true
+          echo "run=$GITHUB_RUN_ID api=${{ matrix.api }} profile=${{ matrix.profile }} status=${{ job.status }} attempt1=${{ steps.emu1.outcome }} attempt2=${{ steps.emu2.outcome }}" > "$OUT/STATUS.txt"
           B=ci-output-emu-api${{ matrix.api }}
           cd "$OUT" && git init -q -b "$B" && git add -A
           git -c user.name="hgi-ci" -c user.email="hgi-ci@users.noreply.github.com" commit -qm "emulator api${{ matrix.api }} run $GITHUB_RUN_ID (${{ job.status }})"
