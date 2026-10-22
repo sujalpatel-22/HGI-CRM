@@ -77,6 +77,7 @@ for (const vp of VIEWPORTS) {
   check(!(await page.isVisible('#onboarding')), 'onboarding completes');
   check(await page.evaluate(() => state.company.name === 'Shree Test Traders' && state.company.stateCode === '24' && state.company.pan === 'AAPFU0939F'), 'onboarding saved company, state code & PAN from GSTIN');
   check((await page.isVisible('#bottom-nav')) === vp.mobile, `bottom navigation ${vp.mobile ? 'visible' : 'hidden'}`);
+  check((await page.isVisible('#quick-actions')) === vp.width < 768, `dashboard quick actions ${vp.width < 768 ? 'shown' : 'hidden'} at ${vp.width}px`);
   await shot('02-dashboard'); await noHScroll('dashboard');
 
   // GST engine unchanged (same numbers as v6 regression)
@@ -99,6 +100,7 @@ for (const vp of VIEWPORTS) {
   await row.locator('.item-desc').fill('Industrial Machine Components'); await row.locator('.item-desc').dispatchEvent('change');
   await row.locator('.item-qty').fill('12');
   await page.waitForTimeout(400);
+  if (vp.width < 768) check(await page.evaluate(() => document.querySelector('#live-total b').textContent.replace(/[^\d.]/g, '') === String(collectDocFromForm().grandTotal.toFixed(2))), 'save bar shows the live grand total');
   await shot('03-invoice-form'); await noHScroll('invoice form');
   const stockWarn = await page.evaluate(() => [...document.querySelectorAll('#check-list > div')].some(d => d.textContent.includes('only 10 available')));
   check(stockWarn, 'stock check warns when selling more than available');
@@ -137,7 +139,15 @@ for (const vp of VIEWPORTS) {
 
   // register as cards on phones
   await page.evaluate(() => switchTab('invoices')); await page.waitForTimeout(300);
-  if (vp.mobile) check(await page.evaluate(() => getComputedStyle(document.querySelector('#invoices-list-tbody tr')).display === 'block'), 'register rows shown as cards');
+  if (vp.mobile) {
+    check(await page.evaluate(() => { const tr = document.querySelector('#invoices-list-tbody tr'); return getComputedStyle(tr).display === 'grid' && tr.getBoundingClientRect().height < 140; }), 'register rows shown as compact cards (< 140px)');
+    await page.click('#invoices-list-tbody tr:first-child td:nth-child(5)'); await page.waitForTimeout(250);
+    const sheet = await page.evaluate(() => ({ open: document.getElementById('more-sheet').classList.contains('open'), acts: [...document.querySelectorAll('#more-sheet .act')].map(b => b.textContent.trim()) }));
+    check(sheet.open && sheet.acts.includes('Record Receipt') && sheet.acts.includes('View / Print') && sheet.acts.some(a => /Delete/.test(a)), `tapping a row opens its labelled actions (${sheet.acts.length})`);
+    await page.click('#more-sheet .act >> text=Record Receipt'); await page.waitForTimeout(300);
+    check(await page.evaluate(() => !document.getElementById('payment-modal').classList.contains('hidden') && !document.getElementById('more-sheet').classList.contains('open')), 'row action runs (receipt dialog opens)');
+    await page.evaluate(() => closeModal('payment-modal'));
+  }
   await shot('05-register'); await noHScroll('register');
   for (const tab of ['items', 'customers', 'returns', 'settings']) { await page.evaluate(t => switchTab(t), tab); await page.waitForTimeout(200); await noHScroll(tab); }
   await page.evaluate(() => switchTab('items')); await shot('06-items');

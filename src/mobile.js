@@ -510,6 +510,80 @@
     i18n.translateTree(card);
   }
 
+  /* ------------------------------------------------------------------ v7.2 UI: dashboard, row actions, live total */
+  function enhanceDashboard() {
+    const sec = document.getElementById('tab-dashboard'); if (!sec) return;
+    const grids = Array.from(sec.children).filter(el => el.classList.contains('grid'));
+    if (grids[0]) grids[0].classList.add('dash-kpis');
+    if (grids[1]) grids[1].classList.add('dash-insights');
+    if (grids[2]) grids[2].classList.add('dash-lists');
+    if (!document.getElementById('quick-actions') && grids[0]) {
+      const qa = document.createElement('div'); qa.id = 'quick-actions'; qa.className = 'no-print';
+      qa.innerHTML = `
+        <button type="button" onclick="newDocument('INV'); switchTab('create-invoice')"><i class="fa-solid fa-file-invoice"></i><span>Invoice</span></button>
+        <button type="button" onclick="newDocument('QUO'); switchTab('create-invoice')"><i class="fa-solid fa-file-signature"></i><span>Quotation</span></button>
+        <button type="button" onclick="switchTab('customers'); openCustomerModal()"><i class="fa-solid fa-user-plus"></i><span>Buyer</span></button>
+        <button type="button" onclick="switchTab('items'); openItemModal()"><i class="fa-solid fa-box-open"></i><span>Item</span></button>`;
+      grids[0].before(qa);
+      i18n.translateTree(qa);
+    }
+  }
+
+  // Phones: a list row is one tap target; its actions open in a labelled bottom sheet instead of 9 tiny icons.
+  const ACTION_NAMES = { 'fa-pen-to-square': 'Edit', 'fa-trash': 'Delete', 'fa-eye': 'View / Print', 'fa-copy': 'Duplicate', 'fa-ban': 'Cancel document',
+    'fa-indian-rupee-sign': 'Record receipt', 'fa-whatsapp': 'Share on WhatsApp', 'fa-file-export': 'Convert to invoice' };
+  function actionLabel(btn) {
+    const ic = btn.querySelector('i'); const cls = ic ? Array.from(ic.classList).find(c => ACTION_NAMES[c]) : null;
+    const title = btn.getAttribute('title');
+    if (title) return title;
+    if (cls) return ACTION_NAMES[cls];
+    const txt = btn.textContent.trim();
+    return txt === 'CN' ? 'Issue credit note' : txt === 'DN' ? 'Issue debit note' : txt || 'Action';
+  }
+  function openRowSheet(tr) {
+    const btns = Array.from(tr.querySelectorAll('td:last-child button'));
+    if (!btns.length) return;
+    const cell = n => (tr.cells[n] ? tr.cells[n].textContent.trim() : '');
+    const tb = tr.parentElement.id;
+    const first = n => (tr.cells[n] && tr.cells[n].firstChild ? tr.cells[n].firstChild.textContent.trim() : cell(n));
+    const head = tb === 'invoices-list-tbody' ? [first(4), `${cell(1)} · ${cell(2)} · ${cell(7)}`]
+      : tb === 'dash-recent-table' ? [cell(2), `${cell(0)} · ${cell(1)} · ${cell(3)}`]
+      : tb === 'items-list-tbody' ? [cell(0), `HSN ${cell(1)} · ${cell(2)} · ${cell(4)}`]
+      : [first(0), cell(1)];
+    window.__rowActions = btns;
+    openSheet(`<div class="row-head"><b>${esc(head[0])}</b><span>${esc(head[1])}</span></div>` + btns.map((b, i) => {
+      const ic = b.querySelector('i'); const label = actionLabel(b);
+      const danger = ic && (ic.classList.contains('fa-trash') || ic.classList.contains('fa-ban'));
+      const icon = ic ? `<i class="${esc(ic.className.replace(/\bmr-\S+/g, ''))}"></i>` : `<b style="font-size:12px">${esc(b.textContent.trim())}</b>`;
+      return `<button type="button" class="act${danger ? ' danger' : ''}" onclick="HGI_M.runRowAction(${i})"><span class="ic ${ic ? Array.from(ic.classList).filter(c => /^text-/.test(c)).join(' ') : ''}">${icon}</span>${esc(t(label))}</button>`;
+    }).join(''));
+  }
+  function runRowAction(i) {
+    const b = (window.__rowActions || [])[i];
+    closeMore();
+    if (b) setTimeout(() => b.click(), 60);
+  }
+  function installRowSheets() {
+    document.addEventListener('click', e => {
+      if (!mq.matches) return;
+      const tr = e.target.closest('#invoices-list-tbody tr, #items-list-tbody tr, #customers-list-tbody tr, #dash-recent-table tr');
+      if (!tr || e.target.closest('button, a, input, select, label') || tr.querySelector('td[colspan]')) return;
+      openRowSheet(tr);
+    });
+  }
+
+  // live grand total inside the sticky save bar
+  function installLiveTotal() {
+    const bar = document.querySelector('#invoice-form > .flex.flex-wrap.justify-end.gap-3:last-child');
+    if (!bar || document.getElementById('live-total')) return;
+    const box = document.createElement('div'); box.id = 'live-total';
+    box.innerHTML = `<small data-i18n>Total</small><b>₹0.00</b>`;
+    bar.prepend(box);
+    const upd = () => { try { const d = collectDocFromForm(); box.querySelector('b').textContent = money(d.grandTotal || 0); } catch (e) { /* form not ready */ } };
+    wrap('doRefreshForm', upd);
+    upd();
+  }
+
   /* ------------------------------------------------------------------ public helpers for inline handlers */
   window.HGI_M = {
     go(tab) { closeMore(); switchTab(tab); },
@@ -523,7 +597,7 @@
     shareBackup, setPin, removePin,
     lock() { closeMore(); unlocked = false; showLock(); },
     about() { closeMore(); toast(`HGI Billing ${APP_VERSION} ${isNative ? '(Android)' : '(Web)'}`, 'info'); },
-    enterDemo, exitDemo, undoRestore,
+    enterDemo, exitDemo, undoRestore, runRowAction,
     restoreAndClose(ev) { const el = document.getElementById('onboarding'); ui().onboarded = true; if (el) el.remove(); importJSONBackup(ev); },
     sharePdf, savePdf
   };
@@ -616,8 +690,11 @@
     installHooks();
     buildShell();                                // nav must exist before the app's first switchTab()
     demoBanner();
+    enhanceDashboard();
+    installRowSheets();
     limitToasts();
     initApp();                                   // the original v6 app start
+    installLiveTotal();
     applyTheme();
     i18n.setLang(ui().lang || 'en');
     setActiveNav('dashboard');

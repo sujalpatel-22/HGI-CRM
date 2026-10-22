@@ -21,7 +21,7 @@ for (const k of ['FAVICON', 'LOGO_ICON', 'LOGO_FULL']) html = html.split(`{{${k}
 if (/\{\{[A-Z_]+\}\}/.test(html)) throw new Error('unresolved template placeholder');
 if (/https:\/\/(cdn\.tailwindcss|cdnjs\.cloudflare|fonts\.googleapis)/.test(html)) throw new Error('CDN reference left in app — the APK must work offline');
 fs.writeFileSync(www('index.html'), html);
-for (const f of ['mobile.css', 'mobile.js', 'i18n.js', 'demo-data.js']) copy(src(f), www(f));
+for (const f of ['mobile.css', 'theme.css', 'mobile.js', 'i18n.js', 'demo-data.js']) copy(src(f), www(f));
 
 // 2. vendor libraries (versions pinned in package.json)
 copy(path.join(mod('chart.js'), 'dist/chart.umd.js'), www('vendor/chart.umd.js'));
