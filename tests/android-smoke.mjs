@@ -77,12 +77,20 @@ await shot('02-dashboard');
 // ₹ must take its own space (old WebViews drew the fallback-font glyph on top of the first digit)
 const rupee = await page.evaluate(async () => { await document.fonts.ready; await new Promise(r => setTimeout(r, 300)); const h = document.getElementById('dash-total-billed'); const sp = document.createElement('span'); sp.textContent = '₹'; h.appendChild(sp);
   const w = sp.getBoundingClientRect().width, fs = parseFloat(getComputedStyle(h).fontSize); sp.remove(); return { w, fs, fix: !!window.HGI_APP.rupeeFix }; });
-console.log('    ₹ diagnostics:', JSON.stringify(await page.evaluate(async () => {
-  const m = (fam, wt) => { const sp = document.createElement('span'); sp.style.cssText = `position:absolute;visibility:hidden;font-size:40px;font-weight:${wt};font-family:${fam}`; sp.textContent = '₹'; document.body.appendChild(sp); const w = sp.getBoundingClientRect().width; sp.remove(); return Math.round(w * 10) / 10; };
-  const faces = []; document.fonts.forEach(f => { if (/Inter|Rupee/.test(f.family)) faces.push(`${f.family}/${f.weight}/${f.status}/${(f.unicodeRange || '').slice(0, 24)}`); });
-  const c = document.createElement('canvas').getContext('2d'); c.font = "700 40px Inter";
-  return { fix: document.documentElement.className, inter700: m("'Inter'", 700), inter400: m("'Inter'", 400), sans: m('sans-serif', 400), roboto: m("'Roboto'", 400),
-    rupeeFace: m("'HGI Rupee'", 400), serif: m('serif', 400), canvasInter: Math.round(c.measureText('₹').width), digit: m("'Inter'", 700) && (() => { const sp = document.createElement('span'); sp.style.cssText = 'position:absolute;font:700 40px Inter'; sp.textContent = '0'; document.body.appendChild(sp); const w = sp.getBoundingClientRect().width; sp.remove(); return w; })(), faces: faces.slice(0, 12) };
+console.log('    ₹ in-context:', JSON.stringify(await page.evaluate(async () => {
+  const h = document.getElementById('dash-total-billed');
+  const variants = { base: '', kernNone: 'font-kerning:none', featKern0: "font-feature-settings:'kern' 0", rupeeFam: "font-family:'HGI Rupee','Inter',sans-serif",
+    sans: 'font-family:sans-serif', ls: 'letter-spacing:0.01em', w400: 'font-weight:400', ligNone: 'font-variant-ligatures:none', textRender: 'text-rendering:optimizeSpeed' };
+  const out = {};
+  for (const [k, css] of Object.entries(variants)) {
+    const el = document.createElement('h3'); el.className = h.className; el.style.cssText = css; el.textContent = '₹1,234.00'; h.parentElement.appendChild(el);
+    const r = document.createRange(); r.setStart(el.firstChild, 0); r.setEnd(el.firstChild, 1);
+    const r2 = document.createRange(); r2.setStart(el.firstChild, 1); r2.setEnd(el.firstChild, 2);
+    out[k] = [Math.round(r.getBoundingClientRect().width * 10) / 10, Math.round((r2.getBoundingClientRect().left - r.getBoundingClientRect().left) * 10) / 10];
+    el.remove();
+  }
+  out.ctx = getComputedStyle(h).fontFamily + ' / ' + getComputedStyle(h).fontWeight + ' / ' + getComputedStyle(h).fontFeatureSettings + ' / ' + getComputedStyle(h).textRendering;
+  return out;
 })));
 check(rupee.w > rupee.fs * 0.35, `₹ sign has its own width (${rupee.w.toFixed(1)}px at ${rupee.fs}px${rupee.fix ? ', system-font fallback active' : ''})`);
 const ui = (await device.shell('uiautomator dump /sdcard/hgi-ui.xml >/dev/null 2>&1; cat /sdcard/hgi-ui.xml')).toString();
