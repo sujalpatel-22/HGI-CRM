@@ -131,15 +131,15 @@ page = await launch();
 check(await page.evaluate(() => state.invoices.length === 1 && window.__restoredFromMirror === true), 'data restored from on-device mirror when WebView storage is wiped');
 
 // Demo Mode: opt-in, separate storage + separate native mirror file; real data untouched; exit deletes sample data
-page.on('dialog', d => d.accept().catch(() => {}));
-await page.evaluate(() => { HGI_M.enterDemo(); });
+// confirmation dialogs are covered by the web test; native AlertDialogs can't be driven reliably over DevTools
+await page.evaluate(() => { HGI_M.enterDemo({ confirmed: true }); });
 await page.waitForFunction(() => window.HGI_READY === true && typeof DEMO_MODE !== 'undefined' && DEMO_MODE === true, null, { timeout: 60000 });
 check(await page.evaluate(() => state.invoices.length === 5 && state.invoices.every(d => d.demo) && !!document.getElementById('demo-banner')), 'Demo Mode shows sample data with a DEMO banner');
 await page.waitForTimeout(1500);
 check(await page.evaluate(async () => { const r = await Capacitor.Plugins.HgiNative.readState({ key: 'state' }); const s = JSON.parse(r.data); return s.invoices.length === 1 && s.company.name === 'Emulator Test Traders'; }),
   'real data in the native mirror untouched while Demo Mode is open');
 await shot('05a-demo');
-await page.evaluate(() => { HGI_M.exitDemo(); });
+await page.evaluate(() => { HGI_M.exitDemo({ confirmed: true }); });
 await page.waitForFunction(() => window.HGI_READY === true && DEMO_MODE === false, null, { timeout: 60000 });
 await page.waitForTimeout(3000);
 check(await page.evaluate(async () => { const r = await Capacitor.Plugins.HgiNative.readState({ key: 'state-demo' }); return state.invoices.length === 1 && !state.invoices.some(d => d.demo) && !r.data && !document.getElementById('demo-banner'); }),

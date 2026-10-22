@@ -238,16 +238,17 @@
   }
 
   /* ------------------------------------------------------------------ demo mode (explicit opt-in only) */
-  async function enterDemo() {
+  // opts.confirmed: caller already asked the user (used by automated tests; the UI always asks)
+  async function enterDemo(opts) {
     if (DEMO_MODE) return;
-    if (!confirm(t('Open Demo Mode?') + '\n\n' + t('Demo Mode shows sample customers and invoices so you can try the app. Your own data is kept separately and is not changed. Demo documents are watermarked "NOT A VALID TAX INVOICE".'))) return;
+    if (!(opts && opts.confirmed) && !confirm(t('Open Demo Mode?') + '\n\n' + t('Demo Mode shows sample customers and invoices so you can try the app. Your own data is kept separately and is not changed. Demo documents are watermarked "NOT A VALID TAX INVOICE".'))) return;
     saveState(); await flushMirror();
     try { localStorage.setItem(HGI_MODE_KEY, 'demo'); } catch (e) { return toast('Demo Mode needs app storage, which is blocked here.', 'error'); }
     location.reload();
   }
-  async function exitDemo() {
+  async function exitDemo(opts) {
     if (!DEMO_MODE) return;
-    if (!confirm(t('Leave Demo Mode?') + '\n\n' + t('The sample data will be deleted and your own data will open.'))) return;
+    if (!(opts && opts.confirmed) && !confirm(t('Leave Demo Mode?') + '\n\n' + t('The sample data will be deleted and your own data will open.'))) return;
     clearTimeout(mirrorTimer);
     try { localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(HGI_MODE_KEY); } catch (e) { /* ignore */ }
     if (Native) { try { await Native.writeState({ key: 'state-demo', data: '' }); } catch (e) { /* ignore */ } }
