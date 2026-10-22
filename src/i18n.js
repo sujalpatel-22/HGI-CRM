@@ -39,7 +39,13 @@
       'App Lock (PIN)': 'ऐप लॉक (PIN)', 'Lock now': 'अभी लॉक करें', 'Share Backup': 'बैकअप शेयर करें', 'App Preferences': 'ऐप पसंद',
       'Enter PIN': 'PIN डालें', 'Wrong PIN': 'गलत PIN', 'Welcome': 'स्वागत है', 'Next': 'आगे', 'Back': 'पीछे', 'Skip': 'छोड़ें', 'Finish': 'पूरा करें',
       'Your Business': 'आपका व्यापार', 'Bank & UPI': 'बैंक व UPI', 'Security': 'सुरक्षा', 'Business / Trade Name': 'व्यापार का नाम',
-      'Restore from a backup': 'बैकअप से वापस लाएँ', 'Get started': 'शुरू करें', 'Stock In': 'स्टॉक आया', 'Convert to Invoice': 'बिल बनाएँ'
+      'Restore from a backup': 'बैकअप से वापस लाएँ', 'Get started': 'शुरू करें', 'Stock In': 'स्टॉक आया', 'Convert to Invoice': 'बिल बनाएँ',
+      'Demo Mode': 'डेमो मोड', 'Exit demo': 'डेमो बंद करें', 'Exit Demo Mode': 'डेमो मोड बंद करें', 'Try with sample data': 'नमूना डेटा से आज़माएँ',
+      'DEMO MODE': 'डेमो मोड', '— sample data, not real invoices': '— नमूना डेटा, असली बिल नहीं',
+      'Just looking? Explore with sample data (Demo Mode)': 'सिर्फ़ देख रहे हैं? नमूना डेटा से आज़माएँ (डेमो मोड)',
+      'Open Demo Mode?': 'डेमो मोड खोलें?', 'Leave Demo Mode?': 'डेमो मोड बंद करें?',
+      'Demo Mode shows sample customers and invoices so you can try the app. Your own data is kept separately and is not changed. Demo documents are watermarked "NOT A VALID TAX INVOICE".': 'डेमो मोड में नमूना ग्राहक और बिल दिखते हैं ताकि आप ऐप आज़मा सकें। आपका अपना डेटा अलग सुरक्षित रहता है और बदला नहीं जाता। डेमो बिलों पर "NOT A VALID TAX INVOICE" वॉटरमार्क रहता है।',
+      'The sample data will be deleted and your own data will open.': 'नमूना डेटा हटा दिया जाएगा और आपका अपना डेटा खुलेगा।'
     },
     gu: {
       'Dashboard': 'ડેશબોર્ડ', 'Home': 'હોમ', 'New Invoice': 'નવું બિલ', 'New': 'નવું', 'Documents': 'દસ્તાવેજો', 'Docs': 'બિલ', 'GST Returns': 'GST રિટર્ન',
@@ -75,7 +81,13 @@
       'App Lock (PIN)': 'એપ લોક (PIN)', 'Lock now': 'હમણાં લોક કરો', 'Share Backup': 'બેકઅપ શેર કરો', 'App Preferences': 'એપ પસંદગી',
       'Enter PIN': 'PIN દાખલ કરો', 'Wrong PIN': 'ખોટો PIN', 'Welcome': 'સ્વાગત છે', 'Next': 'આગળ', 'Back': 'પાછળ', 'Skip': 'છોડો', 'Finish': 'પૂર્ણ કરો',
       'Your Business': 'તમારો વ્યવસાય', 'Bank & UPI': 'બેંક અને UPI', 'Security': 'સુરક્ષા', 'Business / Trade Name': 'વ્યવસાયનું નામ',
-      'Restore from a backup': 'બેકઅપમાંથી પાછું લાવો', 'Get started': 'શરૂ કરો', 'Stock In': 'સ્ટોક આવ્યો', 'Convert to Invoice': 'બિલ બનાવો'
+      'Restore from a backup': 'બેકઅપમાંથી પાછું લાવો', 'Get started': 'શરૂ કરો', 'Stock In': 'સ્ટોક આવ્યો', 'Convert to Invoice': 'બિલ બનાવો',
+      'Demo Mode': 'ડેમો મોડ', 'Exit demo': 'ડેમો બંધ કરો', 'Exit Demo Mode': 'ડેમો મોડ બંધ કરો', 'Try with sample data': 'નમૂના ડેટાથી અજમાવો',
+      'DEMO MODE': 'ડેમો મોડ', '— sample data, not real invoices': '— નમૂના ડેટા, સાચા બિલ નથી',
+      'Just looking? Explore with sample data (Demo Mode)': 'ફક્ત જોઈ રહ્યા છો? નમૂના ડેટાથી અજમાવો (ડેમો મોડ)',
+      'Open Demo Mode?': 'ડેમો મોડ ખોલશો?', 'Leave Demo Mode?': 'ડેમો મોડ બંધ કરશો?',
+      'Demo Mode shows sample customers and invoices so you can try the app. Your own data is kept separately and is not changed. Demo documents are watermarked "NOT A VALID TAX INVOICE".': 'ડેમો મોડમાં નમૂના ગ્રાહકો અને બિલ દેખાય છે જેથી તમે એપ અજમાવી શકો. તમારો પોતાનો ડેટા અલગ સુરક્ષિત રહે છે અને બદલાતો નથી. ડેમો બિલ પર "NOT A VALID TAX INVOICE" વોટરમાર્ક રહે છે.',
+      'The sample data will be deleted and your own data will open.': 'નમૂના ડેટા કાઢી નાખવામાં આવશે અને તમારો પોતાનો ડેટા ખુલશે.'
     }
   };
   const LANGS = { en: 'English', hi: 'हिन्दी', gu: 'ગુજરાતી' };

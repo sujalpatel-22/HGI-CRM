@@ -42,6 +42,10 @@
       display: flex; flex-direction: column; box-shadow: 0 1px 4px rgba(0,0,0,.12);
     }
     .main-invoice-body { flex-grow: 1; display: flex; flex-direction: column; }
+    .a4-page { position: relative; }
+    .demo-watermark { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 5; overflow: hidden; }
+    .demo-watermark span { transform: rotate(-32deg); font-size: 10mm; font-weight: 800; letter-spacing: 1mm; white-space: nowrap;
+      color: rgba(220, 38, 38, .22); border: 1.2mm solid rgba(220, 38, 38, .22); padding: 3mm 6mm; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
     .ctr { text-align: center; }
 
@@ -772,7 +776,10 @@
     /* =====================================================================
        CONSTANTS
        ===================================================================== */
-    const STORAGE_KEY = 'hgi_billing_v7_prod';
+    // Demo Mode keeps sample data in its own storage slot, so it can never mix with real business data.
+    const HGI_MODE_KEY = 'hgi_mode';
+    const DEMO_MODE = (() => { try { return localStorage.getItem(HGI_MODE_KEY) === 'demo'; } catch (e) { return false; } })();
+    const STORAGE_KEY = DEMO_MODE ? 'hgi_billing_demo' : 'hgi_billing_v7_prod';
     const DEFAULT_LOGO = '{{LOGO_ICON}}';
     const DEFAULT_LOGO_FULL = '{{LOGO_FULL}}';
     const GST2_DATE = '2025-09-22';          // GST 2.0 rate rationalisation (5% / 18% / 40%)
@@ -813,27 +820,40 @@
     };
     const SUPPLY_LABEL = { B2B: 'B2B', B2C: 'B2C', SEZWP: 'SEZ (with IGST)', SEZWOP: 'SEZ (LUT)', EXPWP: 'Export (with IGST)', EXPWOP: 'Export (LUT)', DEXP: 'Deemed Export' };
 
+    // Production defaults are EMPTY: a fresh install has no business data. Every value printed on an
+    // invoice must come from the user (onboarding / Settings). Sample data exists only in Demo Mode.
     const DEFAULT_COMPANY = {
-      name: "HARI GURU INDUSTRIES", legalName: "",
-      address: "Plot No 123, Phase 3, GIDC Naroda,\nAhmedabad, Gujarat - 382330",
-      gstin: "24AAAFH1234F1Z5", pan: "", state: "Gujarat", stateCode: "24", pin: "382330",
-      phone: "+91 98765 43210", email: "info@hariguru.com",
-      bankName: "STATE BANK OF INDIA", bankAcc: "123456789012", bankIfsc: "SBIN0001234", bankBranch: "GIDC Naroda, Ahmedabad",
-      upiId: "", defaultCreditDays: 30, logo: "", showLogo: true, tagline: "Quality Products | Trusted Supply",
+      name: "", legalName: "",
+      address: "",
+      gstin: "", pan: "", state: "", stateCode: "", pin: "",
+      phone: "", email: "",
+      bankName: "", bankAcc: "", bankIfsc: "", bankBranch: "",
+      upiId: "", defaultCreditDays: 30, logo: "", showLogo: true, tagline: "",
       aato: "upto5", prefixes: { INV: "", CRN: "CN/", DBN: "DN/", QUO: "QT/" }, lutArn: "", lutFy: "",
       ewbLimit: 50000, interestRate: 18,
       declaration: "We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.",
-      terms: "1. Goods once sold will not be taken back or exchanged.\n2. Interest @ 18% p.a. will be charged if payment is not made within due date.\n3. Subject to Ahmedabad Jurisdiction only."
+      terms: "1. Goods once sold will not be taken back or exchanged.\n2. Interest @ 18% p.a. will be charged if payment is not made within the due date."
     };
+
+    // Sample values shipped as defaults by v5.x–v7.0.0. Existing installs that still carry them are warned
+    // (never silently changed) so a fake GSTIN or bank account is not printed on real invoices.
+    const KNOWN_PLACEHOLDERS = {
+      name: ['HARI GURU INDUSTRIES'], gstin: ['24AAAFH1234F1Z5'], bankAcc: ['123456789012'], bankIfsc: ['SBIN0001234'],
+      phone: ['+91 98765 43210'], address: ['Plot No 123, Phase 3, GIDC Naroda,\nAhmedabad, Gujarat - 382330']
+    };
+    const PLACEHOLDER_LABEL = { name: 'company name', gstin: 'GSTIN', bankAcc: 'bank account number', bankIfsc: 'IFSC', phone: 'phone', address: 'address' };
+    // 'HARI GURU INDUSTRIES' is only a placeholder when it comes together with the sample GSTIN or bank account
+    function placeholderFields(co) {
+      if (DEMO_MODE || !co) return [];
+      const hit = Object.keys(KNOWN_PLACEHOLDERS).filter(k => KNOWN_PLACEHOLDERS[k].includes(String(co[k] || '').trim()));
+      return hit.length === 1 && hit[0] === 'name' ? [] : hit;
+    }
 
     function defaultState() {
       return {
         credentials: { username: "admin", password: "123" },
         company: JSON.parse(JSON.stringify(DEFAULT_COMPANY)),
-        products: [
-          { id: "PROD-101", name: "Industrial Machine Components", hsn: "848390", unit: "NOS", rate: 2500, gst: 18 },
-          { id: "PROD-102", name: "Precision Fabrication Assemblies", hsn: "730890", unit: "SET", rate: 4000, gst: 18 }
-        ],
+        products: [],
         customers: [], invoices: [], ui: { invoiceStyle: 'modern', lastBackup: null }
       };
     }
@@ -1257,7 +1277,8 @@
       try {
         probeStorage();
         const saved = storeGet('local', STORAGE_KEY);
-        state = migrateState(saved ? JSON.parse(saved) : defaultState());
+        const fresh = DEMO_MODE && window.HGI_DEMO_DATA ? window.HGI_DEMO_DATA.build() : defaultState();
+        state = migrateState(saved ? JSON.parse(saved) : fresh);
       } catch (e) {
         console.error(e);
         state = migrateState(defaultState());
@@ -1285,8 +1306,8 @@
     function companyLogo() { return state.company.logo || DEFAULT_LOGO; }
     function refreshCompanyNames() {
       const co = state.company;
-      $('header-comp-name').innerText = co.name;
-      $('login-comp-name').innerText = co.name;
+      $('header-comp-name').innerText = co.name || 'HGI Billing';
+      $('login-comp-name').innerText = co.name || 'HGI Billing';
       $('header-logo').src = companyLogo();
       $('login-logo').src = co.logo || DEFAULT_LOGO_FULL;
       $('login-logo').className = co.logo ? 'mx-auto h-24 object-contain' : 'mx-auto h-40 object-contain';
@@ -1673,6 +1694,11 @@
 
       // --- Supplier profile
       const cg = validateGSTIN(co.gstin);
+      if (!String(co.name || '').trim()) E('Your business name is not set — add it in Settings.', 'Rule 46(a)');
+      if (cg.status === 'empty' && d.docType !== 'QUO') E('Your company GSTIN is not set in Settings — a tax invoice must show the supplier GSTIN.', 'Rule 46(a)');
+      if (!GST_STATES[normalizeStateCode(co.stateCode)]) E('Your business state is not set in Settings — CGST/SGST vs IGST cannot be decided.', 'Sec 10, IGST Act');
+      const ph = placeholderFields(co);
+      if (ph.length) E(`Settings still contain SAMPLE values (${ph.map(k => PLACEHOLDER_LABEL[k]).join(', ')}) — replace them with your real details before issuing documents.`, 'Rule 46(a)');
       if (cg.status === 'invalid') E('Your company GSTIN in Settings is invalid.', 'Rule 46(a)');
       else if (cg.status === 'warn') W('Your company GSTIN fails the check-digit test — update it in Settings.', 'Rule 46(a)');
 
@@ -2095,6 +2121,8 @@
     function renderPreviewPages(labels) {
       const style = $('invoice-style-select').value;
       $('invoice-preview-container').innerHTML = labels.map(l => renderDocPage(previewDoc, style, l)).join('');
+      if (DEMO_MODE) $('invoice-preview-container').querySelectorAll('.a4-page').forEach(p =>
+        p.insertAdjacentHTML('beforeend', '<div class="demo-watermark" aria-hidden="true"><span>DEMO — NOT A VALID TAX INVOICE</span></div>'));
       fitInvoicePages();
     }
 
@@ -2395,7 +2423,10 @@
     function renderAlerts() {
       const co = state.company, today = todayISO(), a = [];
       const add = (lvl, html, action) => a.push({ lvl, html, action });
-      if (validateGSTIN(co.gstin).status !== 'ok') add('error', 'Company GSTIN in Settings looks wrong — every invoice will carry it.', "switchTab('settings')");
+      const ph = placeholderFields(co);
+      if (ph.length) add('error', `<strong>Sample data in Settings:</strong> your ${ph.map(k => PLACEHOLDER_LABEL[k]).join(', ')} still ${ph.length > 1 ? 'are' : 'is'} the app's example value${ph.length > 1 ? 's' : ''}. Replace with your real details — they print on every invoice.`, "switchTab('settings')");
+      if (!co.gstin) add('error', 'Company GSTIN is not set — add it in Settings before issuing tax invoices.', "switchTab('settings')");
+      else if (validateGSTIN(co.gstin).status !== 'ok') add('error', 'Company GSTIN in Settings looks wrong — every invoice will carry it.', "switchTab('settings')");
       const overdue = liveDocs().filter(isOverdue);
       if (overdue.length) {
         const int = overdue.reduce((s, d) => s + interestDue(d), 0);
@@ -2877,7 +2908,7 @@
     }
     function exportJSONBackup() {
       state.ui.lastBackup = new Date().toISOString(); saveState();
-      downloadBlob(new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' }), `HGI_ERP_Backup_${todayISO()}.json`);
+      downloadBlob(new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' }), `${DEMO_MODE ? 'DEMO_' : ''}HGI_ERP_Backup_${todayISO()}.json`);
       updateBackupLabel(); renderAlerts(); toast('Backup downloaded');
     }
     function importJSONBackup(event) {
@@ -2888,6 +2919,7 @@
         try {
           const parsed = JSON.parse(e.target.result);
           if (!parsed || !parsed.company) return toast('Invalid backup file format', 'error');
+          if (DEMO_MODE) return toast('You are in Demo Mode — exit Demo Mode first, then restore your backup.', 'error');
           if (!confirm(`Restore backup with ${(parsed.invoices || []).length} documents? This will REPLACE all current data.`)) return;
           state = migrateState(parsed); saveState(); initApp(); toast('Backup restored successfully');
         } catch (err) { toast('Failed to read the backup file', 'error'); }
@@ -2917,6 +2949,7 @@
     window.onload = initApp;
   </script>
   <script src="i18n.js"></script>
+  <script src="demo-data.js"></script>
   <script src="mobile.js"></script>
 </body>
 </html>

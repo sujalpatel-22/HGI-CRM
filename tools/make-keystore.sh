@@ -19,4 +19,9 @@ echo "  ANDROID_KEYSTORE_PASSWORD = <the password you chose>"
 echo "  ANDROID_KEY_ALIAS = hgi-release"
 echo "  ANDROID_KEY_PASSWORD = <the same password>"
 base64 -w0 "$OUT" > "$OUT.base64.txt" 2>/dev/null || base64 "$OUT" | tr -d '\n' > "$OUT.base64.txt"
+FP=$(keytool -list -v -keystore "$OUT" -storepass "$PW" -alias hgi-release | sed -n 's/.*SHA256: //p' | head -1)
 echo "Delete $OUT.base64.txt after adding the secret."
+echo
+echo "Also add a repository VARIABLE (Settings → Secrets and variables → Actions → Variables):"
+echo "  ANDROID_CERT_SHA256 = $FP"
+echo "CI then refuses to publish a release signed with any other key."

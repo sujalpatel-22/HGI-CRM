@@ -6,7 +6,7 @@
    ===================================================================== */
 (function () {
   'use strict';
-  const APP_VERSION = '7.0.0';
+  const APP_VERSION = '7.1.0';
   const cap = window.Capacitor;
   const isNative = !!(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform());
   // Without a bundler the native bridge exposes registered plugins on Capacitor.Plugins
@@ -215,7 +215,7 @@
   async function shareBackup() {
     closeMore();
     const json = JSON.stringify(state, null, 1);
-    const name = `HGI_Backup_${todayISO()}.json`;
+    const name = `${DEMO_MODE ? 'DEMO_' : ''}HGI_Backup_${todayISO()}.json`;
     state.ui.lastBackup = new Date().toISOString(); saveState();
     if (isNative) {
       try { await Native.shareFile({ fileName: name, base64: btoa(unescape(encodeURIComponent(json))), mime: 'application/json', text: 'HGI Billing backup' }); }
@@ -225,17 +225,48 @@
 
   /* ------------------------------------------------------------------ on-device durability (native) */
   let mirrorTimer = null;
+  // real data and demo data have separate mirror files, so Demo Mode can never overwrite the real mirror
+  const MIRROR_KEY = DEMO_MODE ? 'state-demo' : 'state';
   function mirrorState() {
     if (!Native) return;
     clearTimeout(mirrorTimer);
-    mirrorTimer = setTimeout(() => { Native.writeState({ key: 'state', data: JSON.stringify(state) }).catch(() => {}); }, 800);
+    mirrorTimer = setTimeout(() => { Native.writeState({ key: MIRROR_KEY, data: JSON.stringify(state) }).catch(() => {}); }, 800);
+  }
+  async function flushMirror() {
+    clearTimeout(mirrorTimer);
+    if (Native) { try { await Native.writeState({ key: MIRROR_KEY, data: JSON.stringify(state) }); } catch (e) { /* localStorage copy still exists */ } }
+  }
+
+  /* ------------------------------------------------------------------ demo mode (explicit opt-in only) */
+  async function enterDemo() {
+    if (DEMO_MODE) return;
+    if (!confirm(t('Open Demo Mode?') + '\n\n' + t('Demo Mode shows sample customers and invoices so you can try the app. Your own data is kept separately and is not changed. Demo documents are watermarked "NOT A VALID TAX INVOICE".'))) return;
+    saveState(); await flushMirror();
+    try { localStorage.setItem(HGI_MODE_KEY, 'demo'); } catch (e) { return toast('Demo Mode needs app storage, which is blocked here.', 'error'); }
+    location.reload();
+  }
+  async function exitDemo() {
+    if (!DEMO_MODE) return;
+    if (!confirm(t('Leave Demo Mode?') + '\n\n' + t('The sample data will be deleted and your own data will open.'))) return;
+    clearTimeout(mirrorTimer);
+    try { localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(HGI_MODE_KEY); } catch (e) { /* ignore */ }
+    if (Native) { try { await Native.writeState({ key: 'state-demo', data: '' }); } catch (e) { /* ignore */ } }
+    location.reload();
+  }
+  function demoBanner() {
+    if (!DEMO_MODE || document.getElementById('demo-banner')) return;
+    const b = document.createElement('div');
+    b.id = 'demo-banner'; b.className = 'no-print';
+    b.innerHTML = `<i class="fa-solid fa-flask"></i><span data-i18n><strong>DEMO MODE</strong> — sample data, not real invoices</span><button type="button" onclick="HGI_M.exitDemo()" data-i18n>Exit demo</button>`;
+    const header = document.querySelector('#app-container > header');
+    if (header) header.after(b); else document.body.prepend(b);
   }
   async function restoreFromMirror() {
     if (!Native) return;
     try {
       const has = storeGet('local', STORAGE_KEY);
       if (has) return;
-      const r = await Native.readState({ key: 'state' });
+      const r = await Native.readState({ key: MIRROR_KEY });
       if (r && r.data) { storeSet('local', STORAGE_KEY, r.data); window.__restoredFromMirror = true; console.log('[HGI] restored data from on-device mirror'); }
     } catch (e) { /* first run */ }
   }
@@ -297,7 +328,10 @@
   /* ------------------------------------------------------------------ onboarding */
   function needsOnboarding() { return !ui().onboarded && !(state.invoices || []).length; }
   function showOnboarding() {
-    const co = state.company;
+    // never pre-fill the wizard with the old sample values (fake GSTIN / bank account)
+    const co = placeholderFields(state.company).length
+      ? Object.assign({}, state.company, { name: '', gstin: '', address: '', pin: '', phone: '', bankName: '', bankAcc: '', bankIfsc: '', upiId: '' })
+      : state.company;
     const el = document.createElement('div');
     el.id = 'onboarding'; el.className = 'fixed inset-0 z-[65] brand-bg flex items-center justify-center p-4 overflow-y-auto no-print';
     const langBtns = Object.entries(i18n.LANGS).map(([k, v]) => `<button data-lang="${k}" class="ob-lang px-3 py-3 rounded-xl border-2 font-bold ${i18n.lang === k ? 'border-orange-500 bg-orange-50' : 'border-slate-200'}">${v}</button>`).join('');
@@ -310,6 +344,7 @@
         <div class="field-label mt-4">Theme</div>
         <select id="ob-theme" class="inp"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select>
         <label class="mt-4 block text-sm text-orange-700 font-semibold cursor-pointer"><i class="fa-solid fa-upload mr-1"></i>Restore from a backup<input type="file" accept=".json,application/json" class="hidden" onchange="HGI_M.restoreAndClose(event)"></label>
+        <button type="button" id="ob-demo" onclick="HGI_M.enterDemo()" class="mt-3 block text-sm text-slate-600 font-semibold"><i class="fa-solid fa-flask mr-1"></i>Just looking? Explore with sample data (Demo Mode)</button>
       </div>
       <div class="ob-step" data-step="1">
         <h2 class="text-xl font-bold text-slate-800">Your Business</h2>
@@ -403,7 +438,7 @@
     }
     const langOpts = Object.entries(i18n.LANGS).map(([k, v]) => `<option value="${k}" ${i18n.lang === k ? 'selected' : ''}>${v}</option>`).join('');
     card.innerHTML = `<h2 class="text-lg font-bold text-slate-800 mb-4">App Preferences</h2>
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+      <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 items-end">
         <div><label class="field-label">Language</label><select class="inp" onchange="HGI_M.setLang(this.value)">${langOpts}</select></div>
         <div><label class="field-label">Theme</label><select class="inp" onchange="HGI_M.setTheme(this.value)">
           <option value="system" ${(ui().theme || 'system') === 'system' ? 'selected' : ''}>System</option><option value="light" ${ui().theme === 'light' ? 'selected' : ''}>Light</option><option value="dark" ${ui().theme === 'dark' ? 'selected' : ''}>Dark</option></select></div>
@@ -411,6 +446,9 @@
           ? `<div class="flex gap-2"><button type="button" onclick="HGI_M.setPin()" class="flex-1 px-3 py-2.5 border rounded text-xs font-bold">Change PIN</button><button type="button" onclick="HGI_M.removePin()" class="px-3 py-2.5 border border-rose-300 text-rose-700 rounded text-xs font-bold">Turn off</button></div>`
           : `<button type="button" onclick="HGI_M.setPin()" class="w-full px-3 py-2.5 bg-slate-800 text-white rounded text-xs font-bold"><i class="fa-solid fa-lock mr-1"></i>Set PIN</button>`}</div>` : ''}
         <div><label class="field-label">Backup</label><button type="button" onclick="HGI_M.shareBackup()" class="w-full px-3 py-2.5 bg-emerald-600 text-white rounded text-xs font-bold"><i class="fa-solid fa-share-nodes mr-1"></i>Share Backup</button></div>
+        <div><label class="field-label">Demo Mode</label>${DEMO_MODE
+          ? `<button type="button" id="prefs-exit-demo" onclick="HGI_M.exitDemo()" class="w-full px-3 py-2.5 border-2 border-rose-300 text-rose-700 rounded text-xs font-bold"><i class="fa-solid fa-right-from-bracket mr-1"></i>Exit Demo Mode</button>`
+          : `<button type="button" id="prefs-enter-demo" onclick="HGI_M.enterDemo()" class="w-full px-3 py-2.5 border rounded text-xs font-bold"><i class="fa-solid fa-flask mr-1"></i>Try with sample data</button>`}</div>
       </div>
       <p class="text-[11px] text-slate-400 mt-3">HGI Billing ${APP_VERSION} · ${isNative ? 'Android app — data is stored on this device and mirrored to the app\'s private storage.' : 'Web version — data is stored in this browser.'}</p>`;
     i18n.translateTree(card);
@@ -429,6 +467,7 @@
     shareBackup, setPin, removePin,
     lock() { closeMore(); unlocked = false; showLock(); },
     about() { closeMore(); toast(`HGI Billing ${APP_VERSION} ${isNative ? '(Android)' : '(Web)'}`, 'info'); },
+    enterDemo, exitDemo,
     restoreAndClose(ev) { const el = document.getElementById('onboarding'); ui().onboarded = true; if (el) el.remove(); importJSONBackup(ev); },
     sharePdf, savePdf
   };
@@ -520,6 +559,7 @@
     await restoreFromMirror();
     installHooks();
     buildShell();                                // nav must exist before the app's first switchTab()
+    demoBanner();
     limitToasts();
     initApp();                                   // the original v6 app start
     applyTheme();

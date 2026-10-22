@@ -49,9 +49,14 @@ for (const vp of VIEWPORTS) {
   await page.fill('#login-username', 'admin'); await page.fill('#login-password', '123'); await page.click('#login-overlay button[type=submit]');
   await page.waitForTimeout(400);
   check(await page.isVisible('#onboarding'), 'onboarding wizard shown on first run');
+  const fresh = await page.evaluate(() => ({ p: state.products.length, c: state.customers.length, i: state.invoices.length, co: state.company,
+    prefill: ['ob-name', 'ob-gstin', 'ob-addr', 'ob-phone', 'ob-acc', 'ob-ifsc'].map(id => document.getElementById(id).value).join('') }));
+  check(fresh.p === 0 && fresh.c === 0 && fresh.i === 0, `fresh install has no products, buyers or documents (${fresh.p}/${fresh.c}/${fresh.i})`);
+  check(!fresh.co.name && !fresh.co.gstin && !fresh.co.bankAcc && !fresh.co.bankIfsc && !fresh.co.phone && !fresh.co.address, 'fresh install has no sample company, GSTIN or bank details');
+  check(fresh.prefill === '', 'onboarding fields start empty (no sample values)');
   await shot('01-onboarding');
   await page.click('#ob-next');                                                   // welcome → business
-  await page.fill('#ob-name', 'Shree Test Traders'); await page.fill('#ob-gstin', '24AAPFU0939F1ZV'); await page.dispatchEvent('#ob-gstin', 'input');
+  await page.fill('#ob-name', 'Shree Test Traders'); await page.fill('#ob-gstin', '24AAPFU0939F1Z1'); await page.dispatchEvent('#ob-gstin', 'input');
   await page.fill('#ob-addr', 'Plot 12, GIDC Naroda, Ahmedabad'); await page.fill('#ob-pin', '382330');
   await page.click('#ob-next'); await page.click('#ob-next'); await page.click('#ob-next');
   await page.waitForTimeout(300);
@@ -65,8 +70,12 @@ for (const vp of VIEWPORTS) {
     return [c.taxable, c.cgst, c.grandTotal, c.roundoff]; });
   check(JSON.stringify(calc) === JSON.stringify([11700, 926.25, 13553, 0.5]), `GST engine unchanged ${JSON.stringify(calc)}`);
 
-  // stock tracking on the sample product
-  await page.evaluate(() => { const p = state.products[0]; p.trackStock = true; p.openingStock = 10; p.minStock = 2; saveState(); renderItemList(); });
+  // the user adds their own items (fresh installs have none)
+  await page.evaluate(() => {
+    state.products.push({ id: uid('PROD'), name: 'Industrial Machine Components', hsn: '848390', unit: 'NOS', rate: 2500, gst: 18, trackStock: true, openingStock: 10, minStock: 2, stockIns: [] });
+    state.products.push({ id: uid('PROD'), name: 'Precision Fabrication Assemblies', hsn: '730890', unit: 'SET', rate: 4000, gst: 18 });
+    saveState(); refreshProductDatalist(); renderItemList();
+  });
 
   // invoice
   await page.evaluate(() => newDocument('INV'));
@@ -142,6 +151,59 @@ for (const vp of VIEWPORTS) {
   await page.reload(); await page.waitForFunction(() => window.HGI_READY === true, null, { timeout: 20000 }).catch(e => console.log('   reload errors:', errors.slice(-5)));
   check(await page.evaluate(() => state.invoices.length) === count, `data persists after reload (${count} documents)`);
 
+  if (vp.name === 'phone-large-412' || vp.name === 'desktop-1366') {
+    // ---- Demo Mode: explicit opt-in, separate storage, watermark, real data untouched
+    const realBefore = await page.evaluate(() => localStorage.getItem('hgi_billing_v7_prod'));
+    const realCount = JSON.parse(realBefore).invoices.length;
+    const relog = async () => {
+      await page.waitForFunction(() => window.HGI_READY === true, null, { timeout: 20000 });
+      if (await page.isVisible('#login-overlay')) { await page.fill('#login-username', 'admin'); await page.fill('#login-password', '123'); await page.click('#login-overlay button[type=submit]'); await page.waitForTimeout(300); }
+    };
+    await page.evaluate(() => switchTab('settings'));
+    await Promise.all([page.waitForEvent('load'), page.click('#prefs-enter-demo')]);
+    await relog();
+    const demo = await page.evaluate(() => ({ mode: DEMO_MODE, n: state.invoices.length, allDemo: state.invoices.every(d => d.demo), name: state.company.name, upi: state.company.upiId,
+      banner: !!document.getElementById('demo-banner') && document.getElementById('demo-banner').offsetHeight > 0 }));
+    check(demo.mode && demo.banner, 'Demo Mode opens with a visible DEMO banner');
+    check(demo.n === 5 && demo.allDemo && /Demo/.test(demo.name) && demo.upi === '', `Demo Mode shows only sample data (${demo.n} docs, "${demo.name}", no real UPI)`);
+    await page.evaluate(() => { editInvoice(state.invoices.find(d => d.docType === 'INV').id); renderPreview(); }); await page.waitForTimeout(500);
+    check(await page.evaluate(() => document.querySelectorAll('#invoice-preview-container .demo-watermark').length > 0 && document.querySelector('#invoice-preview-container').textContent.includes('NOT A VALID TAX INVOICE')), 'demo invoices carry the NOT A VALID TAX INVOICE watermark');
+    await shot('09-demo-preview');
+    check(await page.evaluate(b => localStorage.getItem('hgi_billing_v7_prod') === b, realBefore), 'real data untouched while in Demo Mode');
+    await page.evaluate(() => switchTab('settings'));
+    await Promise.all([page.waitForEvent('load'), page.click('#prefs-exit-demo')]);
+    await relog();
+    const back = await page.evaluate(() => ({ mode: DEMO_MODE, n: state.invoices.length, demoDocs: state.invoices.filter(d => d.demo).length, demoKey: localStorage.getItem('hgi_billing_demo'), banner: !!document.getElementById('demo-banner') }));
+    check(!back.mode && back.n === realCount && back.demoDocs === 0 && back.demoKey === null && !back.banner, `exit Demo Mode: real data back (${back.n} docs), sample data deleted`);
+    await page.evaluate(() => { renderPreview(); }); await page.waitForTimeout(300);
+    check(await page.evaluate(() => !document.querySelector('#invoice-preview-container .demo-watermark')), 'no watermark on real invoices');
+  }
+
+  check(errors.length === 0, `no JavaScript errors${errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''}`);
+  await ctx.close();
+}
+// ---- Upgrade from v7.0.0 / v6 data that still has the old sample company values: warned, never silently changed
+{
+  console.log('\n▶ upgrade from older data with sample values');
+  const ctx = await browser.newContext({ viewport: { width: 412, height: 915 }, isMobile: true, hasTouch: true });
+  const legacy = { credentials: { username: 'admin', password: '123' },
+    company: { name: 'HARI GURU INDUSTRIES', gstin: '24AAAFH1234F1Z5', stateCode: '24', state: 'Gujarat', address: 'Plot No 123, Phase 3, GIDC Naroda,\nAhmedabad, Gujarat - 382330',
+      bankName: 'STATE BANK OF INDIA', bankAcc: '123456789012', bankIfsc: 'SBIN0001234', phone: '+91 98765 43210', prefixes: { INV: '' } },
+    products: [{ id: 'PROD-101', name: 'Industrial Machine Components', hsn: '848390', unit: 'NOS', rate: 2500, gst: 18 }],
+    customers: [], invoices: [{ id: 'DOC-1', docType: 'INV', num: '01/26-27', date: '2026-10-01', supplyType: 'B2C', pos: '24', buyerName: 'Old Customer', items: [{ desc: 'X', hsn: '848390', gst: 18, qty: 1, unit: 'NOS', rate: 100 }], payments: [] }],
+    ui: { onboarded: true } };
+  await ctx.addInitScript(s => { if (!sessionStorage.getItem('__seeded')) { localStorage.setItem('hgi_billing_v7_prod', s); sessionStorage.setItem('__seeded', '1'); } }, JSON.stringify(legacy));
+  const page = await ctx.newPage();
+  const errors = []; page.on('pageerror', e => errors.push(String(e)));
+  await page.goto(base); await page.waitForFunction(() => window.HGI_READY === true, null, { timeout: 20000 });
+  await page.fill('#login-username', 'admin'); await page.fill('#login-password', '123'); await page.click('#login-overlay button[type=submit]'); await page.waitForTimeout(400);
+  const r = await page.evaluate(() => ({ n: state.invoices.length, p: state.products.length, gstin: state.company.gstin, acc: state.company.bankAcc,
+    alert: document.getElementById('dash-alerts').textContent, check: runChecks(collectDocFromForm()).map(x => x.msg).join(' | ') }));
+  check(r.n === 1 && r.p === 1, 'existing documents and items kept after upgrade');
+  check(r.gstin === '24AAAFH1234F1Z5' && r.acc === '123456789012', 'existing company values not changed automatically');
+  check(/Sample data in Settings/.test(r.alert) && /GSTIN/.test(r.alert) && /bank account/.test(r.alert), 'dashboard warns that Settings still hold sample values');
+  check(/SAMPLE values/.test(r.check), 'compliance check blocks-warns sample values on new documents');
+  await page.screenshot({ path: path.join(OUT, 'upgrade-sample-warning.png') });
   check(errors.length === 0, `no JavaScript errors${errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''}`);
   await ctx.close();
 }

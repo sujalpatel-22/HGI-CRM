@@ -53,10 +53,12 @@ check(await page.evaluate(() => getComputedStyle(document.body).fontFamily.inclu
 check(await page.evaluate(() => [...document.styleSheets].some(s => { try { return [...s.cssRules].some(r => r.selectorText === '.bg-white'); } catch (e) { return false; } })), 'compiled Tailwind CSS loaded');
 check(!(await page.isVisible('#login-overlay')), 'no username/password screen on Android');
 check(await page.isVisible('#onboarding'), 'onboarding shown on first launch');
+check(await page.evaluate(() => !state.products.length && !state.customers.length && !state.invoices.length && !state.company.gstin && !state.company.bankAcc && !state.company.name),
+  'fresh install starts with no business data (no sample company, items, buyers or invoices)');
 
 // onboarding
 await page.click('#ob-next');
-await page.fill('#ob-name', 'Emulator Test Traders'); await page.fill('#ob-gstin', '24AAPFU0939F1ZV'); await page.dispatchEvent('#ob-gstin', 'input');
+await page.fill('#ob-name', 'Emulator Test Traders'); await page.fill('#ob-gstin', '24AAPFU0939F1Z1'); await page.dispatchEvent('#ob-gstin', 'input');
 await page.fill('#ob-addr', 'GIDC Naroda, Ahmedabad'); await page.fill('#ob-pin', '382330');
 await page.click('#ob-next'); await page.fill('#ob-upi', 'test@upi'); await page.click('#ob-next'); await page.click('#ob-next');
 await page.waitForTimeout(500);
@@ -79,6 +81,7 @@ await page.evaluate(() => newDocument('INV'));
 await page.fill('#inv-buyer-name', 'Shree Ram Engineering'); await page.fill('#inv-buyer-gstin', '27AAPFU0939F1ZV'); await page.dispatchEvent('#inv-buyer-gstin', 'input');
 await page.fill('#inv-buyer-address', 'MIDC Bhosari, Pune'); await page.fill('#inv-buyer-pin', '411026');
 const row = page.locator('#invoice-items-body tr').first();
+await page.evaluate(() => { state.products.push({ id: uid('PROD'), name: 'Industrial Machine Components', hsn: '848390', unit: 'NOS', rate: 2500, gst: 18 }); saveState(); refreshProductDatalist(); });
 await row.locator('.item-desc').fill('Industrial Machine Components'); await row.locator('.item-desc').dispatchEvent('change');
 await row.locator('.item-qty').fill('4');
 await page.waitForTimeout(600);
@@ -126,6 +129,23 @@ await device.shell(`am force-stop ${PKG}`);
 await device.shell(`run-as ${PKG} sh -c 'rm -rf app_webview/Default/"Local Storage" app_webview/"Local Storage"; ls files'`).then(b => console.log('    files dir:', b.toString().trim()));
 page = await launch();
 check(await page.evaluate(() => state.invoices.length === 1 && window.__restoredFromMirror === true), 'data restored from on-device mirror when WebView storage is wiped');
+
+// Demo Mode: opt-in, separate storage + separate native mirror file; real data untouched; exit deletes sample data
+page.on('dialog', d => d.accept().catch(() => {}));
+await page.evaluate(() => { HGI_M.enterDemo(); });
+await page.waitForFunction(() => window.HGI_READY === true && typeof DEMO_MODE !== 'undefined' && DEMO_MODE === true, null, { timeout: 60000 });
+check(await page.evaluate(() => state.invoices.length === 5 && state.invoices.every(d => d.demo) && !!document.getElementById('demo-banner')), 'Demo Mode shows sample data with a DEMO banner');
+await page.waitForTimeout(1500);
+check(await page.evaluate(async () => { const r = await Capacitor.Plugins.HgiNative.readState({ key: 'state' }); const s = JSON.parse(r.data); return s.invoices.length === 1 && s.company.name === 'Emulator Test Traders'; }),
+  'real data in the native mirror untouched while Demo Mode is open');
+await shot('05a-demo');
+await page.evaluate(() => { HGI_M.exitDemo(); });
+await page.waitForFunction(() => window.HGI_READY === true && DEMO_MODE === false, null, { timeout: 60000 });
+await page.waitForTimeout(3000);
+check(await page.evaluate(async () => { const r = await Capacitor.Plugins.HgiNative.readState({ key: 'state-demo' }); return state.invoices.length === 1 && !state.invoices.some(d => d.demo) && !r.data && !document.getElementById('demo-banner'); }),
+  'exit Demo Mode returns to real data and deletes the sample data');
+page = await launch();
+check(await page.evaluate(() => DEMO_MODE === false && state.invoices.length === 1), 'after restart the app opens real data, not demo');
 
 // dark mode + Hindi
 await page.evaluate(() => { HGI_M.setTheme('dark'); HGI_M.setLang('hi'); }); await page.waitForTimeout(800);

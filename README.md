@@ -40,13 +40,17 @@ store/                  Play Store icon, feature graphic, listing text
    ```bash
    ./tools/make-keystore.sh          # needs Java (keytool); prints the 4 values below
    ```
-   In GitHub, go to **Settings → Secrets and variables → Actions** and add:
-   `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`.
-   Without these secrets, CI signs with a throw-away **TEST key**. Files are then named `-TESTKEY`; fine for trying the app, not for Play.
-3. Open **Actions → Android build & test → Run workflow**, or just push to `main`.
+   In GitHub, go to **Settings → Secrets and variables → Actions** and add the secrets
+   `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`,
+   plus the **variable** `ANDROID_CERT_SHA256` (the fingerprint the script prints).
+   Without the secrets, ordinary CI runs sign with a throw-away key. Those files are named `-INTERNAL-TESTKEY`
+   and are only for testing on your own phone: never Play, never customers.
+3. **Production release:** push a version tag (`git tag v7.1.0 && git push origin v7.1.0`) or use
+   **Actions → Android build & test → Run workflow** with *Production release* ticked. A release build **fails** unless the owner's key
+   is configured, and also if the key's fingerprint differs from `ANDROID_CERT_SHA256`. `dist/SIGNING.txt` records which key signed the build.
 4. Download the **hgi-billing-android** artifact:
-   - `HGI-Billing-7.0.0-<n>.apk` — signed release, install directly
-   - `HGI-Billing-7.0.0-<n>.aab` — upload to Google Play
+   - `HGI-Billing-<version>-<n>.apk` — signed with your release key, install directly
+   - `HGI-Billing-<version>-<n>.aab` — upload to Google Play
    - `…-debug.apk` — for testing
    - `SHA256SUMS.txt`
 
@@ -84,3 +88,9 @@ Requires Android 7.0+ (API 24) with **Android System WebView 80 or newer**. WebV
 * Translations cover menus, labels and statuses. Compliance messages and the invoice itself stay in English.
 * E-invoice / e-way bill API is not in the Android app yet. The v6.1 secure backend is web-only for now and will be connected in Phase 2.
 * Indian GST only. Other countries' tax modules are Phase 3.
+
+## Demo Mode
+
+A fresh install has **no** business data. To show the app to someone, open **Welcome → "Explore with sample data"** or
+**Settings → App Preferences → Demo Mode**. Demo data is stored separately from your data (`hgi_billing_demo` / native mirror `state-demo`).
+Every demo page prints with a *DEMO — NOT A VALID TAX INVOICE* watermark, and "Exit demo" deletes the sample data and returns to your own.

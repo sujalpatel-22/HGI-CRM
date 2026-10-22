@@ -3,8 +3,14 @@ name: Android build & test
 on:
   push:
     branches: [main, "android-*"]
+    tags: ["v*"]            # a version tag = production release build (owner key required)
   pull_request:
   workflow_dispatch:
+    inputs:
+      release:
+        description: "Production release build (fails unless the owner's release key secrets are set)"
+        type: boolean
+        default: false
 
 # contents: write only so the job can publish its logs + APK/AAB to the ci-output-* branches
 permissions:
@@ -71,8 +77,13 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          RELEASE_REQUESTED: ${{ startsWith(github.ref, 'refs/tags/v') || inputs.release == true }}
         run: |
           KS="$RUNNER_TEMP/release.jks"
+          if [ "$RELEASE_REQUESTED" = "true" ] && { [ -z "$KEYSTORE_B64" ] || [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; }; then
+            echo "::error::Production release requested but the owner's release key is not configured (ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD). A temporary test key is never used for a release."
+            exit 1
+          fi
           if [ -n "$KEYSTORE_B64" ]; then
             echo "$KEYSTORE_B64" | base64 -d > "$KS"
             echo "HGI_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
@@ -80,7 +91,7 @@ jobs:
             echo "HGI_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
             echo "mode=release-key" >> "$GITHUB_OUTPUT"
           else
-            echo "::warning::No ANDROID_KEYSTORE_BASE64 secret — signing with a throw-away TEST key. Do NOT upload this build to Google Play."
+            echo "::warning::No ANDROID_KEYSTORE_BASE64 secret — INTERNAL TEST build signed with a throw-away key. Not for Google Play or customers."
             PW=$(openssl rand -hex 16)
             keytool -genkeypair -v -keystore "$KS" -storepass "$PW" -keypass "$PW" -alias hgi-test -keyalg RSA -keysize 2048 -validity 365 \
               -dname "CN=HGI Billing TEST, O=HARIGURU INDUSTRIES, C=IN" -noprompt
@@ -108,15 +119,31 @@ jobs:
             "$BT/aapt2" dump badging "$APK" | grep -E "package:|sdkVersion|targetSdkVersion|application-label:|uses-permission"
           } 2>&1 | tee logs/06-verify.log
           "$BT/aapt2" dump badging "$APK" | grep -q "targetSdkVersion:'36'" || (echo "::error::targetSdk must be 36 for Google Play" && exit 1)
+          # signing certificate fingerprint; for release builds it must match the owner's registered fingerprint (repo variable ANDROID_CERT_SHA256)
+          FP=$("$BT/apksigner" verify --print-certs "$APK" | sed -n 's/.*certificate SHA-256 digest: //p' | head -1 | tr 'a-f' 'A-F')
+          DN=$("$BT/apksigner" verify --print-certs "$APK" | sed -n 's/.*certificate DN: //p' | head -1)
+          echo "HGI_CERT_SHA256=$FP" >> "$GITHUB_ENV"
+          echo "Signing certificate: $DN  SHA-256 $FP  (mode: ${{ steps.signing.outputs.mode }})" | tee -a logs/06-verify.log
+          EXPECTED=$(echo "${{ vars.ANDROID_CERT_SHA256 }}" | tr -d ': ' | tr 'a-f' 'A-F')
+          if [ "${{ steps.signing.outputs.mode }}" = "release-key" ] && [ -n "$EXPECTED" ] && [ "$EXPECTED" != "$FP" ]; then
+            echo "::error::Release key fingerprint $FP does not match the registered ANDROID_CERT_SHA256 $EXPECTED — wrong keystore in secrets"; exit 1
+          fi
+          if [ "${{ steps.signing.outputs.mode }}" = "release-key" ] && echo "$DN" | grep -q "HGI Billing TEST"; then echo "::error::release-key mode but the certificate is the test key"; exit 1; fi
 
       - name: Collect artifacts
         run: |
           mkdir -p dist
           V="$HGI_VERSION_NAME-$HGI_VERSION_CODE"
-          TAG=$([ "${{ steps.signing.outputs.mode }}" = "release-key" ] && echo "" || echo "-TESTKEY")
+          TAG=$([ "${{ steps.signing.outputs.mode }}" = "release-key" ] && echo "" || echo "-INTERNAL-TESTKEY")
           cp android/app/build/outputs/apk/release/app-release.apk "dist/HGI-Billing-$V$TAG.apk"
           cp android/app/build/outputs/bundle/release/app-release.aab "dist/HGI-Billing-$V$TAG.aab"
           cp android/app/build/outputs/apk/debug/app-debug.apk "dist/HGI-Billing-$V-debug.apk"
+          {
+            echo "HGI Billing $HGI_VERSION_NAME (versionCode $HGI_VERSION_CODE) — commit $GITHUB_SHA"
+            echo "Signing mode: ${{ steps.signing.outputs.mode }}"
+            echo "Certificate SHA-256: $HGI_CERT_SHA256"
+            [ "${{ steps.signing.outputs.mode }}" = "release-key" ] && echo "Signed with the owner's release key." || echo "INTERNAL TEST BUILD — throw-away key. NOT for Google Play, NOT for customers. Updates from this build cannot be installed over a Play/release install."
+          } > dist/SIGNING.txt
           (cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt)
           # full generated Android Studio project (without build outputs) for local builds
           tar --exclude='build' --exclude='.gradle' --exclude='.idea' --exclude='android/app/src/main/assets/public' \

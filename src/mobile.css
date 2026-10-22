@@ -167,3 +167,11 @@ html.dark .rpt-table td { border-color: #23304a; }
 html.dark .rpt-table tfoot td { background: #0f1728; }
 html.dark #invoice-preview-container .a4-page { box-shadow: 0 2px 14px rgba(0, 0, 0, .6); }
 @media print { html.dark body { background: #fff !important; } }
+
+/* Demo Mode banner (shown under the header on every screen while sample data is open) */
+#demo-banner { display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: #fef3c7; color: #92400e;
+  border-bottom: 1px solid #fcd34d; font-size: 12.5px; position: sticky; top: 0; z-index: 30; }
+#demo-banner span { flex: 1; }
+#demo-banner button { padding: 5px 10px; border-radius: 8px; border: 1px solid #d97706; font-weight: 700; font-size: 12px; background: #fff; color: #92400e; }
+html.dark #demo-banner { background: #422006; color: #fde68a; border-color: #78350f; }
+html.dark #demo-banner button { background: #1c1917; color: #fde68a; }
