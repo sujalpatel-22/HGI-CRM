@@ -58,7 +58,21 @@ for (const vp of VIEWPORTS) {
   await page.click('#ob-next');                                                   // welcome → business
   await page.fill('#ob-name', 'Shree Test Traders'); await page.fill('#ob-gstin', '24AAPFU0939F1Z1'); await page.dispatchEvent('#ob-gstin', 'input');
   await page.fill('#ob-addr', 'Plot 12, GIDC Naroda, Ahmedabad'); await page.fill('#ob-pin', '382330');
-  await page.click('#ob-next'); await page.click('#ob-next'); await page.click('#ob-next');
+  await page.click('#ob-next');
+  // Bank & UPI step (user-reported: a 10-character IFSC silently blocked "Next" because the error toast was hidden)
+  await page.fill('#ob-bank', 'PNB'); await page.fill('#ob-acc', '2138 0021 000086'); await page.fill('#ob-ifsc', 'PUNB213800'); await page.fill('#ob-upi', 'name@bank');
+  await page.click('#ob-next'); await page.waitForTimeout(200);
+  const bankErr = await page.evaluate(() => ({ step: document.querySelector('.ob-step.active').dataset.step, errs: [...document.querySelectorAll('#onboarding .ob-err')].map(e => e.textContent),
+    fixVisible: !!document.querySelector('#onboarding .ob-fix') && document.querySelector('#onboarding .ob-fix').offsetHeight > 0,
+    toastOnTop: Number(getComputedStyle(document.getElementById('toast-container')).zIndex) > Number(getComputedStyle(document.getElementById('onboarding')).zIndex) }));
+  check(bankErr.step === '2' && bankErr.errs.some(e => /11 characters/.test(e) && /PUNB0213800/.test(e)) && bankErr.errs.some(e => /only an example/.test(e)), `wrong IFSC / example UPI explained under the fields (${bankErr.errs.length} messages)`);
+  check(bankErr.fixVisible, 'one-tap IFSC correction offered');
+  check(bankErr.toastOnTop, 'toasts appear above the setup wizard');
+  await page.click('#onboarding .ob-fix'); await page.fill('#ob-upi', '');
+  await page.click('#ob-next'); await page.waitForTimeout(150);
+  check(await page.evaluate(() => document.querySelector('.ob-step.active').dataset.step === '3' && state.company.bankIfsc === 'PUNB0213800' && state.company.bankAcc === '21380021000086' && state.company.upiId === ''),
+    'after correcting, Next continues and bank details are saved');
+  await page.click('#ob-next');
   await page.waitForTimeout(300);
   check(!(await page.isVisible('#onboarding')), 'onboarding completes');
   check(await page.evaluate(() => state.company.name === 'Shree Test Traders' && state.company.stateCode === '24' && state.company.pan === 'AAPFU0939F'), 'onboarding saved company, state code & PAN from GSTIN');

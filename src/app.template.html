@@ -940,6 +940,30 @@
     /* =====================================================================
        GSTIN VALIDATION
        ===================================================================== */
+    /* Bank / UPI field checks shared by onboarding and Settings. They return a clear message and, where a
+       common typo is obvious (IFSC missing its 5th-character 0), a suggested correction. */
+    function checkIfsc(raw) {
+      const v = String(raw || '').toUpperCase().replace(/\s+/g, '');
+      if (!v) return { ok: true, value: '' };
+      if (/^[A-Z]{4}0[A-Z0-9]{6}$/.test(v)) return { ok: true, value: v };
+      const fixed = v.length === 10 && /^[A-Z]{4}[A-Z0-9]{6}$/.test(v) ? v.slice(0, 4) + '0' + v.slice(4) : '';
+      return { ok: false, value: v, suggest: fixed,
+        msg: `IFSC must be 11 characters: 4 letters, then 0, then 6 letters/digits (you entered ${v.length}).${fixed ? ` Did you mean ${fixed}?` : ''}` };
+    }
+    function checkUpi(raw) {
+      const v = String(raw || '').trim();
+      if (!v) return { ok: true, value: '' };
+      if (/^name@bank$/i.test(v)) return { ok: false, value: v, msg: '"name@bank" is only an example — enter your own UPI ID or leave it blank.' };
+      if (!/^[\w.\-]{2,}@[a-zA-Z]{2,}$/.test(v)) return { ok: false, value: v, msg: 'UPI ID looks invalid — it should look like yourname@okhdfcbank.' };
+      return { ok: true, value: v };
+    }
+    function checkBankAcc(raw) {
+      const v = String(raw || '').replace(/[\s-]+/g, '');
+      if (!v) return { ok: true, value: '' };
+      if (!/^\d{9,18}$/.test(v)) return { ok: false, value: v, msg: 'Account number should be 9 to 18 digits.' };
+      return { ok: true, value: v };
+    }
+
     function gstinChecksumOk(g) {
       const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
       let sum = 0;
@@ -2857,10 +2881,11 @@
     }
     function saveSettings() {
       const v = id => $(id).value.trim();
-      const upi = v('set-upi-id');
-      if (upi && !/^[\w.\-]{2,}@[a-zA-Z]{2,}$/.test(upi)) return toast('UPI ID looks invalid (example: name@bank)', 'error');
-      const ifsc = v('set-bank-ifsc').toUpperCase();
-      if (ifsc && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc)) return toast('IFSC should look like SBIN0001234', 'error');
+      const upiR = checkUpi(v('set-upi-id')), ifscR = checkIfsc(v('set-bank-ifsc')), accR = checkBankAcc(v('set-bank-acc'));
+      if (!upiR.ok) return toast(upiR.msg, 'error');
+      if (!ifscR.ok) { if (ifscR.suggest) $('set-bank-ifsc').value = ifscR.suggest; return toast(ifscR.msg + (ifscR.suggest ? ' (filled in — check it and save again)' : ''), 'error'); }
+      if (!accR.ok) return toast(accR.msg, 'error');
+      const upi = upiR.value, ifsc = ifscR.value;
       const pan = v('set-comp-pan').toUpperCase();
       if (pan && !/^[A-Z]{5}\d{4}[A-Z]$/.test(pan)) return toast('PAN should look like ABCDE1234F', 'error');
       const prefixes = { INV: v('set-prefix-inv'), CRN: v('set-prefix-crn') || 'CN/', DBN: v('set-prefix-dbn') || 'DN/', QUO: v('set-prefix-quo') || 'QT/' };
@@ -2873,7 +2898,7 @@
         lutArn: v('set-lut-arn').toUpperCase(), lutFy: v('set-lut-fy'), ewbLimit: parseFloat(v('set-ewb-limit')) || 50000,
         interestRate: parseFloat(v('set-interest')) || 0, defaultCreditDays: parseInt(v('set-credit-days'), 10) || 0,
         declaration: v('set-declaration'), terms: $('set-comp-terms').value,
-        bankName: v('set-bank-name'), bankAcc: v('set-bank-acc'), bankIfsc: ifsc, bankBranch: v('set-bank-branch'),
+        bankName: v('set-bank-name'), bankAcc: accR.value, bankIfsc: ifsc, bankBranch: v('set-bank-branch'),
         upiId: upi, tagline: v('set-tagline'), showLogo: $('set-show-logo').checked
       });
       if (pendingLogo !== null) { state.company.logo = pendingLogo; pendingLogo = null; }

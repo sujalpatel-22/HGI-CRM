@@ -175,3 +175,12 @@ html.dark #invoice-preview-container .a4-page { box-shadow: 0 2px 14px rgba(0, 0
 #demo-banner button { padding: 5px 10px; border-radius: 8px; border: 1px solid #d97706; font-weight: 700; font-size: 12px; background: #fff; color: #92400e; }
 html.dark #demo-banner { background: #422006; color: #fde68a; border-color: #78350f; }
 html.dark #demo-banner button { background: #1c1917; color: #fde68a; }
+
+/* toasts must sit above the onboarding wizard (z 65) and the lock screen (z 70) */
+#toast-container { z-index: 90 !important; }
+/* inline field errors in the onboarding wizard */
+.inp-err { border-color: #e11d48 !important; box-shadow: 0 0 0 2px rgba(225, 29, 72, .18) !important; }
+.ob-err { color: #e11d48; font-size: 12px; font-weight: 600; margin-top: 4px; line-height: 1.35; }
+.ob-fix { margin-top: 4px; padding: 3px 9px; border-radius: 7px; border: 1px solid #e11d48; font-weight: 700; color: #be123c; background: #fff1f2; }
+html.dark .ob-err { color: #fb7185; }
+html.dark .ob-fix { background: #3b0a14; color: #fda4af; border-color: #fb7185; }

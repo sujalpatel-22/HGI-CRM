@@ -383,6 +383,31 @@
     el.querySelector('#ob-aato').value = co.aato || 'upto5';
     el.querySelector('#ob-theme').value = ui().theme || 'system';
     let step = 0;
+    // errors are shown right under the field (a toast could be hidden behind this full-screen wizard)
+    const clearErrs = () => { el.querySelectorAll('.ob-err').forEach(e => e.remove()); el.querySelectorAll('.inp-err').forEach(e => e.classList.remove('inp-err')); };
+    const fieldErr = (sel, msg, suggest) => {
+      const input = el.querySelector(sel);
+      const p = document.createElement('p');
+      p.className = 'ob-err'; p.setAttribute('role', 'alert'); p.textContent = msg;
+      if (suggest) {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'ob-fix'; b.textContent = t('Use') + ' ' + suggest;
+        b.onclick = () => { input.value = suggest; p.remove(); input.classList.remove('inp-err'); };
+        p.appendChild(document.createTextNode(' ')); p.appendChild(b);
+      }
+      input.classList.add('inp-err');
+      const host = input.closest('.grid > div');
+      if (host) host.appendChild(p); else input.after(p);
+      input.focus();
+      return false;
+    };
+    el.addEventListener('input', e => {
+      if (!e.target.classList.contains('inp-err')) return;
+      e.target.classList.remove('inp-err');
+      const host = e.target.closest('.grid > div');
+      const n = host ? host.querySelector('.ob-err') : e.target.nextElementSibling;
+      if (n && n.classList.contains('ob-err')) n.remove();
+    });
     const show = () => {
       el.querySelectorAll('.ob-step').forEach(s => s.classList.toggle('active', Number(s.dataset.step) === step));
       el.querySelectorAll('.ob-dots span').forEach((s, i) => s.classList.toggle('on', i === step));
@@ -406,19 +431,24 @@
     el.querySelector('#ob-next').onclick = () => {
       if (step === 1) {
         const name = el.querySelector('#ob-name').value.trim();
-        if (name.length < 2) return toast('Enter your business name', 'error');
+        clearErrs();
+        if (name.length < 2) return fieldErr('#ob-name', t('Enter your business name'));
         const g = el.querySelector('#ob-gstin').value.trim().toUpperCase(), r = validateGSTIN(g);
-        if (g && (r.status === 'invalid' || r.status === 'typing')) return toast('GSTIN looks invalid — fix it or leave it blank', 'error');
+        if (g && (r.status === 'invalid' || r.status === 'typing')) return fieldErr('#ob-gstin', t('GSTIN looks invalid — fix it or leave it blank'));
         const pin = el.querySelector('#ob-pin').value.trim();
-        if (pin && !/^[1-9]\d{5}$/.test(pin)) return toast('PIN code must be 6 digits', 'error');
+        if (pin && !/^[1-9]\d{5}$/.test(pin)) return fieldErr('#ob-pin', t('PIN code must be 6 digits'));
         Object.assign(state.company, { name, gstin: g, address: el.querySelector('#ob-addr').value, pin, phone: el.querySelector('#ob-phone').value.trim(), aato: el.querySelector('#ob-aato').value });
         if (r.code) { state.company.stateCode = r.code; state.company.state = GST_STATES[r.code]; state.company.pan = g.slice(2, 12); }
       }
       if (step === 2) {
-        const ifsc = el.querySelector('#ob-ifsc').value.trim().toUpperCase(), upi = el.querySelector('#ob-upi').value.trim();
-        if (ifsc && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc)) return toast('IFSC should look like SBIN0001234', 'error');
-        if (upi && !/^[\w.\-]{2,}@[a-zA-Z]{2,}$/.test(upi)) return toast('UPI ID looks invalid (name@bank)', 'error');
-        Object.assign(state.company, { bankName: el.querySelector('#ob-bank').value.trim(), bankAcc: el.querySelector('#ob-acc').value.trim(), bankIfsc: ifsc, upiId: upi });
+        clearErrs();
+        const acc = checkBankAcc(el.querySelector('#ob-acc').value), ifsc = checkIfsc(el.querySelector('#ob-ifsc').value), upi = checkUpi(el.querySelector('#ob-upi').value);
+        let bad = false;
+        if (!acc.ok) bad = fieldErr('#ob-acc', acc.msg) || true;
+        if (!ifsc.ok) bad = fieldErr('#ob-ifsc', ifsc.msg, ifsc.suggest) || true;
+        if (!upi.ok) bad = fieldErr('#ob-upi', upi.msg) || true;
+        if (bad) return;
+        Object.assign(state.company, { bankName: el.querySelector('#ob-bank').value.trim(), bankAcc: acc.value, bankIfsc: ifsc.value, upiId: upi.value });
       }
       if (step < 3) { step++; return show(); }
       ui().onboarded = true; saveState();
