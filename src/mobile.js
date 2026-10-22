@@ -535,7 +535,10 @@
       const host = document.querySelector('#tab-dashboard') || document.body;
       const ws = [rupeeWidth(document.body, 'font-bold text-xl'), rupeeWidth(host, 'text-xl font-bold'), rupeeWidth(document.body, 'font-semibold'), rupeeWidth(document.body, '')];
       window.HGI_APP.rupeeWidths = ws.map(w => Math.round(w * 10) / 10);
-      if (ws.some(w => w < 2)) { document.documentElement.classList.add('rupee-fix'); window.HGI_APP.rupeeFix = true; }
+      // the probe alone is not enough: on WebView 83 the glyph measured fine off-screen but was 0px inside the KPI cards.
+      // Engines before Chrome 100 therefore always take ₹ from the system font (verified fine on WebView 109/124/133).
+      const m = /Chrome\/(\d+)/.exec(navigator.userAgent), major = m ? Number(m[1]) : 999;
+      if (ws.some(w => w < 2) || major < 100) { document.documentElement.classList.add('rupee-fix'); window.HGI_APP.rupeeFix = true; }
     };
     // load Inter's ₹ face first (unicode-range fonts load lazily), then measure
     if (document.fonts && document.fonts.load) Promise.all([document.fonts.load("700 40px 'Inter'", '₹'), document.fonts.load("400 40px 'Inter'", '₹')]).then(run, run);

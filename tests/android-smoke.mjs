@@ -24,6 +24,20 @@ const shot = async n => fs.writeFileSync(path.join(OUT, `${label}-${n}.png`), aw
 setTimeout(() => { console.log('✗ watchdog: smoke test exceeded 15 minutes'); process.exit(3); }, 15 * 60 * 1000);
 const within = (p, ms, what) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(`${what} timed out after ${ms / 1000}s`)), ms))]);
 let lastLaunchAttempts = 1;
+// after an in-app reload (Demo Mode switch) the DevTools page target can be replaced: re-attach until cond() holds
+async function afterReload(cond, timeoutMs = 90000) {
+  const end = Date.now() + timeoutMs;
+  let pg = page;
+  while (Date.now() < end) {
+    try {
+      if (await pg.evaluate(cond)) return pg;
+    } catch (e) {
+      try { pg = await (await device.webView({ pkg: PKG }, { timeout: 15000 })).page(); } catch (e2) { /* not back yet */ }
+    }
+    await new Promise(r => setTimeout(r, 1000));
+  }
+  throw new Error('app did not come back after reload');
+}
 async function launch() {
   // the DevTools socket of a freshly started WebView is sometimes not picked up on slow CI emulators → retry
   for (let attempt = 1; ; attempt++) {
@@ -152,14 +166,14 @@ check(await page.evaluate(retried => state.invoices.length === 1 && (window.__re
 // Demo Mode: opt-in, separate storage + separate native mirror file; real data untouched; exit deletes sample data
 // confirmation dialogs are covered by the web test; native AlertDialogs can't be driven reliably over DevTools
 await page.evaluate(() => { HGI_M.enterDemo({ confirmed: true }); });
-await page.waitForFunction(() => window.HGI_READY === true && typeof DEMO_MODE !== 'undefined' && DEMO_MODE === true, null, { timeout: 60000 });
+page = await afterReload(() => window.HGI_READY === true && typeof DEMO_MODE !== 'undefined' && DEMO_MODE === true);
 check(await page.evaluate(() => state.invoices.length === 5 && state.invoices.every(d => d.demo) && !!document.getElementById('demo-banner')), 'Demo Mode shows sample data with a DEMO banner');
 await page.waitForTimeout(1500);
 check(await page.evaluate(async () => { const r = await Capacitor.Plugins.HgiNative.readState({ key: 'state' }); const s = JSON.parse(r.data); return s.invoices.length === 1 && s.company.name === 'Emulator Test Traders'; }),
   'real data in the native mirror untouched while Demo Mode is open');
 await shot('05a-demo');
 await page.evaluate(() => { HGI_M.exitDemo({ confirmed: true }); });
-await page.waitForFunction(() => window.HGI_READY === true && DEMO_MODE === false, null, { timeout: 60000 });
+page = await afterReload(() => window.HGI_READY === true && typeof DEMO_MODE !== 'undefined' && DEMO_MODE === false);
 await page.waitForTimeout(3000);
 check(await page.evaluate(async () => { const r = await Capacitor.Plugins.HgiNative.readState({ key: 'state-demo' }); return state.invoices.length === 1 && !state.invoices.some(d => d.demo) && !r.data && !document.getElementById('demo-banner'); }),
   'exit Demo Mode returns to real data and deletes the sample data');
