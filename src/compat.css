@@ -1,0 +1,11 @@
+/* =====================================================================
+   Compatibility for older Android System WebView (Chrome 80–87), e.g. Android 7–11 phones whose WebView
+   has not been updated. Loaded BEFORE Tailwind so its utilities still win.
+   - Tailwind's preflight uses :where(); engines before Chrome 88 drop those whole rules, which left
+     buttons with the grey default background.
+   - `inset` is Chrome 87+: longhands keep full-screen overlays (setup wizard, sheets, dialogs) full-screen.
+   ===================================================================== */
+button, [type='button'], [type='reset'], [type='submit'] { -webkit-appearance: button; background-color: transparent; background-image: none; }
+abbr[title] { text-decoration: underline dotted; }
+.inset-0 { top: 0; right: 0; bottom: 0; left: 0; }
+#more-sheet.open, #more-sheet .backdrop, .demo-watermark { top: 0; right: 0; bottom: 0; left: 0; }

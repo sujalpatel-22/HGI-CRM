@@ -20,13 +20,16 @@ const wv = (await device.shell('dumpsys package com.google.android.webview | gre
 console.log(`▶ ${label}: ${device.model()} · Android SDK ${sdk} · WebView ${wv}`);
 const shot = async n => fs.writeFileSync(path.join(OUT, `${label}-${n}.png`), await device.screenshot());
 
+// watchdog: a hung adb/WebView call must fail this run (so the CI retry can start), not eat the whole job timeout
+setTimeout(() => { console.log('✗ watchdog: smoke test exceeded 15 minutes'); process.exit(3); }, 15 * 60 * 1000);
+const within = (p, ms, what) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(`${what} timed out after ${ms / 1000}s`)), ms))]);
 let lastLaunchAttempts = 1;
 async function launch() {
   // the DevTools socket of a freshly started WebView is sometimes not picked up on slow CI emulators → retry
   for (let attempt = 1; ; attempt++) {
     try {
-      await device.shell(`am force-stop ${PKG}`);
-      await device.shell(`am start -W -n ${PKG}/.MainActivity`);
+      await within(device.shell(`am force-stop ${PKG}`), 30000, 'force-stop');
+      await within(device.shell(`am start -W -n ${PKG}/.MainActivity`), 60000, 'am start');
       const webview = await device.webView({ pkg: PKG }, { timeout: 60000 });
       const page = await webview.page();
       await page.waitForFunction(() => window.HGI_READY === true, null, { timeout: 60000 });
@@ -58,6 +61,10 @@ check(await page.isVisible('#onboarding'), 'onboarding shown on first launch');
 check(await page.evaluate(() => !state.products.length && !state.customers.length && !state.invoices.length && !state.company.gstin && !state.company.bankAcc && !state.company.name),
   'fresh install starts with no business data (no sample company, items, buyers or invoices)');
 
+// layout engine compatibility (older WebViews drop Tailwind rules that use :where() / inset)
+const lay = await page.evaluate(() => ({ h: document.getElementById('onboarding').getBoundingClientRect().height, vh: innerHeight,
+  bg: getComputedStyle(document.getElementById('ob-demo')).backgroundColor }));
+check(lay.h >= lay.vh - 1 && /rgba\(0, 0, 0, 0\)|transparent/.test(lay.bg), `setup wizard covers the screen, buttons unstyled by default (${Math.round(lay.h)}/${lay.vh}px, ${lay.bg})`);
 // onboarding
 await page.click('#ob-next');
 await page.fill('#ob-name', 'Emulator Test Traders'); await page.fill('#ob-gstin', '24AAPFU0939F1Z1'); await page.dispatchEvent('#ob-gstin', 'input');
