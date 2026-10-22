@@ -44,8 +44,11 @@ jobs:
         run: npm run build:web 2>&1 | tee logs/02-build-web.log
 
       - name: Web tests (Chromium — phone, tablet, desktop)
+        timeout-minutes: 25
         run: |
-          npx playwright install --with-deps chromium > logs/03-playwright-install.log 2>&1
+          # apt mirrors occasionally hang: bound the system-deps install, fall back to browser-only install (runner images ship the libs)
+          timeout 420 npx playwright install --with-deps chromium > logs/03-playwright-install.log 2>&1 \
+            || { echo "deps install timed out/failed — installing browser only" | tee -a logs/03-playwright-install.log; npx playwright install chromium >> logs/03-playwright-install.log 2>&1; }
           npm run test:web 2>&1 | tee logs/03-web-tests.log
 
       - uses: actions/setup-java@v4
