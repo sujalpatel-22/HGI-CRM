@@ -521,6 +521,20 @@
     i18n.translateTree(card);
   }
 
+  /* ------------------------------------------------------------------ old-WebView ₹ glyph check */
+  function rupeeWidth() {
+    const sp = document.createElement('span');
+    sp.style.cssText = 'position:absolute;visibility:hidden;font-size:40px;font-weight:700;white-space:nowrap';
+    sp.textContent = '₹'; document.body.appendChild(sp);
+    const w = sp.getBoundingClientRect().width; sp.remove(); return w;
+  }
+  function checkRupeeGlyph() {
+    const run = () => { if (rupeeWidth() < 8) { document.documentElement.classList.add('rupee-fix'); window.HGI_APP.rupeeFix = true; } };
+    // load Inter's ₹ face first (unicode-range fonts load lazily), then measure
+    if (document.fonts && document.fonts.load) Promise.all([document.fonts.load("700 40px 'Inter'", '₹'), document.fonts.load("400 40px 'Inter'", '₹')]).then(run, run);
+    else setTimeout(run, 500);
+  }
+
   /* ------------------------------------------------------------------ v7.2 UI: dashboard, row actions, live total */
   function enhanceDashboard() {
     const sec = document.getElementById('tab-dashboard'); if (!sec) return;
@@ -701,6 +715,7 @@
     installHooks();
     buildShell();                                // nav must exist before the app's first switchTab()
     demoBanner();
+    checkRupeeGlyph();
     enhanceDashboard();
     installRowSheets();
     limitToasts();

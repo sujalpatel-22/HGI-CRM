@@ -9,3 +9,10 @@ button, [type='button'], [type='reset'], [type='submit'] { -webkit-appearance: b
 abbr[title] { text-decoration: underline dotted; }
 .inset-0 { top: 0; right: 0; bottom: 0; left: 0; }
 #more-sheet.open, #more-sheet .backdrop, .demo-watermark { top: 0; right: 0; bottom: 0; left: 0; }
+
+/* Android System WebView 83 lays out Inter's ₹ (U+20B9, latin-ext subset) with zero advance width, so the
+   sign is drawn on top of the first digit. mobile.js measures this at start-up and, only on affected engines,
+   adds html.rupee-fix, which takes ₹ from the phone's system font instead. Other devices are unchanged. */
+@font-face { font-family: 'HGI Rupee'; src: local('Roboto'), local('Roboto-Regular'), local('Noto Sans'), local('NotoSans-Regular'), local('Droid Sans');
+  unicode-range: U+20B9; }
+html.rupee-fix body { font-family: 'HGI Rupee', 'Inter', sans-serif !important; }
