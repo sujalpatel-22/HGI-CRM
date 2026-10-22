@@ -262,14 +262,38 @@
     const header = document.querySelector('#app-container > header');
     if (header) header.after(b); else document.body.prepend(b);
   }
+  // Start-up: load whichever copy is newer — WebView storage or the app-file mirror (revision number from saveState).
+  // Covers WebView storage being wiped, and WebView storage being full so its copy fell behind.
+  const revOf = json => { try { const s = typeof json === 'string' ? JSON.parse(json) : json; return Number(s && s.ui && s.ui.rev) || 0; } catch (e) { return -1; } };
   async function restoreFromMirror() {
     if (!Native) return;
     try {
-      const has = storeGet('local', STORAGE_KEY);
-      if (has) return;
+      const local = storeGet('local', STORAGE_KEY);
       const r = await Native.readState({ key: MIRROR_KEY });
-      if (r && r.data) { storeSet('local', STORAGE_KEY, r.data); window.__restoredFromMirror = true; console.log('[HGI] restored data from on-device mirror'); }
+      if (!r || !r.data) return;
+      const lr = local ? revOf(local) : -1, mr = revOf(r.data);
+      if (mr < 0) return;                                   // unreadable mirror: keep what we have
+      if (!local || mr > lr) {
+        window.__HGI_BOOT_DATA = r.data;                    // used by initApp even if WebView storage cannot take it
+        storeSet('local', STORAGE_KEY, r.data);
+        window.__restoredFromMirror = true;
+        console.log(`[HGI] loaded newer on-device copy (rev ${mr} > ${lr})`);
+      }
     } catch (e) { /* first run */ }
+  }
+  // safety copy before a backup restore replaces the data (called by the core app)
+  window.HGI_nativeSnapshot = (key, data) => { if (Native) Native.writeState({ key: (DEMO_MODE ? 'demo-' : '') + key, data }).catch(() => {}); };
+  async function undoRestore() {
+    let snap = storeGet('local', STORAGE_KEY + '_before_restore');
+    if (!snap && Native) { try { const r = await Native.readState({ key: (DEMO_MODE ? 'demo-' : '') + 'before-restore' }); snap = r && r.data; } catch (e) { /* none */ } }
+    if (!snap) return toast('No earlier data to go back to.', 'info');
+    let parsed; try { parsed = JSON.parse(snap); } catch (e) { return toast('The safety copy could not be read.', 'error'); }
+    if (!confirm(`Go back to the data from before the last restore (${(parsed.invoices || []).length} documents)?`)) return;
+    parsed.ui = { ...(parsed.ui || {}), rev: Math.max(Number(parsed.ui && parsed.ui.rev) || 0, Number(state.ui.rev) || 0) };
+    delete parsed.ui.restoredAt;
+    state = migrateState(parsed); saveState(); initApp(state);
+    try { localStorage.removeItem(STORAGE_KEY + '_before_restore'); } catch (e) { /* ignore */ }
+    toast('Previous data is back');
   }
 
   /* ------------------------------------------------------------------ app lock */
@@ -477,6 +501,7 @@
           ? `<div class="flex gap-2"><button type="button" onclick="HGI_M.setPin()" class="flex-1 px-3 py-2.5 border rounded text-xs font-bold">Change PIN</button><button type="button" onclick="HGI_M.removePin()" class="px-3 py-2.5 border border-rose-300 text-rose-700 rounded text-xs font-bold">Turn off</button></div>`
           : `<button type="button" onclick="HGI_M.setPin()" class="w-full px-3 py-2.5 bg-slate-800 text-white rounded text-xs font-bold"><i class="fa-solid fa-lock mr-1"></i>Set PIN</button>`}</div>` : ''}
         <div><label class="field-label">Backup</label><button type="button" onclick="HGI_M.shareBackup()" class="w-full px-3 py-2.5 bg-emerald-600 text-white rounded text-xs font-bold"><i class="fa-solid fa-share-nodes mr-1"></i>Share Backup</button></div>
+        ${ui().restoredAt ? `<div><label class="field-label">Last restore</label><button type="button" id="prefs-undo-restore" onclick="HGI_M.undoRestore()" class="w-full px-3 py-2.5 border rounded text-xs font-bold"><i class="fa-solid fa-rotate-left mr-1"></i>Undo restore</button></div>` : ''}
         <div><label class="field-label">Demo Mode</label>${DEMO_MODE
           ? `<button type="button" id="prefs-exit-demo" onclick="HGI_M.exitDemo()" class="w-full px-3 py-2.5 border-2 border-rose-300 text-rose-700 rounded text-xs font-bold"><i class="fa-solid fa-right-from-bracket mr-1"></i>Exit Demo Mode</button>`
           : `<button type="button" id="prefs-enter-demo" onclick="HGI_M.enterDemo()" class="w-full px-3 py-2.5 border rounded text-xs font-bold"><i class="fa-solid fa-flask mr-1"></i>Try with sample data</button>`}</div>
@@ -498,7 +523,7 @@
     shareBackup, setPin, removePin,
     lock() { closeMore(); unlocked = false; showLock(); },
     about() { closeMore(); toast(`HGI Billing ${APP_VERSION} ${isNative ? '(Android)' : '(Web)'}`, 'info'); },
-    enterDemo, exitDemo,
+    enterDemo, exitDemo, undoRestore,
     restoreAndClose(ev) { const el = document.getElementById('onboarding'); ui().onboarded = true; if (el) el.remove(); importJSONBackup(ev); },
     sharePdf, savePdf
   };

@@ -183,7 +183,9 @@ for (const vp of VIEWPORTS) {
     await page.evaluate(() => { editInvoice(state.invoices.find(d => d.docType === 'INV').id); renderPreview(); }); await page.waitForTimeout(500);
     check(await page.evaluate(() => document.querySelectorAll('#invoice-preview-container .demo-watermark').length > 0 && document.querySelector('#invoice-preview-container').textContent.includes('NOT A VALID TAX INVOICE')), 'demo invoices carry the NOT A VALID TAX INVOICE watermark');
     await shot('09-demo-preview');
-    check(await page.evaluate(b => localStorage.getItem('hgi_billing_v7_prod') === b, realBefore), 'real data untouched while in Demo Mode');
+    // business data identical (the save just before switching only stamps ui.rev / savedAt)
+    const biz = j => { const o = JSON.parse(j); return JSON.stringify([o.company, o.invoices, o.products, o.customers]); };
+    check(await page.evaluate(() => localStorage.getItem('hgi_billing_v7_prod')).then(j => biz(j) === biz(realBefore)), 'real data untouched while in Demo Mode');
     await page.evaluate(() => switchTab('settings'));
     await Promise.all([page.waitForEvent('load'), page.click('#prefs-exit-demo')]);
     await relog();
@@ -218,6 +220,72 @@ for (const vp of VIEWPORTS) {
   check(/Sample data in Settings/.test(r.alert) && /GSTIN/.test(r.alert) && /bank account/.test(r.alert), 'dashboard warns that Settings still hold sample values');
   check(/SAMPLE values/.test(r.check), 'compliance check blocks-warns sample values on new documents');
   await page.screenshot({ path: path.join(OUT, 'upgrade-sample-warning.png') });
+  check(errors.length === 0, `no JavaScript errors${errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''}`);
+  await ctx.close();
+}
+// ---- Data-safety and GST guards (audit P0/P1 items 2–9)
+{
+  console.log('\n▶ data safety & GST guards');
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const co = { name: 'Guard Test Co', gstin: '24AAPFU0939F1Z1', stateCode: '24', state: 'Gujarat', address: 'Ahmedabad', prefixes: { INV: '' } };
+  const item = (q) => [{ desc: 'Widget', hsn: '847130', gst: 18, qty: q, unit: 'NOS', rate: 1000 }];
+  const seed = { credentials: { username: 'admin', password: '123' }, company: co, customers: [],
+    products: [{ id: 'P1', name: 'Widget', hsn: '847130', unit: 'NOS', rate: 1000, gst: 18, trackStock: true, openingStock: 10, minStock: 1, stockIns: [] }],
+    invoices: [
+      { id: 'A', docType: 'INV', num: '01/26-27', date: '2026-10-01', supplyType: 'B2C', pos: '24', buyerName: 'Paid Buyer', items: item(1), payments: [{ id: 'PAY1', date: '2026-10-02', amount: 1180, tds: 0, mode: 'UPI', ref: '' }] },
+      { id: 'B', docType: 'INV', num: '02/26-27', date: '2026-10-02', supplyType: 'B2C', pos: '24', buyerName: 'Noted Buyer', items: item(1), payments: [] },
+      { id: 'C', docType: 'CRN', num: 'CN/01/26-27', date: '2026-10-03', supplyType: 'B2C', pos: '24', buyerName: 'Noted Buyer', refId: 'B', refNum: '02/26-27', items: item(1), payments: [] },
+      { id: 'D', docType: 'INV', num: '03/26-27', date: '2026-10-04', supplyType: 'B2B', pos: '27', buyerName: 'IRN Buyer', buyerGstin: '27AAPFU0939F1ZV', items: item(1), payments: [], irn: 'a'.repeat(64), ackNo: '112010000000001', ackDate: '2026-10-04' }
+    ], ui: { onboarded: true, rev: 5 } };
+  await ctx.addInitScript(sd => { if (!sessionStorage.getItem('__seeded')) { localStorage.setItem('hgi_billing_v7_prod', sd); sessionStorage.setItem('__seeded', '1'); } }, JSON.stringify(seed));
+  const page = await ctx.newPage();
+  const errors = []; page.on('pageerror', e => errors.push(String(e)));
+  page.on('dialog', d => d.accept(d.type() === 'prompt' ? 'test' : undefined));
+  await page.goto(base); await page.waitForFunction(() => window.HGI_READY === true, null, { timeout: 20000 });
+  await page.fill('#login-username', 'admin'); await page.fill('#login-password', '123'); await page.click('#login-overlay button[type=submit]'); await page.waitForTimeout(300);
+  const n = () => page.evaluate(() => state.invoices.length);
+  await page.evaluate(() => deleteInvoice('A'));
+  check(await n() === 4, 'invoice with receipts cannot be deleted');
+  await page.evaluate(() => deleteInvoice('B'));
+  check(await n() === 4, 'invoice with a credit note against it cannot be deleted');
+  await page.evaluate(() => cancelInvoice('B'));
+  check(await page.evaluate(() => !state.invoices.find(d => d.id === 'B').cancelled), 'invoice with a live credit note cannot be cancelled');
+  await page.evaluate(() => deleteInvoice('D'));
+  check(await n() === 4, 'invoice with an IRN cannot be deleted');
+  // IRN lock: amounts can't change, transport details can
+  await page.evaluate(() => editInvoice('D')); await page.waitForTimeout(200);
+  await page.locator('#invoice-items-body tr').first().locator('.item-qty').fill('5');
+  await page.evaluate(() => saveCurrentInvoice());
+  check(await page.evaluate(() => state.invoices.find(d => d.id === 'D').items[0].qty === 1), 'IRN-registered invoice: items/amounts locked');
+  await page.evaluate(() => editInvoice('D')); await page.waitForTimeout(200);
+  await page.fill('#inv-transport', 'Shree Logistics');
+  await page.evaluate(() => saveCurrentInvoice());
+  check(await page.evaluate(() => state.invoices.find(d => d.id === 'D').transport === 'Shree Logistics'), 'IRN-registered invoice: transport details can still be updated');
+  // discount larger than value
+  check(await page.evaluate(() => runChecks({ ...state.invoices[0], discount: 5000, items: [{ desc: 'Widget', hsn: '847130', gst: 18, qty: 1, unit: 'NOS', rate: 1000 }] }).some(x => x.lvl === 'error' && /Discount/.test(x.msg))), 'discount above item value is a compliance error');
+  // products: duplicate name blocked, rename keeps stock history
+  const stock0 = await page.evaluate(() => stockOf(state.products[0]));
+  await page.evaluate(() => { openItemModal(); $('modal-item-name').value = 'widget'; $('modal-item-hsn').value = '847130'; $('modal-item-unit').value = 'NOS'; saveItemFromModal(); });
+  check(await page.evaluate(() => state.products.length === 1), 'duplicate item name rejected');
+  await page.evaluate(() => { openItemModal('P1'); $('modal-item-name').value = 'Widget Pro'; saveItemFromModal(); });
+  check(await page.evaluate(s0 => state.products[0].name === 'Widget Pro' && stockOf(state.products[0]) === s0, stock0), `renamed item keeps its stock (${stock0})`);
+  // backup restore: invalid rejected; valid restore keeps a safety copy that can be undone
+  const restore = obj => page.evaluate(o => new Promise(res => { importJSONBackup({ target: { files: [new File([JSON.stringify(o)], 'b.json')], set value(v) {} } }); setTimeout(res, 600); }), obj);
+  await restore({ company: { name: 'X' }, invoices: [{ foo: 1 }] });
+  check(await n() === 4, 'invalid backup file rejected (data unchanged)');
+  await restore({ company: { name: 'Restored Co', stateCode: '24' }, invoices: [], products: [], customers: [] });
+  check(await page.evaluate(() => state.company.name === 'Restored Co' && state.invoices.length === 0 && !!localStorage.getItem('hgi_billing_v7_prod_before_restore')), 'valid backup restored, safety copy kept');
+  await page.evaluate(() => switchTab('settings'));
+  check(await page.isVisible('#prefs-undo-restore'), 'Undo restore offered in Settings');
+  await page.evaluate(() => HGI_M.undoRestore()); await page.waitForTimeout(400);
+  check(await page.evaluate(() => state.company.name === 'Guard Test Co' && state.invoices.length === 4), 'undo restore brings back the previous data');
+  // revision number increases with every save
+  const r1 = await page.evaluate(() => state.ui.rev); await page.evaluate(() => saveState());
+  check(await page.evaluate(r => state.ui.rev === r + 1 && JSON.parse(localStorage.getItem('hgi_billing_v7_prod')).ui.rev === r + 1, r1), 'each save stamps a higher revision');
+  // unreadable stored data is kept, not overwritten
+  await page.evaluate(() => localStorage.setItem('hgi_billing_v7_prod', '{"company": broken'));
+  await page.reload(); await page.waitForFunction(() => window.HGI_READY === true, null, { timeout: 20000 });
+  check(await page.evaluate(() => Object.keys(localStorage).some(k => k.startsWith('hgi_billing_v7_prod_unreadable_') && localStorage.getItem(k).includes('broken'))), 'unreadable saved data is preserved as a recovery copy');
   check(errors.length === 0, `no JavaScript errors${errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''}`);
   await ctx.close();
 }

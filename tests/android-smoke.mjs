@@ -122,6 +122,11 @@ check(await page.evaluate(() => !document.getElementById('tab-dashboard').classL
 await page.evaluate(() => saveState()); await page.waitForTimeout(1500);
 page = await launch();
 check(await page.evaluate(() => state.invoices.length === 1 && state.company.name === 'Emulator Test Traders'), 'data persists after app restart');
+// WebView storage behind the app-file mirror (e.g. storage full): the newer copy must win at start-up
+await page.evaluate(async () => { const s = JSON.parse(JSON.stringify(state)); s.company.tagline = 'from-newer-mirror'; s.ui.rev = (Number(state.ui.rev) || 0) + 100;
+  await Capacitor.Plugins.HgiNative.writeState({ key: 'state', data: JSON.stringify(s) }); });
+page = await launch();
+check(await page.evaluate(() => state.company.tagline === 'from-newer-mirror' && window.__restoredFromMirror === true && state.invoices.length === 1), 'newer on-device copy wins over older WebView storage');
 // simulate the WebView's storage being wiped (e.g. WebView update/reset): delete its Local Storage on disk while
 // the app is stopped (debug build → run-as), keep the app's own files dir where the native mirror lives
 await page.evaluate(() => localStorage.clear()); await page.waitForTimeout(500);

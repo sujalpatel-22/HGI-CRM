@@ -884,7 +884,7 @@
     function storeSet(kind, key, val) {
       memStore[kind][key] = val;
       try { (kind === 'local' ? localStorage : sessionStorage).setItem(key, val); return true; }
-      catch (e) { storageOk = false; return false; }
+      catch (e) { storageOk = false; window.__lastStoreError = e; return false; }
     }
     function storeDel(kind, key) {
       delete memStore[kind][key];
@@ -1020,10 +1020,20 @@
     /* =====================================================================
        STORAGE & MIGRATION
        ===================================================================== */
+    // Every save gets a higher revision number, so at start-up the newest copy (WebView storage or the
+    // Android app-file mirror) is the one that is loaded — never an older one.
     function saveState() {
+      state.ui = state.ui || {};
+      state.ui.rev = (Number(state.ui.rev) || 0) + 1;
+      state.ui.savedAt = new Date().toISOString();
       if (!storeSet('local', STORAGE_KEY, JSON.stringify(state)) && !window.__storageWarned) {
         window.__storageWarned = true;
-        toast('Browser storage is blocked (private window or cookie setting) — your data will be lost when this tab closes. Export a backup from Settings.', 'error');
+        const e = window.__lastStoreError, quota = e && (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014);
+        const native = window.HGI_APP && window.HGI_APP.isNative;
+        toast(quota
+          ? (native ? 'Quick storage is full. Your data is still saved in the app\'s own file storage — take a backup and remove a large logo if you can.'
+                    : 'Browser storage is full — your latest changes may not be kept. Export a backup from Settings now.')
+          : 'Browser storage is blocked (private window or cookie setting) — your data will be lost when this tab closes. Export a backup from Settings.', 'error');
       }
     }
 
@@ -1297,16 +1307,21 @@
     /* =====================================================================
        INIT
        ===================================================================== */
-    function initApp() {
+    function initApp(preloaded) {
+      let saved = null;
       try {
         probeStorage();
-        const saved = storeGet('local', STORAGE_KEY);
+        // __HGI_BOOT_DATA: a newer copy found by the Android shell in the app-file mirror
+        saved = preloaded ? null : (window.__HGI_BOOT_DATA || storeGet('local', STORAGE_KEY));
+        window.__HGI_BOOT_DATA = null;
         const fresh = DEMO_MODE && window.HGI_DEMO_DATA ? window.HGI_DEMO_DATA.build() : defaultState();
-        state = migrateState(saved ? JSON.parse(saved) : fresh);
+        state = migrateState(preloaded || (saved ? JSON.parse(saved) : fresh));
       } catch (e) {
         console.error(e);
+        // keep the unreadable copy so it can still be recovered — never overwrite it with an empty book
+        if (saved) storeSet('local', `${STORAGE_KEY}_unreadable_${Date.now()}`, saved);
         state = migrateState(defaultState());
-        toast('Saved data could not be read — starting fresh. Restore a backup from Settings.', 'error');
+        toast('Saved data could not be read — a copy was kept. Restore a backup from Settings.', 'error');
       }
       sortInvoices(); saveState();
       updateLoginHint(); refreshCompanyNames(); loadSettingsForm();
@@ -1725,6 +1740,9 @@
       if (ph.length) E(`Settings still contain SAMPLE values (${ph.map(k => PLACEHOLDER_LABEL[k]).join(', ')}) — replace them with your real details before issuing documents.`, 'Rule 46(a)');
       if (cg.status === 'invalid') E('Your company GSTIN in Settings is invalid.', 'Rule 46(a)');
       else if (cg.status === 'warn') W('Your company GSTIN fails the check-digit test — update it in Settings.', 'Rule 46(a)');
+
+      // --- Discount larger than the goods/charges it reduces
+      if (c.discount > round2(c.subtotal + c.pf + c.other) + 0.009) E(`Discount ${money(c.discount)} is more than the item value plus charges (${money(c.subtotal + c.pf + c.other)}).`, 'Sec 15(3)');
 
       // --- Number & date
       if (!d.num) E('Document number is required.', 'Rule 46(b)');
@@ -2208,6 +2226,13 @@
       if (errs.length && !confirm(`${errs.length} GST compliance issue(s):\n\n• ${errs.slice(0, 6).map(e => e.msg).join('\n• ')}\n\nSave anyway?`)) return;
 
       const old = currentEditId ? state.invoices.find(x => x.id === currentEditId) : null;
+      // An e-invoice registered on the IRP cannot be amended: only non-tax details (transport, PO, terms…) may change
+      if (old && old.irn && !old.cancelled) {
+        const sig = x => JSON.stringify([x.docType, x.num, x.date, (x.buyerGstin || '').toUpperCase(), x.supplyType, x.pos, !!x.reverseCharge,
+          (x.items || []).map(i => [i.desc, i.hsn, Number(i.gst), Number(i.qty), Number(i.rate), normUQC(i.unit) || i.unit]), Number(x.discount) || 0, Number(x.pfCharges) || 0, Number(x.otherCharges) || 0]);
+        if (sig(old) !== sig(d) || (d.irn && d.irn !== old.irn))
+          return toast(`${old.num} has an IRN — its number, date, buyer GSTIN, items and amounts cannot be changed. Issue a credit or debit note, or cancel the IRN on the portal (within 24 hours) and the document here.`, 'error');
+      }
       const doc = { ...d };
       delete doc.calc;
       doc.id = old ? old.id : uid('DOC');
@@ -2298,6 +2323,9 @@
     function cancelInvoice(id) {
       const d = state.invoices.find(x => x.id === id);
       if (!d || d.cancelled) return;
+      const liveNotes = state.invoices.filter(n => n.refId === d.id && !n.cancelled && n.id !== d.id);
+      if (liveNotes.length) return toast(`Cancel ${liveNotes.map(n => n.num).join(', ')} (issued against ${d.num}) first.`, 'error');
+      if (settledOf(d) > 0 && !confirm(`${d.num} has receipts of ${money(settledOf(d))}. After cancelling, they no longer count towards any invoice. Continue?`)) return;
       if (d.irn) alert('This document has an IRN. Cancel the IRN on the e-invoice portal too (allowed within 24 hours), or issue a credit note.');
       const reason = prompt(`Cancel ${d.num}? It stays in the register (needed for GSTR-1 Table 13) but is excluded from sales and tax.\n\nReason:`, 'Data entry mistake');
       if (reason === null) return;
@@ -2307,6 +2335,10 @@
     function deleteInvoice(id) {
       const d = state.invoices.find(x => x.id === id);
       if (!d) return;
+      const notes = state.invoices.filter(n => n.refId === d.id && n.id !== d.id);
+      if (notes.length) return toast(`${d.num} has ${notes.map(n => n.num).join(', ')} issued against it — it cannot be deleted. Use Cancel instead.`, 'error');
+      if ((d.payments || []).length) return toast(`${d.num} has ${d.payments.length} receipt(s) recorded — delete the receipts first, or use Cancel.`, 'error');
+      if (d.irn) return toast(`${d.num} has an IRN — it cannot be deleted. Cancel the IRN on the portal and use Cancel here.`, 'error');
       const later = state.invoices.some(x => x.docType === d.docType && fyOf(x.date) === fyOf(d.date) && seqOf(x) > seqOf(d));
       if (later && !confirm(`Deleting ${d.num} will leave a gap in your number series (not allowed under Rule 46). "Cancel" is the compliant option.\n\nDelete permanently anyway?`)) return;
       if (!later && !confirm(`Permanently delete ${d.num}? This cannot be undone.`)) return;
@@ -2478,7 +2510,7 @@
       if (lut && co.lutFy && co.lutFy !== fyOf(today)) add('error', `LUT on record is for FY ${co.lutFy}. File RFD-11 for FY ${fyOf(today)} before the next zero-rated supply.`, "switchTab('settings')");
       const cnLimit = liveDocs().filter(x => x.docType === 'INV' && balanceOf(x) > 0 && fyOf(x.date) !== fyOf(today) && today <= `${fyEndISO(x.date).slice(0, 4)}-11-30` && today >= `${fyEndISO(x.date).slice(0, 4)}-10-01`);
       if (cnLimit.length) add('info', `${cnLimit.length} last-FY invoice(s) with dues: any credit note against them must be issued by 30 November (Sec 34).`, null);
-      if (!state.ui.lastBackup) add('warn', 'No backup taken yet — all data lives only in this browser.', "switchTab('settings')");
+      if (!state.ui.lastBackup && !DEMO_MODE) add('warn', `No backup taken yet — your data is only on this ${window.HGI_APP && window.HGI_APP.isNative ? 'phone' : 'browser'}.`, "switchTab('settings')");
       else if (state.ui.lastBackup && daysBetween(state.ui.lastBackup.slice(0, 10), today) > 7) add('warn', `Last backup was ${daysBetween(state.ui.lastBackup.slice(0, 10), today)} days ago.`, "exportJSONBackup()");
       const color = { error: 'border-rose-300 bg-rose-50', warn: 'border-amber-300 bg-amber-50', info: 'border-blue-200 bg-blue-50' };
       $('dash-alerts').innerHTML = a.length ? a.map(x => `<div class="border-l-4 ${color[x.lvl]} p-2 rounded text-xs text-slate-700 ${x.action ? 'cursor-pointer hover:brightness-95' : ''}" ${x.action ? `onclick="${x.action}"` : ''}>${x.html}</div>`).join('')
@@ -2703,7 +2735,7 @@
     function renderItemList() {
       const q = ($('item-search').value || '').toLowerCase(), digits = state.company.aato === 'upto5' ? 4 : 6;
       const usage = {};
-      state.invoices.forEach(d => d.items.forEach(it => { const k = (it.desc || '').toLowerCase(); usage[k] = (usage[k] || 0) + 1; }));
+      state.invoices.forEach(d => d.items.forEach(it => { const k = (it.desc || '').trim().toLowerCase(); usage[k] = (usage[k] || 0) + 1; }));
       $('items-list-tbody').innerHTML = state.products.filter(p => !q || `${p.name} ${p.hsn}`.toLowerCase().includes(q)).map(p => {
         const issues = [];
         if (!p.hsn) issues.push('No HSN'); else if (p.hsn.length < digits) issues.push(`HSN < ${digits} digits`);
@@ -2715,7 +2747,7 @@
           <td class="p-3 whitespace-nowrap">${p.trackStock ? (() => { const st = stockOf(p); const low = st <= (Number(p.minStock) || 0);
             return `<span class="font-bold ${st < 0 ? 'text-rose-700' : low ? 'text-amber-600' : 'text-emerald-700'}">${st} ${esc(p.unit)}</span>${low ? ' <i class="fa-solid fa-triangle-exclamation text-amber-500" title="Low stock"></i>' : ''}
               <button onclick="stockIn('${esc(p.id)}')" class="ml-1 text-[11px] font-bold text-blue-600 hover:underline">+ Stock In</button>`; })() : '<span class="text-slate-400 text-xs">not tracked</span>'}</td>
-          <td class="p-3 text-slate-500">${usage[(p.name || '').toLowerCase()] || 0}</td>
+          <td class="p-3 text-slate-500">${productNames(p).reduce((a, k) => a + (usage[k] || 0), 0)}</td>
           <td class="p-3 text-xs">${issues.length ? `<span class="text-amber-600 font-semibold"><i class="fa-solid fa-triangle-exclamation mr-1"></i>${issues.join(', ')}</span>` : '<span class="text-emerald-600"><i class="fa-solid fa-circle-check"></i></span>'}</td>
           <td class="p-3 text-right whitespace-nowrap">
             <button onclick="openItemModal('${esc(p.id)}')" class="text-blue-600 hover:text-blue-800 mr-3"><i class="fa-solid fa-pen-to-square"></i></button>
@@ -2753,21 +2785,29 @@
       const data = { name, hsn, gst: Number($('modal-item-gst').value), unit, rate: parseFloat($('modal-item-rate').value) || 0,
         trackStock: $('modal-item-track').checked, openingStock: parseFloat($('modal-item-opening').value) || 0, minStock: parseFloat($('modal-item-min').value) || 0 };
       const id = $('modal-item-id').value;
-      if (id) Object.assign(state.products.find(p => p.id === id), data); else state.products.push({ id: uid('PROD'), ...data });
+      const clash = state.products.find(p => p.id !== id && productNames(p).includes(name.toLowerCase()));
+      if (clash) return toast(`"${clash.name}" already exists${clash.name.toLowerCase() !== name.toLowerCase() ? ' (this was its earlier name)' : ''} — use a different name.`, 'error');
+      if (id) {
+        const p = state.products.find(x => x.id === id);
+        // renamed: remember the old name so stock and history from earlier invoices still count
+        if (p.name && p.name.trim().toLowerCase() !== name.toLowerCase()) data.aliases = [...new Set([...(p.aliases || []), p.name.trim()])];
+        Object.assign(p, data);
+      } else state.products.push({ id: uid('PROD'), ...data });
       saveState(); renderItemList(); refreshProductDatalist(); closeModal('item-modal');
       toast(id ? 'Product updated' : 'Product added');
     }
 
     /* ---------- stock ---------- */
-    const productByName = name => state.products.find(p => p.name.trim().toLowerCase() === String(name || '').trim().toLowerCase());
+    const productNames = p => [p.name, ...(p.aliases || [])].map(n => String(n || '').trim().toLowerCase()).filter(Boolean);
+    const productByName = name => { const k = String(name || '').trim().toLowerCase(); return state.products.find(p => p.name.trim().toLowerCase() === k) || state.products.find(p => productNames(p).includes(k)); };
     // stock = opening + stock-in − invoiced + credit-note returns (cancelled documents and quotations ignored)
     function stockOf(p, excludeDocId) {
       if (!p) return 0;
-      const key = p.name.trim().toLowerCase();
+      const keys = productNames(p);
       let qty = (Number(p.openingStock) || 0) + (p.stockIns || []).reduce((a, x) => a + (Number(x.qty) || 0), 0);
       state.invoices.forEach(d => {
         if (d.cancelled || d.id === excludeDocId || !['INV', 'CRN'].includes(d.docType)) return;
-        d.items.forEach(it => { if ((it.desc || '').trim().toLowerCase() === key) qty += (d.docType === 'INV' ? -1 : 1) * (Number(it.qty) || 0); });
+        d.items.forEach(it => { if (keys.includes((it.desc || '').trim().toLowerCase())) qty += (d.docType === 'INV' ? -1 : 1) * (Number(it.qty) || 0); });
       });
       return Math.round(qty * 1000) / 1000;
     }
@@ -2936,6 +2976,22 @@
       downloadBlob(new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' }), `${DEMO_MODE ? 'DEMO_' : ''}HGI_ERP_Backup_${todayISO()}.json`);
       updateBackupLabel(); renderAlerts(); toast('Backup downloaded');
     }
+    function backupProblem(b) {
+      if (!b || typeof b !== 'object' || Array.isArray(b)) return 'file is not a backup object';
+      if (!b.company || typeof b.company !== 'object') return 'company details missing';
+      for (const k of ['invoices', 'products', 'customers']) if (b[k] !== undefined && !Array.isArray(b[k])) return `${k} is not a list`;
+      if (!Array.isArray(b.invoices)) b.invoices = [];
+      const bad = b.invoices.findIndex(d => !d || typeof d !== 'object' || !d.num || !d.date || !Array.isArray(d.items));
+      if (bad >= 0) return `document #${bad + 1} is incomplete (number, date or items missing)`;
+      return '';
+    }
+    // keeps the current data before a restore replaces it (localStorage key + Android app file via the shell)
+    const PRE_RESTORE_KEY = STORAGE_KEY + '_before_restore';
+    function snapshotBeforeRestore() {
+      const snap = JSON.stringify(state);
+      storeSet('local', PRE_RESTORE_KEY, snap);
+      if (typeof window.HGI_nativeSnapshot === 'function') window.HGI_nativeSnapshot('before-restore', snap);
+    }
     function importJSONBackup(event) {
       const file = event.target.files[0];
       if (!file) return;
@@ -2943,10 +2999,14 @@
       reader.onload = e => {
         try {
           const parsed = JSON.parse(e.target.result);
-          if (!parsed || !parsed.company) return toast('Invalid backup file format', 'error');
+          const problem = backupProblem(parsed);
+          if (problem) return toast(`Not a valid HGI backup: ${problem}`, 'error');
           if (DEMO_MODE) return toast('You are in Demo Mode — exit Demo Mode first, then restore your backup.', 'error');
-          if (!confirm(`Restore backup with ${(parsed.invoices || []).length} documents? This will REPLACE all current data.`)) return;
-          state = migrateState(parsed); saveState(); initApp(); toast('Backup restored successfully');
+          if (!confirm(`Restore backup of "${parsed.company.name || 'unnamed business'}" with ${parsed.invoices.length} documents?\n\nThis REPLACES the data now in the app. A safety copy of the current data is kept so you can undo.`)) return;
+          snapshotBeforeRestore();
+          const restored = migrateState(parsed);
+          restored.ui = { ...(restored.ui || {}), rev: Math.max(Number(restored.ui && restored.ui.rev) || 0, Number(state.ui && state.ui.rev) || 0), restoredAt: new Date().toISOString() };
+          state = restored; saveState(); initApp(state); toast('Backup restored successfully');
         } catch (err) { toast('Failed to read the backup file', 'error'); }
         finally { event.target.value = ''; }
       };
