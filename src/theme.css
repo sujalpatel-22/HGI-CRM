@@ -32,9 +32,11 @@ html.dark {
   --sh-1: 0 1px 2px rgba(0, 0, 0, .4); --sh-2: 0 6px 20px rgba(0, 0, 0, .45); --sh-3: 0 12px 32px rgba(0, 0, 0, .55);
 }
 
-/* ---------- base ---------- */
-body { background: var(--c-bg) !important; color: var(--c-text); font-feature-settings: 'cv11', 'ss01'; -webkit-font-smoothing: antialiased; }
-main h2.text-xl, main h2.text-lg { letter-spacing: -.01em; color: var(--c-text); }
+/* ---------- base ----------
+   No font-feature-settings / tabular-nums / negative letter-spacing here: on Android System WebView 83 they made the
+   fallback-font ₹ glyph overlap the first digit (seen on the Android 11 emulator). */
+body { background: var(--c-bg) !important; color: var(--c-text); -webkit-font-smoothing: antialiased; }
+main h2.text-xl, main h2.text-lg { color: var(--c-text); }
 .field-label { text-transform: none !important; font-size: 12.5px !important; font-weight: 600 !important; color: var(--c-muted) !important; letter-spacing: 0; }
 .inp, .inp-sm { border-color: var(--c-line-strong) !important; border-radius: var(--r-md) !important; background: var(--c-surface); color: var(--c-text);
   transition: border-color .15s, box-shadow .15s; }
@@ -63,7 +65,7 @@ html.dark #quick-actions button i { background: #1b2742 !important; color: #ffb0
 /* ---------- KPI cards ---------- */
 #tab-dashboard > .dash-kpis > div { border-radius: var(--r-lg) !important; box-shadow: var(--sh-1) !important; border-color: var(--c-line) !important; position: relative; overflow: hidden; }
 #tab-dashboard > .dash-kpis > div p:first-child { text-transform: none !important; font-size: 12.5px; font-weight: 600; color: var(--c-muted) !important; }
-#tab-dashboard > .dash-kpis > div h3 { font-size: 21px !important; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+#tab-dashboard > .dash-kpis > div h3 { font-size: 21px !important; }
 #tab-dashboard > .dash-kpis > div::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--c-brand); opacity: .85; }
 #tab-dashboard > .dash-kpis > div:nth-child(2)::before { background: var(--c-ok); }
 #tab-dashboard > .dash-kpis > div:nth-child(3)::before { background: var(--c-accent); }
@@ -88,7 +90,7 @@ table tbody td[colspan].text-center::before { content: '\f15c'; font-family: 'Fo
   /* header: one compact row; the product tagline is redundant on every screen */
   #app-container > header > div { padding-top: 8px !important; padding-bottom: 8px !important; }
   #app-container > header p.text-xs.text-blue-200 { display: none; }
-  #app-container > header h1 { font-size: 16px !important; letter-spacing: -.01em; }
+  #app-container > header h1 { font-size: 16px !important; }
   #mobile-page-title { font-size: 11px !important; letter-spacing: .08em; opacity: .9; }
 
   main { padding-top: 14px !important; }
@@ -138,7 +140,7 @@ table tbody td[colspan].text-center::before { content: '\f15c'; font-family: 'Fo
   #invoices-list-tbody td:nth-child(5) { grid-area: party; font-size: 15px !important; font-weight: 700 !important; color: var(--c-text) !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #invoices-list-tbody td:nth-child(5) div { font-weight: 500; font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #invoices-list-tbody td:nth-child(6), #invoices-list-tbody td:nth-child(7) { display: none !important; }
-  #invoices-list-tbody td:nth-child(8) { grid-area: total; font-size: 15px !important; text-align: right; font-variant-numeric: tabular-nums; align-self: start; }
+  #invoices-list-tbody td:nth-child(8) { grid-area: total; font-size: 15px !important; text-align: right; align-self: start; }
   #invoices-list-tbody td:nth-child(9) { grid-area: bal; font-size: 11.5px !important; text-align: right; }
   #invoices-list-tbody td:nth-child(9)::before { content: 'Balance ' !important; display: inline !important; font-size: inherit; text-transform: none; color: var(--c-faint); font-weight: 400; }
   #invoices-list-tbody td:nth-child(10) { grid-area: status; justify-self: end; }
@@ -149,7 +151,7 @@ table tbody td[colspan].text-center::before { content: '\f15c'; font-family: 'Fo
   #dash-recent-table td:nth-child(1) { grid-area: num; font-size: 12.5px !important; }
   #dash-recent-table td:nth-child(2) { grid-area: date; font-size: 12px !important; color: var(--c-muted); }
   #dash-recent-table td:nth-child(3) { grid-area: party; font-size: 15px !important; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #dash-recent-table td:nth-child(4) { grid-area: value; text-align: right; font-size: 15px !important; font-variant-numeric: tabular-nums; }
+  #dash-recent-table td:nth-child(4) { grid-area: value; text-align: right; font-size: 15px !important; }
   #dash-recent-table td:nth-child(5) { display: none !important; }
   #dash-recent-table td:nth-child(6) { grid-area: status; justify-self: end; }
 
@@ -160,7 +162,7 @@ table tbody td[colspan].text-center::before { content: '\f15c'; font-family: 'Fo
   #items-list-tbody td:nth-child(2)::before { content: 'HSN ' !important; display: inline !important; text-transform: none; font-size: inherit; color: var(--c-faint); font-weight: 400; }
   #items-list-tbody td:nth-child(3), #items-list-tbody td:nth-child(4) { font-size: 12px !important; color: var(--c-muted); background: var(--c-surface-2); border-radius: 6px; padding: 1px 6px !important; }
   #items-list-tbody td:nth-child(3) { grid-area: gst; } #items-list-tbody td:nth-child(4) { grid-area: uqc; }
-  #items-list-tbody td:nth-child(5) { grid-area: rate; font-size: 15px !important; text-align: right; font-variant-numeric: tabular-nums; }
+  #items-list-tbody td:nth-child(5) { grid-area: rate; font-size: 15px !important; text-align: right; }
   #items-list-tbody td:nth-child(6) { grid-area: stock; text-align: right; font-size: 12.5px !important; }
   #items-list-tbody td:nth-child(7) { display: none !important; }
   #items-list-tbody td:nth-child(8) { grid-area: chk; display: none !important; font-size: 12px !important; }
@@ -172,7 +174,7 @@ table tbody td[colspan].text-center::before { content: '\f15c'; font-family: 'Fo
   #customers-list-tbody td:nth-child(2) { grid-area: gstin; font-size: 12px !important; color: var(--c-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #customers-list-tbody td:nth-child(3), #customers-list-tbody td:nth-child(4), #customers-list-tbody td:nth-child(6) { display: none !important; }
   #customers-list-tbody td:nth-child(5) { grid-area: phone; font-size: 12px !important; color: var(--c-muted); text-align: right; }
-  #customers-list-tbody td:nth-child(7) { grid-area: due; text-align: right; font-size: 15px !important; font-variant-numeric: tabular-nums; }
+  #customers-list-tbody td:nth-child(7) { grid-area: due; text-align: right; font-size: 15px !important; }
 
   /* register totals footer as a summary strip */
   table.m-cards tfoot tr { border-radius: var(--r-md) !important; font-size: 12.5px; }
@@ -199,7 +201,7 @@ table tbody td[colspan].text-center::before { content: '\f15c'; font-family: 'Fo
   #invoice-form > .flex.flex-wrap.justify-end.gap-3:last-child button span.text-\[10px\] { display: none; }
   #live-total { flex: 0 0 auto; padding: 0 6px 0 4px; line-height: 1.15; }
   #live-total small { display: block; font-size: 10.5px; font-weight: 600; color: var(--c-muted); }
-  #live-total b { font-size: 16px; color: var(--c-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #live-total b { font-size: 16px; color: var(--c-text); white-space: nowrap; }
 
   /* ---------- bottom navigation ---------- */
   #bottom-nav { background: rgba(255, 255, 255, .94) !important; backdrop-filter: saturate(1.6) blur(14px); -webkit-backdrop-filter: saturate(1.6) blur(14px);
