@@ -76,23 +76,8 @@ check(!(await page.isVisible('#onboarding')) && (await page.isVisible('#bottom-n
 await shot('02-dashboard');
 // ₹ must take its own space (old WebViews drew the fallback-font glyph on top of the first digit)
 const rupee = await page.evaluate(async () => { await document.fonts.ready; await new Promise(r => setTimeout(r, 300)); const h = document.getElementById('dash-total-billed'); const sp = document.createElement('span'); sp.textContent = '₹'; h.appendChild(sp);
-  const w = sp.getBoundingClientRect().width, fs = parseFloat(getComputedStyle(h).fontSize); sp.remove(); return { w, fs, fix: !!window.HGI_APP.rupeeFix }; });
-console.log('    ₹ in-context:', JSON.stringify(await page.evaluate(async () => {
-  const h = document.getElementById('dash-total-billed');
-  const variants = { base: '', kernNone: 'font-kerning:none', featKern0: "font-feature-settings:'kern' 0", rupeeFam: "font-family:'HGI Rupee','Inter',sans-serif",
-    sans: 'font-family:sans-serif', ls: 'letter-spacing:0.01em', w400: 'font-weight:400', ligNone: 'font-variant-ligatures:none', textRender: 'text-rendering:optimizeSpeed' };
-  const out = {};
-  for (const [k, css] of Object.entries(variants)) {
-    const el = document.createElement('h3'); el.className = h.className; el.style.cssText = css; el.textContent = '₹1,234.00'; h.parentElement.appendChild(el);
-    const r = document.createRange(); r.setStart(el.firstChild, 0); r.setEnd(el.firstChild, 1);
-    const r2 = document.createRange(); r2.setStart(el.firstChild, 1); r2.setEnd(el.firstChild, 2);
-    out[k] = [Math.round(r.getBoundingClientRect().width * 10) / 10, Math.round((r2.getBoundingClientRect().left - r.getBoundingClientRect().left) * 10) / 10];
-    el.remove();
-  }
-  out.ctx = getComputedStyle(h).fontFamily + ' / ' + getComputedStyle(h).fontWeight + ' / ' + getComputedStyle(h).fontFeatureSettings + ' / ' + getComputedStyle(h).textRendering;
-  return out;
-})));
-check(rupee.w > rupee.fs * 0.35, `₹ sign has its own width (${rupee.w.toFixed(1)}px at ${rupee.fs}px${rupee.fix ? ', system-font fallback active' : ''})`);
+  const w = sp.getBoundingClientRect().width, fs = parseFloat(getComputedStyle(h).fontSize); sp.remove(); return { w, fs, fix: !!window.HGI_APP.rupeeFix, probe: window.HGI_APP.rupeeWidths }; });
+check(rupee.w > rupee.fs * 0.35, `₹ sign has its own width (${rupee.w.toFixed(1)}px at ${rupee.fs}px${rupee.fix ? ', system-font fallback active' : ''}, probe ${JSON.stringify(rupee.probe)})`);
 const ui = (await device.shell('uiautomator dump /sdcard/hgi-ui.xml >/dev/null 2>&1; cat /sdcard/hgi-ui.xml')).toString();
 fs.writeFileSync(path.join(OUT, `${label}-ui.xml`), ui);
 check(ui.includes('<hierarchy') && !/<node[^>]*text="HGI Billing"[^>]*class="android.widget.TextView"/.test(ui), 'no native title bar over the app');

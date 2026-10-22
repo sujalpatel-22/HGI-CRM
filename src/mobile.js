@@ -522,14 +522,21 @@
   }
 
   /* ------------------------------------------------------------------ old-WebView ₹ glyph check */
-  function rupeeWidth() {
-    const sp = document.createElement('span');
-    sp.style.cssText = 'position:absolute;visibility:hidden;font-size:40px;font-weight:700;white-space:nowrap';
-    sp.textContent = '₹'; document.body.appendChild(sp);
-    const w = sp.getBoundingClientRect().width; sp.remove(); return w;
+  // width of the ₹ glyph inside real bold app text ('₹1,234'), measured with a Range like the browser lays it out
+  function rupeeWidth(parent, cls) {
+    const el = document.createElement(parent === document.body ? 'div' : 'h3');
+    el.className = cls; el.style.cssText = 'position:absolute;left:-9999px;top:0;white-space:nowrap';
+    el.textContent = '₹1,234.00'; parent.appendChild(el);
+    const r = document.createRange(); r.setStart(el.firstChild, 0); r.setEnd(el.firstChild, 1);
+    const w = r.getBoundingClientRect().width; el.remove(); return w;
   }
   function checkRupeeGlyph() {
-    const run = () => { if (rupeeWidth() < 8) { document.documentElement.classList.add('rupee-fix'); window.HGI_APP.rupeeFix = true; } };
+    const run = () => {
+      const host = document.querySelector('#tab-dashboard') || document.body;
+      const ws = [rupeeWidth(document.body, 'font-bold text-xl'), rupeeWidth(host, 'text-xl font-bold'), rupeeWidth(document.body, 'font-semibold'), rupeeWidth(document.body, '')];
+      window.HGI_APP.rupeeWidths = ws.map(w => Math.round(w * 10) / 10);
+      if (ws.some(w => w < 2)) { document.documentElement.classList.add('rupee-fix'); window.HGI_APP.rupeeFix = true; }
+    };
     // load Inter's ₹ face first (unicode-range fonts load lazily), then measure
     if (document.fonts && document.fonts.load) Promise.all([document.fonts.load("700 40px 'Inter'", '₹'), document.fonts.load("400 40px 'Inter'", '₹')]).then(run, run);
     else setTimeout(run, 500);
