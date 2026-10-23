@@ -498,3 +498,10 @@ html.dark .chips button.on b { color: #4b5878; }
 .fixed.inset-0.z-50 h3, .fixed.inset-0.z-50 h4 { color: var(--text); }
 .fixed.inset-0.z-50 .text-\[10px\].uppercase, .fixed.inset-0.z-50 p.text-xs.font-bold { font-size: 12px !important; font-weight: 600 !important; }
 #tab-invoices #doc-chips + * { margin-top: 4px !important; }
+/* Settings: named groups with an icon, roomy separation */
+.set-group { display: flex; align-items: center; gap: 10px; font-size: 15px !important; font-weight: 700 !important; color: var(--text) !important; text-transform: none !important; letter-spacing: 0 !important; }
+.set-group i { width: 30px; height: 30px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; background: var(--surface-2); color: var(--brand); border: 1px solid var(--line); }
+html.dark .set-group i { color: #9fbdf0; }
+#settings-form .set-group.border-t { border-top: 1px solid var(--line) !important; padding-top: 20px !important; margin-top: 22px !important; }
+#tab-settings > .bg-white > h2 { border-bottom: 0 !important; margin-bottom: 8px !important; font-size: 22px !important; }
+#app-prefs h2 { font-size: 17px !important; }

@@ -559,6 +559,7 @@
         <div class="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
           <h2 class="text-xl font-bold text-slate-800 mb-6 pb-2 border-b">Company Settings & GST Profile</h2>
           <form id="settings-form" onsubmit="event.preventDefault(); saveSettings();" class="space-y-4">
+            <h3 class="set-group"><i class="fa-regular fa-building"></i>Business details</h3>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div><label class="field-label">Trade Name (printed)</label><input type="text" id="set-comp-name" class="inp" required></div>
               <div><label class="field-label">Legal Name (as per GST registration, if different)</label><input type="text" id="set-legal-name" class="inp"></div>
@@ -580,7 +581,7 @@
               </div>
             </div>
 
-            <h3 class="text-sm font-bold text-slate-800 pt-4 border-t uppercase">GST Compliance Profile</h3>
+            <h3 class="set-group text-sm font-bold text-slate-800 pt-4 border-t uppercase"><i class="fa-solid fa-scale-balanced"></i>GST Compliance Profile</h3>
             <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div class="md:col-span-2">
                 <label class="field-label">Aggregate Annual Turnover (previous FY, all GSTINs on PAN)</label>
@@ -606,7 +607,7 @@
               <div class="md:col-span-4"><label class="field-label">Default Terms & Conditions</label><textarea id="set-comp-terms" rows="3" class="inp"></textarea></div>
             </div>
 
-            <h3 class="text-sm font-bold text-slate-800 pt-4 border-t uppercase">Branding</h3>
+            <h3 class="set-group text-sm font-bold text-slate-800 pt-4 border-t uppercase"><i class="fa-solid fa-palette"></i>Branding</h3>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
               <div class="flex gap-4 items-center">
                 <div class="w-28 h-20 border rounded bg-slate-50 flex items-center justify-center p-2"><img id="set-logo-preview" alt="Logo preview" class="max-h-full max-w-full object-contain"></div>
@@ -622,7 +623,7 @@
               <div><label class="field-label">Tagline</label><input type="text" id="set-tagline" class="inp"></div>
             </div>
 
-            <h3 class="text-sm font-bold text-slate-800 pt-4 border-t uppercase">Bank & UPI</h3>
+            <h3 class="set-group text-sm font-bold text-slate-800 pt-4 border-t uppercase"><i class="fa-solid fa-building-columns"></i>Bank & UPI</h3>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div><label class="field-label">Bank Name</label><input type="text" id="set-bank-name" class="inp"></div>
               <div><label class="field-label">Account Number</label><input type="text" id="set-bank-acc" class="inp"></div>
@@ -636,7 +637,7 @@
           </form>
 
           <div class="mt-8 pt-6 border-t">
-            <h3 class="text-sm font-bold text-slate-800 mb-3 uppercase">Change Login Password</h3>
+            <h3 class="set-group text-sm font-bold text-slate-800 mb-3 uppercase"><i class="fa-solid fa-key"></i>Change Login Password</h3>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
               <input type="password" id="cp-current" class="inp" placeholder="Current password">
               <input type="password" id="cp-new" class="inp" placeholder="New password">
@@ -646,7 +647,7 @@
           </div>
 
           <div class="mt-8 pt-6 border-t">
-            <h3 class="text-sm font-bold text-slate-800 mb-1 uppercase">Data Backup & Recovery</h3>
+            <h3 class="set-group text-sm font-bold text-slate-800 mb-1 uppercase"><i class="fa-solid fa-cloud-arrow-down"></i>Data Backup & Recovery</h3>
             <p id="last-backup-label" class="text-xs text-slate-500 mb-3"></p>
             <div class="flex flex-wrap gap-3">
               <button onclick="exportJSONBackup()" class="bg-slate-800 text-white px-4 py-2 rounded text-xs font-bold hover:bg-slate-900"><i class="fa-solid fa-download mr-1"></i> Export Backup (JSON)</button>
@@ -2874,7 +2875,7 @@
             <td class="p-3 whitespace-nowrap">${esc(c.gstin || 'Unregistered')} ${c.gstin ? (g.status === 'ok' ? '<i class="fa-solid fa-circle-check text-emerald-500"></i>' : '<i class="fa-solid fa-triangle-exclamation text-amber-500" title="' + esc(g.msg) + '"></i>') : ''}</td>
             <td class="p-3 whitespace-pre-line text-xs">${esc(withPin(c.address, c.pin))}</td>
             <td class="p-3 font-semibold text-orange-700">${esc(c.state)} (${esc(c.stateCode)})</td>
-            <td class="p-3">${esc(c.phone || '-')}</td>
+            <td class="p-3">${esc(c.phone || '')}</td>
             <td class="p-3 text-xs">${c.creditDays ?? '-'} days${Number(c.creditLimit) ? `<div>${money(c.creditLimit)}</div>` : ''}</td>
             <td class="p-3 font-bold ${over ? 'text-rose-700' : due > 0 ? 'text-rose-600' : 'text-slate-400'}">${money(due)}${over ? '<div class="text-[10px]">over limit</div>' : ''}</td>
             <td class="p-3 text-right whitespace-nowrap">
