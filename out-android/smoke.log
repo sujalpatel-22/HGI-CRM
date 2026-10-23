@@ -1,0 +1,38 @@
+▶ api33-pixel_6: sdk_gphone64_x86_64 · Android SDK 33 · WebView versionName=109.0.5414.123
+  ✓ runs as native Capacitor app
+  ✓ HgiNative plugin reachable from JavaScript
+  ✓ native writeState/readState round trip
+  ✓ bundled QR + Chart libraries loaded (offline)
+  ✓ bundled Font Awesome icons
+  ✓ bundled Inter font
+  ✓ compiled Tailwind CSS loaded
+  ✓ no username/password screen on Android
+  ✓ onboarding shown on first launch
+  ✓ fresh install starts with no business data (no sample company, items, buyers or invoices)
+  ✓ setup wizard covers the screen, buttons unstyled by default (842/842px, rgba(0, 0, 0, 0))
+  ✓ onboarding done, bottom tab bar shown
+  ✓ ₹ sign has its own width (23.9px at 46px, probe [11.4,11.4,9,8.7])
+  ✓ no native title bar over the app
+    status-bar pixel [ 243, 241, 236 ] header pixel [ 241, 232, 226 ] insets "0px"
+  ✓ status bar painted the page colour (rgb 243,241,236 vs page 243,241,236)
+  ✓ invoice saved
+  ✓ GST: inter-state IGST 18% on ₹10,000 = ₹1,800, total ₹11,800
+  ✓ UPI scan-to-pay QR rendered
+    save toast: PDF saved: Downloads/HGI Billing/Invoice_01-26-27_Shree_Ram_Engineering.pdf
+  ✓ native A4 PDF written to Downloads/HGI Billing (744579 bytes)
+  ✓ file is a valid PDF
+  ✓ Android back button closes dialog
+  ✓ back button returns to dashboard
+    (launch attempt 1 failed: Error: page.waitForFunction: Target page, context or browser has been closed — retrying)
+  ✓ data persists after app restart
+  ✓ newer on-device copy wins over older WebView storage
+    files dir: hgi-selftest.json  hgi-state.json  profileInstalled
+  ✓ data restored from on-device mirror when WebView storage is wiped
+  ✓ Demo Mode shows sample data with a DEMO banner
+  ✓ real data in the native mirror untouched while Demo Mode is open
+  ✓ exit Demo Mode returns to real data and deletes the sample data
+  ✓ after restart the app opens real data, not demo
+  ✓ Hindi UI
+  ✓ no JavaScript errors
+
+api33-pixel_6: 31 passed, 0 failed
