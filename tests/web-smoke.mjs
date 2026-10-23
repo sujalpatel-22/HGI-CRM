@@ -237,6 +237,14 @@ for (const vp of VIEWPORTS) {
     check(chip.st === 'Overdue' && chip.ty === 'INV' && chip.rows === chip.want && chip.badge === String(chip.want) && chip.on === '2', `document filter chips (Overdue: ${chip.rows})`);
     await page.click('#doc-chips button[data-i="0"]'); await page.waitForTimeout(100);
     check(await page.evaluate(() => getFilteredInvoices().length === state.invoices.length), 'All chip clears the filters');
+    await page.evaluate(() => switchTab('returns')); await page.waitForTimeout(150);
+    const ret = await page.evaluate(() => { const mk = $('ret-month').value, R = buildReturns(mk), t = R.t31a;
+      return { hero: $('ret-hero').querySelector('.rh-amount').textContent, want: money(round2(t.igst + t.cgst + t.sgst + R.t31b.igst)), secs: document.querySelectorAll('#ret-sections details').length,
+        empty: document.querySelectorAll('#ret-empty .re-list span').length, mk }; });
+    check(ret.hero === ret.want && ret.secs >= 2, `GST returns hero shows the month's output tax (${ret.hero}, ${ret.secs} sections, ${ret.empty} empty listed)`);
+    await page.click('.period-step[aria-label="Previous month"]'); await page.waitForTimeout(120);
+    check(await page.evaluate(mk => { const [y, m] = mk.split('-').map(Number), d = new Date(y, m - 2, 1); return $('ret-month').value === `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }, ret.mk), 'period stepper moves to the previous month');
+    await page.evaluate(() => { $('ret-month').value = todayISO().slice(0, 7); renderReturns(); });
     await page.evaluate(() => { editInvoice(state.invoices.find(d => d.docType === 'INV').id); renderPreview(); }); await page.waitForTimeout(500);
     check(await page.evaluate(() => document.querySelectorAll('#invoice-preview-container .demo-watermark').length > 0 && document.querySelector('#invoice-preview-container').textContent.includes('NOT A VALID TAX INVOICE')), 'demo invoices carry the NOT A VALID TAX INVOICE watermark');
     await shot('09-demo-preview');

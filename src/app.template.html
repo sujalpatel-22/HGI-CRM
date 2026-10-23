@@ -494,22 +494,23 @@
 
       <!-- ====================== GST RETURNS ====================== -->
       <section id="tab-returns" class="tab-content space-y-6 hidden">
-        <div class="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
-          <div class="flex flex-wrap gap-3 justify-between items-center">
-            <div>
-              <h2 class="text-xl font-bold text-slate-800">GST Returns Workbench</h2>
-              <p class="text-xs text-slate-500 mt-1">GSTR-1 & GSTR-3B (outward supplies) ready figures from your saved documents. Cancelled documents are excluded; credit notes are netted.</p>
-            </div>
-            <div class="flex items-center gap-2">
-              <label class="text-xs font-bold text-slate-600 uppercase">Tax Period</label>
-              <input type="month" id="ret-month" onchange="renderReturns()" class="inp !w-auto">
-              <button onclick="window.print()" class="hidden"></button>
-            </div>
+        <div class="ret-head">
+          <div>
+            <h2 class="text-xl font-bold text-slate-800">GST Returns</h2>
+            <p class="ret-intro">GSTR-1 and GSTR-3B figures from your saved documents. Cancelled documents are left out and credit notes are netted.</p>
           </div>
-          <div id="ret-cards" class="grid grid-cols-2 md:grid-cols-6 gap-3 mt-5"></div>
-          <div id="ret-warnings" class="mt-4"></div>
+          <div class="period" role="group" aria-label="Tax period">
+            <button type="button" class="period-step" onclick="shiftReturnMonth(-1)" aria-label="Previous month"><i class="fa-solid fa-chevron-left"></i></button>
+            <label for="ret-month" class="sr-only">Tax Period</label>
+            <input type="month" id="ret-month" onchange="renderReturns()" class="inp">
+            <button type="button" class="period-step" onclick="shiftReturnMonth(1)" aria-label="Next month"><i class="fa-solid fa-chevron-right"></i></button>
+          </div>
         </div>
-        <div id="ret-sections" class="space-y-6"></div>
+        <article id="ret-hero" class="ret-hero"></article>
+        <div id="ret-cards" class="ret-cards"></div>
+        <div id="ret-warnings"></div>
+        <div id="ret-sections" class="ret-sections"></div>
+        <div id="ret-empty" class="ret-empty"></div>
       </section>
 
       <!-- ====================== ITEMS ====================== -->
@@ -702,7 +703,7 @@
         </div>
       </div>
       <p id="modal-item-hint" class="text-[11px] text-slate-500"></p>
-      <div class="flex justify-end gap-2 pt-2">
+      <div class="dlg-actions flex justify-end gap-2 pt-2">
         <button onclick="closeModal('item-modal')" class="px-4 py-2 border rounded text-xs font-semibold">Cancel</button>
         <button onclick="saveItemFromModal()" class="px-4 py-2 text-white rounded text-xs font-semibold" style="background: var(--brand-orange)">Save Item</button>
       </div>
@@ -737,7 +738,7 @@
         <div><label class="field-label">Credit Days</label><input type="number" min="0" id="modal-cust-credit" class="inp"></div>
         <div><label class="field-label">Credit Limit (₹, optional)</label><input type="number" min="0" id="modal-cust-limit" class="inp"></div>
       </div>
-      <div class="flex justify-end gap-2 pt-2">
+      <div class="dlg-actions flex justify-end gap-2 pt-2">
         <button onclick="closeModal('customer-modal')" class="px-4 py-2 border rounded text-xs font-semibold">Cancel</button>
         <button onclick="saveCustomerFromModal()" class="px-4 py-2 text-white rounded text-xs font-semibold" style="background: var(--brand-orange)">Save Buyer</button>
       </div>
@@ -771,7 +772,7 @@
           <div class="col-span-2"><label class="field-label">UTR / Cheque No.</label><input type="text" id="pay-ref" class="inp"></div>
         </div>
         <p id="pay-cash-warning" class="hidden text-[11px] text-rose-600 font-semibold"></p>
-        <div class="flex justify-end gap-2 pt-1">
+        <div class="dlg-actions flex justify-end gap-2 pt-1">
           <button onclick="markFullyPaid()" class="px-3 py-2 border border-emerald-600 text-emerald-700 rounded text-xs font-bold hover:bg-emerald-50">Receive Full Balance</button>
           <button onclick="addPayment()" class="px-4 py-2 bg-emerald-600 text-white rounded text-xs font-bold hover:bg-emerald-700"><i class="fa-solid fa-plus mr-1"></i> Add Receipt</button>
         </div>
@@ -2717,11 +2718,21 @@
       const mk = $('ret-month').value || todayISO().slice(0, 7);
       const R = buildReturns(mk);
       const t = R.t31a, tax = round2(t.igst + t.cgst + t.sgst + R.t31b.igst);
-      const card = (l, v, cls = '') => `<div class="bg-slate-50 rounded p-3 border"><div class="text-[10px] font-bold uppercase text-slate-500">${l}</div><div class="font-bold text-slate-800 ${cls}">${v}</div></div>`;
-      $('ret-cards').innerHTML = card('Taxable (3.1a)', money(t.taxable)) + card('IGST', money(t.igst + R.t31b.igst)) + card('CGST', money(t.cgst)) + card('SGST', money(t.sgst))
-        + card('Total Output Tax', money(tax), 'text-orange-700') + card('Zero-rated / Nil', money(R.t31b.taxable + R.t31c.taxable));
-      $('ret-warnings').innerHTML = R.warnings.length ? `<div class="bg-amber-50 border border-amber-200 rounded p-3 text-xs text-amber-800 space-y-1">
-        <div class="font-bold"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Fix before filing</div>${R.warnings.map(w => `<div>• ${esc(w)}</div>`).join('')}</div>` : '';
+      const card = (l, v, sub = '') => `<div class="ret-card"><span>${l}</span><b>${v}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;
+      const igst = round2(t.igst + R.t31b.igst);
+      const [y, m] = mk.split('-').map(Number), period = new Date(y, m - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+      const due = (day) => new Date(y, m, day).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+      const parts = [['IGST', igst, 'p-igst'], ['CGST', t.cgst, 'p-cgst'], ['SGST', t.sgst, 'p-sgst']];
+      $('ret-hero').innerHTML = `
+        <div class="rh-top"><span>Output tax for ${esc(period)}</span><span class="rh-dues"><span>GSTR-1 by ${due(11)}</span><span>GSTR-3B by ${due(20)}</span></span></div>
+        <div class="rh-amount">${money(tax)}</div>
+        <div class="rh-sub">on taxable value of ${money(t.taxable)}${R.t31b.taxable + R.t31c.taxable ? `, plus ${money(R.t31b.taxable + R.t31c.taxable)} zero-rated / nil` : ''}</div>
+        <div class="rh-bar">${tax > 0 ? parts.map(([, v, c]) => v > 0 ? `<i class="${c}" style="flex:${v}"></i>` : '').join('') : '<i class="p-none" style="flex:1"></i>'}</div>
+        <div class="rh-legend">${parts.map(([l, v, c]) => `<div><span class="dot ${c}"></span>${l}<b>${money(v)}</b></div>`).join('')}</div>`;
+      $('ret-cards').innerHTML = card('Taxable value (3.1a)', money(t.taxable)) + card('Zero-rated and nil', money(R.t31b.taxable + R.t31c.taxable))
+        + card('Documents', String(R.docs.reduce((a, r) => a + (Number(r[5]) || 0), 0)), R.docs.length ? 'net issued this month' : 'none this month');
+      $('ret-warnings').innerHTML = R.warnings.length ? `<div class="ret-warn" role="alert">
+        <div class="ret-warn-h"><i class="fa-solid fa-triangle-exclamation"></i>Fix before filing</div><ul>${R.warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul></div>` : '';
 
       const sections = [
         { id: 'b2b', title: 'GSTR-1 · 4A/4B/6B/6C — B2B, SEZ & Deemed Exports (invoice-wise, rate-wise)', head: ['GSTIN of Recipient', 'Receiver Name', 'Invoice No', 'Invoice Date', 'Invoice Value', 'Place of Supply', 'Reverse Charge', 'Invoice Type', 'Rate', 'Taxable Value', 'IGST', 'CGST', 'SGST'], rows: R.b2b, sum: [9, 10, 11, 12] },
@@ -2741,19 +2752,39 @@
           ...Object.entries(R.t32).map(([p, v]) => [`3.2 Inter-state supplies to unregistered persons — POS ${p}`, v.taxable, v.igst, 0, 0])], sum: [] }
       ];
       window.__retSections = sections;
+      // short names people use, with the official table numbers kept as a reference chip
+      const NAMES = { b2b: ['B2B, SEZ and deemed exports', '4A 4B 6B 6C'], b2cl: ['B2C large (inter-state above ₹1 lakh)', '5'], exp: ['Exports', '6A'],
+        b2cs: ['B2C others', '7'], cdnr: ['Credit and debit notes, registered', '9B'], cdnur: ['Credit and debit notes, unregistered', '9B'],
+        hsnb2b: ['HSN summary, B2B', '12'], hsnb2c: ['HSN summary, B2C', '12'], docs: ['Documents issued', '13'], '3b': ['Outward supplies', '3.1 3.2'] };
+      const form = id => id === '3b' ? 'GSTR-3B' : 'GSTR-1';
+      const empty = [], phone = window.matchMedia && matchMedia('(max-width: 767px)').matches;
+      let firstOpen = 0;
       $('ret-sections').innerHTML = sections.map((s, i) => {
+        const [name, tbl] = NAMES[s.id] || [s.title, ''];
+        const always = s.id === '3b' || s.id === 'docs';
+        if (!s.rows.length && !always) { empty.push(`<span>${esc(name)} <em>${form(s.id)} ${esc(tbl)}</em></span>`); return ''; }
         const sums = s.sum.map(ci => round2(s.rows.reduce((a, r) => a + (Number(r[ci]) || 0), 0)));
-        return `<div class="bg-white p-5 rounded-lg shadow-sm border border-slate-200">
-          <div class="flex justify-between items-center mb-3 gap-2">
-            <h3 class="text-sm font-bold text-slate-800">${esc(s.title)} <span class="text-xs font-normal text-slate-400">(${s.rows.length} rows)</span></h3>
-            <button onclick="exportReturnSection(${i})" class="text-xs font-bold text-emerald-700 border border-emerald-600 rounded px-2 py-1 hover:bg-emerald-50 whitespace-nowrap" ${s.rows.length ? '' : 'disabled'}><i class="fa-solid fa-file-csv mr-1"></i>CSV</button>
-          </div>
-          ${s.rows.length ? `<div class="overflow-x-auto"><table class="rpt-table"><thead><tr>${s.head.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead>
-            <tbody>${s.rows.map(r => `<tr>${r.map((v, ci) => fmtCell(s.head[ci], v)).join('')}</tr>`).join('')}</tbody>
-            ${s.sum.length ? `<tfoot><tr>${s.head.map((h, ci) => `<td class="num">${ci === 0 ? 'Total' : (s.sum.includes(ci) ? amt(sums[s.sum.indexOf(ci)]) : '')}</td>`).join('')}</tr></tfoot>` : ''}
-          </table></div>` : '<p class="text-xs text-slate-400">Nothing to report for this period.</p>'}
-        </div>`;
+        const tvi = s.head.indexOf('Taxable Value');
+        const headline = tvi >= 0 && s.sum.includes(tvi) ? money(sums[s.sum.indexOf(tvi)]) : `${s.rows.length} ${s.rows.length === 1 ? 'row' : 'rows'}`;
+        // phones: only the first section with rows starts open (long tables scroll sideways); larger screens open all
+        const open = s.rows.length && (!phone || !firstOpen++);
+        return `<details class="ret-sec" ${open ? 'open' : ''} title="${esc(s.title)}">
+          <summary><span class="rs-form">${form(s.id)} <b>${esc(tbl)}</b></span><span class="rs-name">${esc(name)}<small>${s.rows.length} ${s.rows.length === 1 ? 'row' : 'rows'}</small></span><span class="rs-total">${headline}</span></summary>
+          <div class="rs-body">
+            <div class="rs-tools"><button onclick="exportReturnSection(${i})" class="rs-csv" ${s.rows.length ? '' : 'disabled'}><i class="fa-solid fa-file-arrow-down"></i>Download CSV</button></div>
+            ${s.rows.length ? `<div class="overflow-x-auto rs-scroll"><table class="rpt-table"><thead><tr>${s.head.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead>
+              <tbody>${s.rows.map(r => `<tr>${r.map((v, ci) => fmtCell(s.head[ci], v)).join('')}</tr>`).join('')}</tbody>
+              ${s.sum.length ? `<tfoot><tr>${s.head.map((h, ci) => `<td class="num">${ci === 0 ? 'Total' : (s.sum.includes(ci) ? amt(sums[s.sum.indexOf(ci)]) : '')}</td>`).join('')}</tr></tfoot>` : ''}
+            </table></div>` : '<p class="text-xs text-slate-400">Nothing to report for this period.</p>'}
+          </div></details>`;
       }).join('');
+      $('ret-empty').innerHTML = empty.length ? `<p class="re-h">Nothing to report this month</p><div class="re-list">${empty.join('')}</div>` : '';
+    }
+    function shiftReturnMonth(n) {
+      const v = $('ret-month').value || todayISO().slice(0, 7);
+      const [y, m] = v.split('-').map(Number), d = new Date(y, m - 1 + n, 1);
+      $('ret-month').value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      renderReturns();
     }
     function fmtCell(head, v) {
       const isMoney = /Value|IGST|CGST|SGST|Taxable/i.test(head);
