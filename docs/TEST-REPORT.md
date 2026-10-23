@@ -1,6 +1,6 @@
 # HGI Billing v7.2.0: test report
 
-_Branch `android-v7`, commit 290f6c4, build 7.2.0 (125)._ _ CI: GitHub Actions "Android build & test". Builds and logs are published to the `ci-output-*` branches._
+_Branch `android-v7`, commit 290f6c4, build 7.2.0 (125). CI: GitHub Actions "Android build & test"; builds and logs are published to the `ci-output-*` branches._
 
 ## Automated suites
 | Suite | What it covers | Result |
