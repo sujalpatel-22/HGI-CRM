@@ -606,3 +606,24 @@ html.dark .p-igst { background: #c7d6f5; } html.dark .p-cgst { background: #6f9b
 #more-sheet .tile { gap: 8px !important; padding: 16px 6px 12px !important; font-size: 12.5px !important; }
 #more-sheet .tile i { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: var(--surface); border: 1px solid var(--line); color: var(--ink) !important; font-size: 16px !important; }
 html.dark #more-sheet .tile i { color: #dbe3f5 !important; background: #16213a; }
+
+/* motion: only in answer to an action (screen change, sheets, press) */
+.tab-in { animation: tabIn .2s var(--ease) both; }
+@keyframes tabIn { from { opacity: 0; } to { opacity: 1; } }
+main button:active, #bottom-nav button:active { transform: scale(.97); }
+#hero .ledger .seg { transition: flex-grow .5s var(--ease); }
+
+/* small phones: the demo banner stays on one line */
+@media (max-width: 400px) { #demo-banner .db-more { display: none; } }
+/* tablets: the top navigation fits one row (icons only between 768 and 1180 px; names stay for screen readers) */
+@media (min-width: 768px) and (max-width: 1180px) {
+  #app-container > header nav { flex-wrap: nowrap !important; }
+  #app-container > header nav .nav-btn { font-size: 0 !important; padding: 9px 11px !important; }
+  #app-container > header nav .nav-btn i { font-size: 15px; margin: 0 !important; }
+  #app-container > header > div > div:first-child p { display: none; }
+}
+/* tablet/desktop item table: the description gets the room */
+@media (min-width: 768px) { #invoice-items-body .item-desc { min-width: 200px; } }
+#live-total { display: inline-flex; flex-direction: column; justify-content: center; margin-right: auto; padding: 0 10px; line-height: 1.15; }
+#live-total small { font-size: 11px; color: var(--muted); font-weight: 500; }
+#live-total b { font-size: 17px; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }

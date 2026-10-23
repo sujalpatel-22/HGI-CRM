@@ -82,6 +82,8 @@ for (const vp of VIEWPORTS) {
       return !!document.querySelector('meta[http-equiv="Content-Security-Policy"]') && netBlocked; }), 'Content-Security-Policy active (remote connections blocked)');
     errors.splice(0, errors.length, ...errors.filter(e => !e.includes('csp-probe')));   // the probe's own expected violation
   }
+  if (vp.name === 'tablet-800') check(await page.evaluate(() => document.querySelector('#app-container > header nav').getBoundingClientRect().height < 56), 'tablet: top navigation fits on one row');
+  check(await page.evaluate(() => { switchTab('items'); const ok = document.getElementById('tab-items').classList.contains('tab-in'); switchTab('dashboard'); return ok; }), 'screen change answers with a fade-in');
   check((await page.isVisible('#quick-actions')) === vp.width < 768, `dashboard quick actions ${vp.width < 768 ? 'shown' : 'hidden'} at ${vp.width}px`);
   // editor: segmented document type drives the real select; consignee collapses when same as billing
   await page.evaluate(() => { newDocument('INV'); switchTab('create-invoice'); }); await page.waitForTimeout(150);

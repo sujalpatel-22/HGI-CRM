@@ -6,7 +6,7 @@
    ===================================================================== */
 (function () {
   'use strict';
-  const APP_VERSION = '7.4.0';
+  const APP_VERSION = '7.5.0';
   const cap = window.Capacitor;
   const isNative = !!(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform());
   // Without a bundler the native bridge exposes registered plugins on Capacitor.Plugins
@@ -269,7 +269,7 @@
     if (!DEMO_MODE || document.getElementById('demo-banner')) return;
     const b = document.createElement('div');
     b.id = 'demo-banner'; b.className = 'no-print';
-    b.innerHTML = `<i class="fa-solid fa-flask"></i><span data-i18n><strong>DEMO MODE</strong> — sample data, not real invoices</span><button type="button" onclick="HGI_M.exitDemo()" data-i18n>Exit demo</button>`;
+    b.innerHTML = `<i class="fa-solid fa-flask"></i><span data-i18n><strong>DEMO MODE</strong><span class="db-more"> — sample data, not real invoices</span></span><button type="button" onclick="HGI_M.exitDemo()" data-i18n>Exit demo</button>`;
     const header = document.querySelector('#app-container > header');
     if (header) header.after(b); else document.body.prepend(b);
   }
@@ -791,7 +791,12 @@
   /* ------------------------------------------------------------------ hook into the core app */
   let currentTab = 'dashboard';
   function installHooks() {
-    wrap('switchTab', (out, tab) => { currentTab = tab; setActiveNav(tab); closeMore(); if (mq.matches) window.scrollTo(0, 0); });
+    wrap('switchTab', (out, tab) => {
+      currentTab = tab; setActiveNav(tab); closeMore(); if (mq.matches) window.scrollTo(0, 0);
+      // answer the tap: the new screen fades in (opacity only, so sticky/fixed children are unaffected)
+      const sec = document.getElementById(`tab-${tab}`);
+      if (sec) { sec.classList.remove('tab-in'); void sec.offsetWidth; sec.classList.add('tab-in'); }
+    });
     ['renderInvoiceList', 'renderItemList', 'renderCustomerList', 'renderDashboard', 'addInvoiceRow'].forEach(n => wrap(n, () => labelAll()));
     wrap('renderDashboard', () => renderHero());
     wrap('renderInvoiceList', () => syncDocChips());

@@ -2765,7 +2765,7 @@
         if (!s.rows.length && !always) { empty.push(`<span>${esc(name)} <em>${form(s.id)} ${esc(tbl)}</em></span>`); return ''; }
         const sums = s.sum.map(ci => round2(s.rows.reduce((a, r) => a + (Number(r[ci]) || 0), 0)));
         const tvi = s.head.indexOf('Taxable Value');
-        const headline = tvi >= 0 && s.sum.includes(tvi) ? money(sums[s.sum.indexOf(tvi)]) : `${s.rows.length} ${s.rows.length === 1 ? 'row' : 'rows'}`;
+        const headline = tvi >= 0 && s.sum.includes(tvi) ? money(sums[s.sum.indexOf(tvi)]) : '';
         // phones: only the first section with rows starts open (long tables scroll sideways); larger screens open all
         const open = s.rows.length && (!phone || !firstOpen++);
         return `<details class="ret-sec" ${open ? 'open' : ''} title="${esc(s.title)}">
