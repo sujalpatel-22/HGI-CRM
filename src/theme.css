@@ -389,3 +389,84 @@ html.dark main .bg-teal-100:not(.a4-page *) { background: rgba(45, 212, 191, .14
 html.dark main .bg-blue-100:not(.a4-page *) { background: rgba(120, 160, 230, .15) !important; color: #a8c4f5 !important; }
 html.dark main .bg-purple-100:not(.a4-page *) { background: rgba(170, 130, 240, .15) !important; color: #c9b0f7 !important; }
 html.dark main .bg-slate-100.text-slate-700:not(.a4-page *), html.dark main .bg-slate-200:not(.a4-page *) { background: rgba(255, 255, 255, .08) !important; color: #c7cfe0 !important; }
+
+/* =====================================================================
+   v7.4 refinements: dashboard analytics, avatars, segmented document type, shorter editor
+   ===================================================================== */
+/* hero: overdue money by age (the monthly trend lives in the chart card) */
+#hero .hero-aging { margin-top: 16px; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, .1); display: grid; gap: 7px; }
+#hero .aging-cap { display: flex; justify-content: space-between; font-size: 12px; color: rgba(255, 255, 255, .6); margin-bottom: 2px; }
+#hero .aging-cap > span:last-child { color: rgba(255, 255, 255, .85); font-weight: 600; }
+#hero .age { display: grid; grid-template-columns: 78px 1fr auto; align-items: center; gap: 10px; font-size: 12.5px; }
+#hero .age-l { color: rgba(255, 255, 255, .7); }
+#hero .age-bar { height: 6px; border-radius: 6px; background: rgba(255, 255, 255, .08); overflow: hidden; }
+#hero .age-bar i { display: block; height: 100%; border-radius: 6px; background: #ff6b8a; transition: width .6s var(--ease); }
+#hero .age:nth-child(2) .age-bar i { background: #f5b84a; } #hero .age:nth-child(3) .age-bar i { background: #ff9461; }
+#hero .age b { font-weight: 600; color: #fff; min-width: 84px; text-align: right; }
+#hero .age.zero b, #hero .age.zero .age-l { color: rgba(255, 255, 255, .38); }
+@media (min-width: 768px) {
+  #hero .hero-aging { grid-column: 2; grid-row: 1 / span 5; border-top: 0; padding-top: 0; margin: 0; align-self: center; }
+}
+
+/* panel headers with a key / link on the right */
+.panel-h { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.panel-h h3 { margin: 0 !important; }
+.chart-key { display: flex; gap: 12px; font-size: 12px; color: var(--muted); font-weight: 500; }
+.chart-key span::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 3px; margin-right: 6px; vertical-align: 0; }
+.chart-key .k-billed::before { background: var(--ink); } .chart-key .k-received::before { background: var(--green); }
+html.dark .chart-key .k-billed::before { background: #7f96cc; }
+.panel-link { font-size: 13px; font-weight: 600; color: var(--saffron-ink); background: none; border: 0; padding: 4px 2px; min-height: 0 !important; }
+html.dark .panel-link { color: #ffb066; }
+
+/* party avatars: initials on a tint derived from the brand ink */
+.avatar { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 11px; flex-shrink: 0;
+  background: rgba(13, 27, 62, .07); color: var(--ink); font-size: 12.5px; font-weight: 700; letter-spacing: .02em; margin-right: 10px; vertical-align: middle; }
+html.dark .avatar { background: rgba(255, 255, 255, .08); color: #dbe3f5; }
+#dash-recent-table td:nth-child(3) { white-space: nowrap; }
+
+/* who owes you */
+#dash-top-buyers { display: grid; gap: 12px; }
+.owe-row { display: flex; align-items: center; }
+.owe-body { flex: 1; min-width: 0; }
+.owe-line { display: flex; justify-content: space-between; gap: 10px; font-size: 13.5px; }
+.owe-name { font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.owe-amt { font-weight: 700; color: var(--text); white-space: nowrap; }
+.owe-bar { height: 5px; border-radius: 5px; background: var(--surface-2); border: 1px solid var(--line); margin-top: 6px; overflow: hidden; }
+.owe-bar span { display: block; height: 100%; background: var(--rose); opacity: .75; border-radius: 5px; }
+.empty-note { font-size: 13px; color: var(--muted); }
+
+/* segmented document type */
+.seg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; padding: 3px; margin: 0 0 14px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px; }
+.seg button { min-height: 38px !important; border-radius: 11px !important; font-size: 13px; font-weight: 600; color: var(--muted); background: transparent; border: 0; transition: background .15s var(--ease), color .15s; }
+.seg button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(13, 27, 62, .1), 0 2px 8px -2px rgba(13, 27, 62, .12); }
+html.dark .seg button.on { background: #1a2742; color: #fff; }
+.doc-type-field { display: none !important; }
+/* the separate CN/DN buttons are now in the segmented control */
+#tab-create-invoice .justify-between > .flex.gap-2 > button[onclick^="newDocument('CRN')"],
+#tab-create-invoice .justify-between > .flex.gap-2 > button[onclick^="newDocument('DBN')"] { display: none; }
+
+/* consignee: one line when it is the same as the billing party */
+.ship-same > :not(:first-child) { display: none !important; }
+.ship-same > div:first-child { border-bottom: 0 !important; padding-bottom: 0 !important; }
+
+/* placeholders are hints, not shouting */
+input.uppercase::placeholder { text-transform: none; }
+.inp::placeholder { color: var(--faint); }
+
+/* item card: description full width, amount as the card's figure */
+@media (max-width: 767px) {
+  #invoice-items-body tr { padding: 12px !important; gap: 8px 8px !important; }
+  #invoice-items-body td:nth-child(2) { padding-right: 48px !important; }
+  #invoice-items-body td:nth-child(2) input { width: 100% !important; }
+  #invoice-items-body td.row-index { right: 50px !important; top: 12px !important; font-weight: 600; }
+  #invoice-items-body td:nth-child(8) { grid-column: 1 / -1 !important; display: flex !important; justify-content: space-between; align-items: baseline;
+    border-top: 1px dashed var(--line-2) !important; padding-top: 8px !important; font-size: 17px !important; font-weight: 700; color: var(--text); }
+  #invoice-items-body td:nth-child(8)::before { margin: 0 !important; font-size: 12.5px !important; }
+  #invoice-items-body td:nth-child(9) button { background: rgba(200, 54, 79, .08) !important; }
+}
+/* list rows: the avatar sits in its own gutter so the party name keeps its width */
+@media (max-width: 767px) {
+  #dash-recent-table tr { padding-left: 62px !important; min-height: 64px; }
+  #dash-recent-table .avatar { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); margin: 0; }
+}
+@media (max-width: 767px) { .dash-lists > div.bg-white:first-child > .panel-h { padding: 0 16px; } }

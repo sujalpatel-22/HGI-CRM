@@ -6,7 +6,7 @@
    ===================================================================== */
 (function () {
   'use strict';
-  const APP_VERSION = '7.3.0';
+  const APP_VERSION = '7.4.0';
   const cap = window.Capacitor;
   const isNative = !!(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform());
   // Without a bundler the native bridge exposes registered plugins on Capacitor.Plugins
@@ -245,7 +245,7 @@
   }
   async function flushMirror() {
     clearTimeout(mirrorTimer);
-    if (Native) { try { await Native.writeState({ key: MIRROR_KEY, data: JSON.stringify(state) }); } catch (e) { /* localStorage copy still exists */ } }
+    if (Native) { try { await Promise.race([Native.writeState({ key: MIRROR_KEY, data: JSON.stringify(state) }), new Promise(res => setTimeout(res, 3000))]); } catch (e) { /* localStorage copy still exists */ } }
   }
 
   /* ------------------------------------------------------------------ demo mode (explicit opt-in only) */
@@ -262,7 +262,7 @@
     if (!(opts && opts.confirmed) && !confirm(t('Leave Demo Mode?') + '\n\n' + t('The sample data will be deleted and your own data will open.'))) return;
     clearTimeout(mirrorTimer);
     try { localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(HGI_MODE_KEY); } catch (e) { /* ignore */ }
-    if (Native) { try { await Native.writeState({ key: 'state-demo', data: '' }); } catch (e) { /* ignore */ } }
+    if (Native) { try { await Promise.race([Native.writeState({ key: 'state-demo', data: '' }), new Promise(res => setTimeout(res, 3000))]); } catch (e) { /* ignore */ } }
     location.reload();
   }
   function demoBanner() {
@@ -280,7 +280,13 @@
     if (!Native) return;
     try {
       const local = storeGet('local', STORAGE_KEY);
-      const r = await Native.readState({ key: MIRROR_KEY });
+      // Right after an in-app reload (Demo Mode switch) the first bridge reply can be lost on some WebViews (seen on
+      // Android 11/13 emulators): never let start-up wait forever — time out, retry once, then go on with WebView storage.
+      let r = null;
+      for (let attempt = 0; attempt < 2 && !r; attempt++) {
+        r = await Promise.race([Native.readState({ key: MIRROR_KEY }), new Promise(res => setTimeout(() => res(null), 2500))]);
+        if (!r && attempt === 0) console.warn('[HGI] mirror read timed out — retrying');
+      }
       if (!r || !r.data) return;
       const lr = local ? revOf(local) : -1, mr = revOf(r.data);
       if (mr < 0) return;                                   // unreadable mirror: keep what we have
@@ -586,15 +592,13 @@
     const fyDocs = liveDocs().filter(d => d.date >= fyStart && d.date <= fyEnd);
     const net = fyDocs.reduce((a, d) => a + signed(d) * (d.grandTotal || 0), 0);
     const notDue = Math.max(0, due - overdue);
-    const months = [], y0 = Number(fyStart.slice(0, 4)), curKey = today.slice(0, 7);
-    for (let i = 0; i < 12; i++) { const m = (3 + i) % 12, y = y0 + (3 + i >= 12 ? 1 : 0); months.push(`${y}-${String(m + 1).padStart(2, '0')}`); }
-    const billed = months.map(k => fyDocs.filter(d => monthKey(d.date) === k).reduce((a, d) => a + signed(d) * (d.grandTotal || 0), 0));
-    const max = Math.max(1, ...billed);
-    const bars = months.map((k, i) => {
-      const h = Math.max(billed[i] > 0 ? 3 : 1.5, Math.round(billed[i] / max * 40));
-      const cls = k === curKey ? 'cur' : k > curKey ? 'fut' : '';
-      return `<rect class="${cls}" x="${i * 10 + 1}" y="${44 - h}" width="7" height="${h}" rx="1.5"><title>${k}: ${money(billed[i])}</title></rect>`;
-    }).join('');
+    const curKey = today.slice(0, 7);
+    // overdue money by how late it is (days past each invoice's due date)
+    const AGE = [['1–30 days', 30], ['31–60 days', 60], ['61–90 days', 90], ['90+ days', Infinity]];
+    const late = [0, 0, 0, 0];
+    invs.forEach(d => { const b = balanceOf(d); if (b <= 0.009 || !isOverdue(d)) return; const n = daysBetween(getDueDate(d), today); late[AGE.findIndex(a => n <= a[1])] += b; });
+    const lateMax = Math.max(1, ...late);
+    const aging = AGE.map((a, i) => `<div class="age${late[i] > 0 ? '' : ' zero'}"><span class="age-l">${a[0]}</span><span class="age-bar"><i style="width:${late[i] > 0 ? Math.max(6, late[i] / lateMax * 100) : 0}%"></i></span><b>${esc(money(late[i]))}</b></div>`).join('');
     const [whole, dec] = splitMoney(due);
     const sum = received + notDue + overdue;
     hero.innerHTML = `
@@ -609,8 +613,7 @@
         <div><span class="dot due"></span><span data-i18n>Due</span><b>${esc(money(notDue))}</b></div>
         <div><span class="dot ovd"></span><span data-i18n>Overdue</span><b>${esc(money(overdue))}</b></div>
       </div>
-      <div class="hero-spark"><svg viewBox="0 0 120 46" preserveAspectRatio="none" aria-hidden="true">${bars}</svg>
-        <div class="spark-cap"><span data-i18n>Billed by month</span><span>${esc(money(net))} <span data-i18n>this FY</span></span></div></div>`;
+      <div class="hero-aging"><div class="aging-cap"><span data-i18n>Overdue by age</span><span>${esc(money(net))} <span data-i18n>billed this FY</span></span></div>${aging}</div>`;
     const r = gstSummaryFor(today.slice(0, 7));
     const monthDocs = fyDocs.filter(d => monthKey(d.date) === curKey && d.docType === 'INV').length;
     document.getElementById('stat-strip').innerHTML = `
@@ -648,7 +651,37 @@
       parties.querySelector('.ed-head').after(wrapEl);
     }
     form.classList.add('editor-v2');
+    buildDocTypeSeg();
+    const ship = document.getElementById('sync-shipping-chk');
+    if (ship) {
+      const box = ship.closest('div.border');
+      const sync = () => box && box.classList.toggle('ship-same', ship.checked);
+      ship.addEventListener('change', sync);
+      ['populateCustomerData', 'loadDocIntoForm', 'newDocument', 'syncShippingIfChecked'].forEach(n => wrap(n, sync));
+      sync();
+    }
     i18n.translateTree(form);
+  }
+  // Document type as a segmented control (the select stays as the source of truth for the core logic)
+  const DOC_SEG = [['INV', 'Invoice'], ['QUO', 'Quotation'], ['CRN', 'Credit note'], ['DBN', 'Debit note']];
+  function buildDocTypeSeg() {
+    const sel = document.getElementById('inv-doc-type'); if (!sel || document.getElementById('doc-seg')) return;
+    const seg = document.createElement('div'); seg.id = 'doc-seg'; seg.className = 'seg'; seg.setAttribute('role', 'tablist');
+    seg.innerHTML = DOC_SEG.map(([v, l]) => `<button type="button" role="tab" data-v="${v}"><span data-i18n>${l}</span></button>`).join('');
+    seg.addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b || sel.value === b.dataset.v) return;
+      if (b.dataset.v === 'CRN' || b.dataset.v === 'DBN') { newDocument(b.dataset.v); } else { sel.value = b.dataset.v; onDocTypeChange(); }
+      syncSeg();
+    });
+    const head = document.getElementById('form-title').closest('.justify-between');
+    head.after(seg);
+    sel.closest('div').classList.add('doc-type-field');
+    wrap('onDocTypeChange', syncSeg); wrap('newDocument', syncSeg); wrap('loadDocIntoForm', syncSeg);
+    syncSeg();
+  }
+  function syncSeg() {
+    const sel = document.getElementById('inv-doc-type'), seg = document.getElementById('doc-seg'); if (!sel || !seg) return;
+    seg.querySelectorAll('button').forEach(b => { const on = b.dataset.v === sel.value; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
   }
 
   // Phones: a list row is one tap target; its actions open in a labelled bottom sheet instead of 9 tiny icons.

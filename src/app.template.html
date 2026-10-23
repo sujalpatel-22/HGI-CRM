@@ -216,19 +216,19 @@
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div class="bg-white p-6 rounded-lg shadow-sm border border-slate-200 lg:col-span-2">
-            <h3 class="text-sm font-bold text-slate-800 mb-3 uppercase">Monthly Billing vs Collection (Current FY)</h3>
+            <div class="panel-h"><h3 class="text-sm font-bold text-slate-800 uppercase">Billing and collection</h3><div class="chart-key" aria-hidden="true"><span class="k-billed">Billed</span><span class="k-received">Received</span></div></div>
             <div class="h-64"><canvas id="sales-chart"></canvas></div>
             <p id="chart-fallback" class="hidden text-xs text-slate-400">Chart library could not load (offline?).</p>
           </div>
           <div class="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
-            <h3 class="text-sm font-bold text-slate-800 mb-3 uppercase"><i class="fa-solid fa-wand-magic-sparkles text-orange-500 mr-1"></i>Smart Alerts</h3>
+            <h3 class="text-sm font-bold text-slate-800 mb-3 uppercase">Needs attention</h3>
             <div id="dash-alerts" class="space-y-2 text-sm"></div>
           </div>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div class="bg-white p-6 rounded-lg shadow-sm border border-slate-200 lg:col-span-2">
-            <h3 class="text-lg font-bold text-slate-800 mb-4">Recent Documents</h3>
+            <div class="panel-h"><h3 class="text-lg font-bold text-slate-800">Recent documents</h3><button type="button" class="panel-link" onclick="switchTab('invoices')">See all</button></div>
             <div class="overflow-x-auto">
               <table class="w-full text-left text-sm text-slate-600">
                 <thead class="bg-slate-50 text-slate-700 uppercase text-xs">
@@ -239,7 +239,7 @@
             </div>
           </div>
           <div class="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
-            <h3 class="text-sm font-bold text-slate-800 mb-3 uppercase">Top Outstanding Buyers</h3>
+            <h3 class="text-sm font-bold text-slate-800 mb-3 uppercase">Who owes you</h3>
             <div id="dash-top-buyers" class="space-y-2 text-sm"></div>
           </div>
         </div>
@@ -2471,15 +2471,16 @@
       invs.forEach(d => { const b = balanceOf(d); if (b > 0.009) byBuyer[d.buyerName] = (byBuyer[d.buyerName] || 0) + b; });
       const top = Object.entries(byBuyer).sort((a, b) => b[1] - a[1]).slice(0, 6), max = top.length ? top[0][1] : 1;
       $('dash-top-buyers').innerHTML = top.length ? top.map(([n, v]) => `
-        <div><div class="flex justify-between text-xs"><span class="font-semibold text-slate-700 truncate pr-2">${esc(n)}</span><span class="font-bold text-rose-600">${money(v)}</span></div>
-        <div class="h-1.5 bg-slate-100 rounded mt-1"><div class="h-1.5 bg-rose-400 rounded" style="width:${Math.max(4, v / max * 100)}%"></div></div></div>`).join('')
-        : '<p class="text-xs text-slate-400">🎉 No outstanding dues!</p>';
+        <div class="owe-row"><span class="avatar" aria-hidden="true">${esc(initials(n))}</span>
+          <div class="owe-body"><div class="owe-line"><span class="owe-name">${esc(n)}</span><span class="owe-amt">${money(v)}</span></div>
+          <div class="owe-bar"><span style="width:${Math.max(4, v / max * 100)}%"></span></div></div></div>`).join('')
+        : '<p class="empty-note">Nobody owes you money right now.</p>';
 
       $('dash-recent-table').innerHTML = state.invoices.slice(0, 7).map(d => `
         <tr class="border-b hover:bg-slate-50 ${d.cancelled ? 'opacity-50' : ''}">
           <td class="p-3 font-bold text-orange-700 whitespace-nowrap">${esc(d.num)} ${d.docType !== 'INV' ? `<span class="text-[10px] px-1 rounded ${DOC_TYPES[d.docType].badge}">${d.docType}</span>` : ''}</td>
           <td class="p-3 whitespace-nowrap">${fmtDate(d.date)}</td>
-          <td class="p-3 font-medium text-slate-800">${esc(d.buyerName)}</td>
+          <td class="p-3 font-medium text-slate-800"><span class="avatar" aria-hidden="true">${esc(initials(d.buyerName))}</span>${esc(d.buyerName)}</td>
           <td class="p-3 font-semibold whitespace-nowrap">${money(d.grandTotal)}</td>
           <td class="p-3 font-semibold whitespace-nowrap ${balanceOf(d) > 0 ? 'text-rose-600' : 'text-slate-400'}">${d.docType === 'INV' ? money(balanceOf(d)) : '—'}</td>
           <td class="p-3">${statusBadge(d)}</td>
@@ -2487,11 +2488,14 @@
             ${d.docType === 'INV' && !d.cancelled ? `<button onclick="openPaymentModal('${d.id}')" class="text-emerald-600 mr-2" title="Receipts"><i class="fa-solid fa-indian-rupee-sign"></i></button>` : ''}
             <button onclick="viewInvoiceDetail('${d.id}')" class="text-orange-600" title="View"><i class="fa-solid fa-eye"></i></button>
           </td>
-        </tr>`).join('') || '<tr><td colspan="7" class="p-6 text-center text-slate-400 text-sm">No documents yet — create your first invoice!</td></tr>';
+        </tr>`).join('') || '<tr><td colspan="7" class="p-6 text-center text-slate-400 text-sm">No documents yet. Your first invoice will appear here.</td></tr>';
 
       renderAlerts();
       renderChart();
     }
+
+    // two letters for a party avatar: "Sample Buyer Pvt Ltd (Demo)" → "SB"
+    const initials = name => String(name || '?').replace(/\(.*?\)/g, '').trim().split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?';
 
     function renderAlerts() {
       const co = state.company, today = todayISO(), a = [];
@@ -2544,13 +2548,14 @@
       const dark = document.documentElement.classList.contains('dark');
       const C = { billed: dark ? '#7f96cc' : '#0d1b3e', received: dark ? '#34c08f' : '#12805c', grid: dark ? 'rgba(255,255,255,.06)' : 'rgba(13,27,62,.06)', tick: dark ? '#93a0bc' : '#6b7590' };
       const data = { labels, datasets: [
-        { label: 'Billed (net)', data: billed.map(round2), backgroundColor: C.billed, borderRadius: 6, borderSkipped: false, maxBarThickness: 14 },
+        { label: 'Billed', data: billed.map(round2), backgroundColor: C.billed, borderRadius: 6, borderSkipped: false, maxBarThickness: 14 },
         { label: 'Received', data: received.map(round2), backgroundColor: C.received, borderRadius: 6, borderSkipped: false, maxBarThickness: 14 }] };
       if (salesChart && salesChart.__dark === dark) { salesChart.data = data; salesChart.update(); return; }
       if (salesChart) salesChart.destroy();
       salesChart = new Chart($('sales-chart'), { type: 'bar', data, options: { maintainAspectRatio: false,
-        plugins: { legend: { align: 'start', labels: { usePointStyle: true, pointStyle: 'rectRounded', boxWidth: 10, color: C.tick, font: { family: 'Inter', size: 12 } } },
-          tooltip: { callbacks: { label: c => `${c.dataset.label}: ${money(c.raw)}` } } },
+        plugins: { legend: { display: false },
+          tooltip: { backgroundColor: dark ? '#1b2742' : '#0d1b3e', padding: 10, cornerRadius: 10, boxPadding: 4, usePointStyle: true,
+            titleFont: { family: 'Inter', size: 12, weight: '600' }, bodyFont: { family: 'Inter', size: 12 }, callbacks: { label: c => ` ${c.dataset.label}: ${money(c.raw)}` } } },
         scales: { x: { grid: { display: false }, border: { display: false }, ticks: { color: C.tick, font: { family: 'Inter', size: 11 } } },
           y: { grid: { color: C.grid }, border: { display: false }, ticks: { color: C.tick, font: { family: 'Inter', size: 11 }, maxTicksLimit: 5, callback: v => '₹' + Number(v).toLocaleString('en-IN', { notation: 'compact' }) } } } } });
       salesChart.__dark = dark;

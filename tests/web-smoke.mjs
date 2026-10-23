@@ -83,6 +83,18 @@ for (const vp of VIEWPORTS) {
     errors.splice(0, errors.length, ...errors.filter(e => !e.includes('csp-probe')));   // the probe's own expected violation
   }
   check((await page.isVisible('#quick-actions')) === vp.width < 768, `dashboard quick actions ${vp.width < 768 ? 'shown' : 'hidden'} at ${vp.width}px`);
+  // editor: segmented document type drives the real select; consignee collapses when same as billing
+  await page.evaluate(() => { newDocument('INV'); switchTab('create-invoice'); }); await page.waitForTimeout(150);
+  await page.click('#doc-seg button[data-v="QUO"]'); await page.waitForTimeout(120);
+  const seg1 = await page.evaluate(() => ({ v: $('inv-doc-type').value, on: document.querySelector('#doc-seg button.on').dataset.v, title: $('form-title').textContent }));
+  await page.click('#doc-seg button[data-v="CRN"]'); await page.waitForTimeout(120);
+  const seg2 = await page.evaluate(() => ({ v: $('inv-doc-type').value, on: document.querySelector('#doc-seg button.on').dataset.v }));
+  await page.click('#doc-seg button[data-v="INV"]'); await page.waitForTimeout(120);
+  check(seg1.v === 'QUO' && seg1.on === 'QUO' && seg2.v === 'CRN' && seg2.on === 'CRN' && await page.evaluate(() => $('inv-doc-type').value === 'INV'), `document type switcher (${seg1.title})`);
+  const ship = await page.evaluate(() => { const c = $('sync-shipping-chk'); if (!c.checked) { c.click(); } const hidden = $('inv-ship-name').offsetParent === null;
+    c.click(); const shown = $('inv-ship-name').offsetParent !== null; c.click(); return hidden && shown; });
+  check(ship, 'consignee fields collapse when "Same as billing" is ticked');
+  await page.evaluate(() => switchTab('dashboard'));
   await shot('02-dashboard'); await noHScroll('dashboard');
 
   // GST engine unchanged (same numbers as v6 regression)
@@ -211,6 +223,12 @@ for (const vp of VIEWPORTS) {
       banner: !!document.getElementById('demo-banner') && document.getElementById('demo-banner').offsetHeight > 0 }));
     check(demo.mode && demo.banner, 'Demo Mode opens with a visible DEMO banner');
     check(demo.n === 5 && demo.allDemo && /Demo/.test(demo.name) && demo.upi === '', `Demo Mode shows only sample data (${demo.n} docs, "${demo.name}", no real UPI)`);
+    const age = await page.evaluate(() => { const toN = t => Number(String(t).replace(/[^\d.]/g, '')) || 0;
+      const sum = [...document.querySelectorAll('#hero .age b')].reduce((a, b) => a + toN(b.textContent), 0);
+      const overdue = liveDocs().filter(isOverdue).reduce((a, d) => a + balanceOf(d), 0);
+      return { sum: Math.round(sum * 100) / 100, overdue: Math.round(overdue * 100) / 100, avatars: document.querySelectorAll('#dash-recent-table .avatar, #dash-top-buyers .avatar').length }; });
+    check(age.sum === age.overdue && age.overdue > 0, `hero: overdue-by-age buckets add up to the overdue total (${age.sum})`);
+    check(age.avatars >= 5, `party avatars on recent documents and who-owes-you (${age.avatars})`);
     await page.evaluate(() => { editInvoice(state.invoices.find(d => d.docType === 'INV').id); renderPreview(); }); await page.waitForTimeout(500);
     check(await page.evaluate(() => document.querySelectorAll('#invoice-preview-container .demo-watermark').length > 0 && document.querySelector('#invoice-preview-container').textContent.includes('NOT A VALID TAX INVOICE')), 'demo invoices carry the NOT A VALID TAX INVOICE watermark');
     await shot('09-demo-preview');
