@@ -101,7 +101,10 @@ const W = raw.readUInt32LE(0), H = raw.readUInt32LE(4), hdrLen = raw.length - W 
 const px = y => { const o = hdrLen + (y * W + Math.floor(W / 2)) * 4; return [raw[o], raw[o + 1], raw[o + 2]]; };
 const top = px(8), below = px(Math.round(H * 0.06));
 console.log('    status-bar pixel', top, 'header pixel', below, 'insets', JSON.stringify(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--safe-area-inset-top'))));
-check(top[2] > top[0] + 40 && top[0] + top[1] + top[2] < 330, `status bar area is navy (rgb ${top.join(',')})`);
+// v8: the app bar is the page colour, so the status bar must be painted that colour (not Android's default grey / black / white)
+const pageRgb = await page.evaluate(() => (getComputedStyle(document.body).backgroundColor.match(/\d+/g) || []).slice(0, 3).map(Number));
+check(pageRgb.length === 3 && top.every((c, i) => Math.abs(c - pageRgb[i]) <= 14) && !(top[0] > 250 && top[1] > 250 && top[2] > 250),
+  `status bar painted the page colour (rgb ${top.join(',')} vs page ${pageRgb.join(',')})`);
 
 // invoice
 await page.evaluate(() => newDocument('INV'));
