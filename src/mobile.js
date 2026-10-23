@@ -662,6 +662,37 @@
     }
     i18n.translateTree(form);
   }
+  // Documents: one row of filter chips with counts; the original selects stay the source of truth
+  const DOC_CHIPS = [['All', '', ''], ['Unpaid', 'INV', 'Unpaid'], ['Overdue', 'INV', 'Overdue'], ['Partial', 'INV', 'Partial'], ['Paid', 'INV', 'Paid'],
+    ['Quotations', 'QUO', ''], ['Credit notes', 'CRN', ''], ['Debit notes', 'DBN', ''], ['Cancelled', '', 'Cancelled']];
+  function buildDocChips() {
+    const search = document.getElementById('inv-search'); if (!search || document.getElementById('doc-chips')) return;
+    const bar = document.createElement('div'); bar.id = 'doc-chips'; bar.className = 'chips no-print'; bar.setAttribute('role', 'toolbar');
+    bar.innerHTML = DOC_CHIPS.map(([l], i) => `<button type="button" data-i="${i}"><span data-i18n>${l}</span><b></b></button>`).join('')
+      + `<button type="button" class="chip-more" aria-expanded="false"><i class="fa-solid fa-sliders"></i><span data-i18n>Filters</span></button>`;
+    const row = search.parentElement;
+    row.classList.add('doc-filters');
+    row.after(bar);
+    bar.addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.classList.contains('chip-more')) { const open = row.classList.toggle('show-more'); b.setAttribute('aria-expanded', open); return; }
+      const [, ty, st] = DOC_CHIPS[Number(b.dataset.i)];
+      document.getElementById('inv-filter-type').value = ty; document.getElementById('inv-filter-status').value = st;
+      renderInvoiceList();
+    });
+    i18n.translateTree(bar);
+  }
+  function syncDocChips() {
+    const bar = document.getElementById('doc-chips'); if (!bar) return;
+    const ty = document.getElementById('inv-filter-type').value, st = document.getElementById('inv-filter-status').value;
+    const counts = DOC_CHIPS.map(([, t, s]) => state.invoices.filter(d => (!t || d.docType === t) && (!s || displayStatus(d) === s)).length);
+    let active = DOC_CHIPS.findIndex(([, t, s]) => t === ty && s === st);
+    if (active < 0 && !ty) active = DOC_CHIPS.findIndex(([, t, s]) => s && s === st);
+    bar.querySelectorAll('button[data-i]').forEach(b => { const i = Number(b.dataset.i); b.classList.toggle('on', i === active); b.querySelector('b').textContent = counts[i] || ''; b.setAttribute('aria-pressed', i === active); });
+    const extra = !!(document.getElementById('inv-filter-from').value || document.getElementById('inv-filter-to').value || active < 0);
+    bar.querySelector('.chip-more').classList.toggle('has-extra', extra);
+  }
+
   // Document type as a segmented control (the select stays as the source of truth for the core logic)
   const DOC_SEG = [['INV', 'Invoice'], ['QUO', 'Quotation'], ['CRN', 'Credit note'], ['DBN', 'Debit note']];
   function buildDocTypeSeg() {
@@ -763,6 +794,7 @@
     wrap('switchTab', (out, tab) => { currentTab = tab; setActiveNav(tab); closeMore(); if (mq.matches) window.scrollTo(0, 0); });
     ['renderInvoiceList', 'renderItemList', 'renderCustomerList', 'renderDashboard', 'addInvoiceRow'].forEach(n => wrap(n, () => labelAll()));
     wrap('renderDashboard', () => renderHero());
+    wrap('renderInvoiceList', () => syncDocChips());
     wrap('fitInvoicePages', () => scalePreview());
     window.addEventListener('resize', () => { if (previewDoc) scalePreview(); });
     wrap('saveState', () => mirrorState());
@@ -849,6 +881,7 @@
     checkRupeeGlyph();
     enhanceDashboard();
     enhanceEditor();
+    buildDocChips();
     installRowSheets();
     limitToasts();
     initApp();                                   // the original v6 app start

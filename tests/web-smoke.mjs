@@ -229,6 +229,14 @@ for (const vp of VIEWPORTS) {
       return { sum: Math.round(sum * 100) / 100, overdue: Math.round(overdue * 100) / 100, avatars: document.querySelectorAll('#dash-recent-table .avatar, #dash-top-buyers .avatar').length }; });
     check(age.sum === age.overdue && age.overdue > 0, `hero: overdue-by-age buckets add up to the overdue total (${age.sum})`);
     check(age.avatars >= 5, `party avatars on recent documents and who-owes-you (${age.avatars})`);
+    await page.evaluate(() => switchTab('invoices')); await page.waitForTimeout(150);
+    await page.click('#doc-chips button[data-i="2"]'); await page.waitForTimeout(150);   // Overdue
+    const chip = await page.evaluate(() => ({ st: $('inv-filter-status').value, ty: $('inv-filter-type').value, rows: getFilteredInvoices().length,
+      want: state.invoices.filter(d => d.docType === 'INV' && displayStatus(d) === 'Overdue').length, badge: document.querySelector('#doc-chips button[data-i="2"] b').textContent,
+      on: document.querySelector('#doc-chips button.on').dataset.i }));
+    check(chip.st === 'Overdue' && chip.ty === 'INV' && chip.rows === chip.want && chip.badge === String(chip.want) && chip.on === '2', `document filter chips (Overdue: ${chip.rows})`);
+    await page.click('#doc-chips button[data-i="0"]'); await page.waitForTimeout(100);
+    check(await page.evaluate(() => getFilteredInvoices().length === state.invoices.length), 'All chip clears the filters');
     await page.evaluate(() => { editInvoice(state.invoices.find(d => d.docType === 'INV').id); renderPreview(); }); await page.waitForTimeout(500);
     check(await page.evaluate(() => document.querySelectorAll('#invoice-preview-container .demo-watermark').length > 0 && document.querySelector('#invoice-preview-container').textContent.includes('NOT A VALID TAX INVOICE')), 'demo invoices carry the NOT A VALID TAX INVOICE watermark');
     await shot('09-demo-preview');
