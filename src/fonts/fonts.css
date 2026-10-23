@@ -1,0 +1,6 @@
+/* Display + accent faces for the app chrome (never the invoice paper). Bundled for offline use. */
+@font-face { font-family: 'Inter Display'; font-style: normal; font-weight: 500; font-display: swap; src: url('InterDisplay-Medium.woff') format('woff'); }
+@font-face { font-family: 'Inter Display'; font-style: normal; font-weight: 600; font-display: swap; src: url('InterDisplay-SemiBold.woff') format('woff'); }
+@font-face { font-family: 'Inter Display'; font-style: normal; font-weight: 700; font-display: swap; src: url('InterDisplay-Bold.woff') format('woff'); }
+@font-face { font-family: 'Inter Display'; font-style: normal; font-weight: 800; font-display: swap; src: url('InterDisplay-ExtraBold.woff') format('woff'); }
+@font-face { font-family: 'Lora'; font-style: italic; font-weight: 400 700; font-display: swap; src: url('Lora-Italic-Variable.ttf') format('truetype'); }

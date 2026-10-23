@@ -82,7 +82,8 @@ for (const vp of VIEWPORTS) {
       return !!document.querySelector('meta[http-equiv="Content-Security-Policy"]') && netBlocked; }), 'Content-Security-Policy active (remote connections blocked)');
     errors.splice(0, errors.length, ...errors.filter(e => !e.includes('csp-probe')));   // the probe's own expected violation
   }
-  if (vp.name === 'tablet-800') check(await page.evaluate(() => document.querySelector('#app-container > header nav').getBoundingClientRect().height < 56), 'tablet: top navigation fits on one row');
+  if (!vp.mobile) check(await page.evaluate(() => { const r = document.getElementById('rail'); return !!r && getComputedStyle(r).display !== 'none' && r.querySelectorAll('.rail-btn[data-tab]').length === 6; }), 'tablet/desktop: side rail navigation shown');
+  check(await page.evaluate(() => document.querySelectorAll('#hgi-icons symbol').length > 40 && !!document.querySelector('#bottom-nav svg.ic, #rail svg.ic')), 'custom icon set in use');
   check(await page.evaluate(() => { switchTab('items'); const ok = document.getElementById('tab-items').classList.contains('tab-in'); switchTab('dashboard'); return ok; }), 'screen change answers with a fade-in');
   check((await page.isVisible('#quick-actions')) === vp.width < 768, `dashboard quick actions ${vp.width < 768 ? 'shown' : 'hidden'} at ${vp.width}px`);
   // editor: segmented document type drives the real select; consignee collapses when same as billing
@@ -174,8 +175,8 @@ for (const vp of VIEWPORTS) {
   // register as cards on phones
   await page.evaluate(() => switchTab('invoices')); await page.waitForTimeout(300);
   if (vp.mobile) {
-    check(await page.evaluate(() => { const tr = document.querySelector('#invoices-list-tbody tr'); return getComputedStyle(tr).display === 'grid' && tr.getBoundingClientRect().height < 140; }), 'register rows shown as compact cards (< 140px)');
-    await page.click('#invoices-list-tbody tr:first-child td:nth-child(5)'); await page.waitForTimeout(250);
+    check(await page.evaluate(() => { const tr = document.querySelector('#invoices-list-tbody tr:not(.month-row)'); return getComputedStyle(tr).display === 'grid' && tr.getBoundingClientRect().height < 140; }), 'register rows shown as compact cards (< 140px)');
+    await page.click('#invoices-list-tbody tr:not(.month-row) td:nth-child(5)'); await page.waitForTimeout(250);
     const sheet = await page.evaluate(() => ({ open: document.getElementById('more-sheet').classList.contains('open'), acts: [...document.querySelectorAll('#more-sheet .act')].map(b => b.textContent.trim()) }));
     check(sheet.open && sheet.acts.includes('Record Receipt') && sheet.acts.includes('View / Print') && sheet.acts.some(a => /Delete/.test(a)), `tapping a row opens its labelled actions (${sheet.acts.length})`);
     await page.click('#more-sheet .act >> text=Record Receipt'); await page.waitForTimeout(300);
@@ -229,6 +230,14 @@ for (const vp of VIEWPORTS) {
       const sum = [...document.querySelectorAll('#hero .age b')].reduce((a, b) => a + toN(b.textContent), 0);
       const overdue = liveDocs().filter(isOverdue).reduce((a, d) => a + balanceOf(d), 0);
       return { sum: Math.round(sum * 100) / 100, overdue: Math.round(overdue * 100) / 100, avatars: document.querySelectorAll('#dash-recent-table .avatar, #dash-top-buyers .avatar').length }; });
+    const v8 = await page.evaluate(() => { HGI_STUDIO.renderDash(); const bars = [...document.querySelectorAll('svg.flow .bar')]; const cur = todayISO().slice(0, 7);
+      const billed = liveDocs().filter(d => monthKey(d.date) === cur).reduce((a, d) => a + signed(d) * (d.grandTotal || 0), 0);
+      return { bars: bars.length, read: document.getElementById('flow-read').textContent.includes(money(round2(billed))), ring: !!document.querySelector('#ring-card .r-arc'), kpis: document.querySelectorAll('#stat-strip .kpi').length,
+        months: document.querySelectorAll('#invoices-list-tbody tr.month-row').length }; });
+    check(v8.bars === 12 && v8.read && v8.ring && v8.kpis === 4, `cash-flow chart (12 months, this month's billing in the readout), collection ring and 4 KPI tiles`);
+    await page.evaluate(() => switchTab('invoices'));
+    check(await page.evaluate(() => document.querySelectorAll('#invoices-list-tbody tr.month-row').length >= 1), 'documents grouped under month headings');
+    await page.evaluate(() => switchTab('dashboard'));
     check(age.sum === age.overdue && age.overdue > 0, `hero: overdue-by-age buckets add up to the overdue total (${age.sum})`);
     check(age.avatars >= 5, `party avatars on recent documents and who-owes-you (${age.avatars})`);
     await page.evaluate(() => switchTab('invoices')); await page.waitForTimeout(150);
@@ -353,10 +362,10 @@ for (const vp of VIEWPORTS) {
   // long registers are paged
   await page.evaluate(() => { for (let i = 10; i < 410; i++) state.invoices.push({ id: 'X' + i, docType: 'INV', num: `${i}/26-27`, date: '2026-09-01', supplyType: 'B2C', pos: '24', buyerName: 'Bulk ' + i,
     items: [{ desc: 'Widget Pro', hsn: '847130', gst: 18, qty: 1, unit: 'NOS', rate: 10 }], payments: [], grandTotal: 12, taxable: 10, cgst: 0.9, sgst: 0.9 }); saveState(); switchTab('invoices'); });
-  const pg = await page.evaluate(() => ({ rows: document.querySelectorAll('#invoices-list-tbody tr:not(.show-more-row)').length, more: !!document.getElementById('btn-show-more-docs'), foot: document.getElementById('invoices-list-tfoot').textContent }));
+  const pg = await page.evaluate(() => ({ rows: document.querySelectorAll('#invoices-list-tbody tr:not(.show-more-row):not(.month-row)').length, more: !!document.getElementById('btn-show-more-docs'), foot: document.getElementById('invoices-list-tfoot').textContent }));
   check(pg.rows === 150 && pg.more && /404 docs/.test(pg.foot), `register shows 150 rows + "Show more", totals cover all (${pg.rows})`);
   await page.click('#btn-show-more-docs');
-  check(await page.evaluate(() => document.querySelectorAll('#invoices-list-tbody tr:not(.show-more-row)').length === 300), 'Show more adds the next page');
+  check(await page.evaluate(() => document.querySelectorAll('#invoices-list-tbody tr:not(.show-more-row):not(.month-row)').length === 300), 'Show more adds the next page');
   await page.evaluate(() => { state.invoices = state.invoices.filter(d => !d.id.startsWith('X')); saveState(); renderAll(); });
   // revision number increases with every save
   const r1 = await page.evaluate(() => state.ui.rev); await page.evaluate(() => saveState());

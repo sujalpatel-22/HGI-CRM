@@ -6,7 +6,7 @@
    ===================================================================== */
 (function () {
   'use strict';
-  const APP_VERSION = '7.5.0';
+  const APP_VERSION = '8.0.0';
   const cap = window.Capacitor;
   const isNative = !!(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform());
   // Without a bundler the native bridge exposes registered plugins on Capacitor.Plugins
@@ -54,10 +54,13 @@
     })));
   }
   // icon-only buttons get an accessible name (screen readers / TalkBack)
+  // icon classes of a button: Font Awesome <i>, or the v8 <svg> that replaced it (original names kept in data-fa)
+  const faOf = el => !el ? [] : el.tagName === 'I' ? Array.from(el.classList) : String((el.dataset && el.dataset.fa) || '').split(' ').filter(Boolean);
+  const iconOf = b => b.querySelector('i, svg.ic');
   function ariaIcons(root) {
     (root || document).querySelectorAll('button:not([aria-label])').forEach(b => {
       if (b.textContent.trim()) return;
-      const ic = b.querySelector('i'); const cls = ic ? Array.from(ic.classList).find(c => ACTION_NAMES[c]) : null;
+      const ic = iconOf(b); const cls = faOf(ic).find(c => ACTION_NAMES[c]);
       const name = b.getAttribute('title') || (cls ? ACTION_NAMES[cls] : '');
       if (name) b.setAttribute('aria-label', name);
     });
@@ -104,17 +107,18 @@
     const dark = pref === 'dark' || (pref === 'system' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
     document.documentElement.classList.toggle('dark', dark);
     if (typeof salesChart !== 'undefined' && salesChart && salesChart.__dark !== dark && typeof renderChart === 'function') { try { renderChart(); } catch (e) { /* chart optional */ } }
-    const meta = document.querySelector('meta[name="theme-color"]'); if (meta) meta.content = dark ? '#0b1430' : '#0d1b3e';
+    const meta = document.querySelector('meta[name="theme-color"]'); if (meta) meta.content = dark ? '#070b16' : '#f3f1ec';
     try {
       const sb = isNative && cap.Plugins.SystemBars;
-      if (sb) {   // light icons over the navy header; nav-bar icons follow the bottom tab bar colour
-        Promise.resolve(sb.setStyle({ style: 'DARK', bar: 'StatusBar' })).catch(() => {});
+      // v8: the app bar and the area under the floating dock are the page colour, so both system bars take it
+      // (dark icons on the light page, light icons in dark mode)
+      if (sb) {
+        Promise.resolve(sb.setStyle({ style: dark ? 'DARK' : 'LIGHT', bar: 'StatusBar' })).catch(() => {});
         Promise.resolve(sb.setStyle({ style: dark ? 'DARK' : 'LIGHT', bar: 'NavigationBar' })).catch(() => {});
       }
       if (Native && Native.setBarColors) {
-        const nav = document.getElementById('bottom-nav');
-        const bottom = (nav && getComputedStyle(nav).display !== 'none') ? rgbHex(getComputedStyle(nav).backgroundColor) : rgbHex(getComputedStyle(document.body).backgroundColor);
-        Promise.resolve(Native.setBarColors({ top: '#0d1b3e', bottom: bottom || (dark ? '#0f1728' : '#ffffff') })).catch(() => {});
+        const page = rgbHex(getComputedStyle(document.body).backgroundColor) || (dark ? '#070b16' : '#f3f1ec');
+        Promise.resolve(Native.setBarColors({ top: page, bottom: page })).catch(() => {});
       }
     } catch (e) { /* optional */ }
   }
@@ -154,7 +158,11 @@
   function tile(icon, label, action) {
     return `<button class="tile" onclick="${action}"><i class="fa-solid ${icon}"></i><span>${label}</span></button>`;
   }
-  function openSheet(html) { document.getElementById('more-sheet-body').innerHTML = html; document.getElementById('more-sheet').classList.add('open'); i18n.translateTree(document.getElementById('more-sheet')); }
+  function openSheet(html) {
+    const sheet = document.getElementById('more-sheet');
+    document.getElementById('more-sheet-body').innerHTML = html; sheet.classList.add('open'); i18n.translateTree(sheet);
+    if (window.HGI_STUDIO) HGI_STUDIO.swapIcons(sheet);
+  }
   function closeMore() { const m = document.getElementById('more-sheet'); if (m) m.classList.remove('open'); }
   function openMore() {
     openSheet(`<div class="grid grid-cols-3 gap-2.5">
@@ -598,13 +606,13 @@
     const late = [0, 0, 0, 0];
     invs.forEach(d => { const b = balanceOf(d); if (b <= 0.009 || !isOverdue(d)) return; const n = daysBetween(getDueDate(d), today); late[AGE.findIndex(a => n <= a[1])] += b; });
     const lateMax = Math.max(1, ...late);
-    const aging = AGE.map((a, i) => `<div class="age${late[i] > 0 ? '' : ' zero'}"><span class="age-l">${a[0]}</span><span class="age-bar"><i style="width:${late[i] > 0 ? Math.max(6, late[i] / lateMax * 100) : 0}%"></i></span><b>${esc(money(late[i]))}</b></div>`).join('');
+    const aging = AGE.map((a, i) => `<div class="age${late[i] > 0 ? '' : ' zero'}" style="--heat:${late[i] > 0 ? Math.max(.18, late[i] / lateMax).toFixed(2) : 0}"><span class="age-l">${a[0]}</span><b>${esc(money(late[i]))}</b><span class="age-bar"><i style="width:${late[i] > 0 ? Math.max(6, late[i] / lateMax * 100) : 0}%"></i></span></div>`).join('');
     const [whole, dec] = splitMoney(due);
     const sum = received + notDue + overdue;
     hero.innerHTML = `
       <div class="hero-top"><span class="hero-label" data-i18n>To collect</span><span class="hero-fy">FY ${fyOf(today)}</span></div>
       <div class="hero-amount" id="hero-amount">${esc(whole)}<span class="dec">${esc(dec)}</span></div>
-      <div class="hero-sub">${dueN ? `${dueN} ${dueN === 1 ? t('invoice') : t('invoices')} ${t('pending')}${overN ? ` <span class="hero-warn"><i class="fa-solid fa-circle-exclamation"></i> ${esc(money(overdue))} ${t('overdue')}</span>` : ''}` : t('Nothing pending — all invoices are paid')}</div>
+      <div class="hero-sub">${dueN ? `${dueN} ${dueN === 1 ? t('invoice') : t('invoices')} ${t('pending')}${overN ? ` <span class="hero-warn">${window.HGI_STUDIO ? HGI_STUDIO.ic('error') : '<i class="fa-solid fa-circle-exclamation"></i>'} ${esc(money(overdue))} ${t('overdue')}</span>` : ''}` : t('Nothing pending — all invoices are paid')}</div>
       <div class="ledger" role="img" aria-label="${esc(`Received ${money(received)}, due ${money(notDue)}, overdue ${money(overdue)}`)}">
         ${sum > 0 ? `<i class="seg rec" style="flex:${received}"></i><i class="seg due" style="flex:${notDue}"></i><i class="seg ovd" style="flex:${overdue}"></i>` : '<i class="seg none" style="flex:1"></i>'}
       </div>
@@ -613,13 +621,14 @@
         <div><span class="dot due"></span><span data-i18n>Due</span><b>${esc(money(notDue))}</b></div>
         <div><span class="dot ovd"></span><span data-i18n>Overdue</span><b>${esc(money(overdue))}</b></div>
       </div>
-      <div class="hero-aging"><div class="aging-cap"><span data-i18n>Overdue by age</span><span>${esc(money(net))} <span data-i18n>billed this FY</span></span></div>${aging}</div>`;
+      <div class="hero-aging"><div class="aging-cap"><span data-i18n>Overdue by age</span><span>${esc(money(net))} <span data-i18n>billed this FY</span></span></div><div class="age-grid">${aging}</div></div>`;
     const r = gstSummaryFor(today.slice(0, 7));
     const monthDocs = fyDocs.filter(d => monthKey(d.date) === curKey && d.docType === 'INV').length;
     document.getElementById('stat-strip').innerHTML = `
       <div><span data-i18n>Sales this month</span><b>${esc(money(r.taxable))}</b><small>${monthDocs} ${t(monthDocs === 1 ? 'invoice' : 'invoices')}</small></div>
       <div><span data-i18n>Output GST this month</span><b>${esc(money(r.tax))}</b><small data-i18n>for GSTR-3B</small></div>`;
     i18n.translateTree(hero); i18n.translateTree(document.getElementById('stat-strip'));
+    if (window.HGI_STUDIO) HGI_STUDIO.renderDash();
   }
 
   // Invoice editor: the long form becomes named sections in the order people fill it in.
@@ -719,7 +728,7 @@
   const ACTION_NAMES = { 'fa-pen-to-square': 'Edit', 'fa-trash': 'Delete', 'fa-eye': 'View / Print', 'fa-copy': 'Duplicate', 'fa-ban': 'Cancel document',
     'fa-indian-rupee-sign': 'Record receipt', 'fa-whatsapp': 'Share on WhatsApp', 'fa-file-export': 'Convert to invoice' };
   function actionLabel(btn) {
-    const ic = btn.querySelector('i'); const cls = ic ? Array.from(ic.classList).find(c => ACTION_NAMES[c]) : null;
+    const ic = iconOf(btn); const cls = faOf(ic).find(c => ACTION_NAMES[c]);
     const title = btn.getAttribute('title');
     if (title) return title;
     if (cls) return ACTION_NAMES[cls];
@@ -738,10 +747,11 @@
       : [first(0), cell(1)];
     window.__rowActions = btns;
     openSheet(`<div class="row-head"><b>${esc(head[0])}</b><span>${esc(head[1])}</span></div>` + btns.map((b, i) => {
-      const ic = b.querySelector('i'); const label = actionLabel(b);
-      const danger = ic && (ic.classList.contains('fa-trash') || ic.classList.contains('fa-ban'));
-      const icon = ic ? `<i class="${esc(ic.className.replace(/\bmr-\S+/g, ''))}"></i>` : `<b style="font-size:12px">${esc(b.textContent.trim())}</b>`;
-      return `<button type="button" class="act${danger ? ' danger' : ''}" onclick="HGI_M.runRowAction(${i})"><span class="ic ${ic ? Array.from(ic.classList).filter(c => /^text-/.test(c)).join(' ') : ''}">${icon}</span>${esc(t(label))}</button>`;
+      const ic = iconOf(b); const label = actionLabel(b), fa = faOf(ic);
+      const danger = fa.includes('fa-trash') || fa.includes('fa-ban');
+      const icon = !ic ? `<b style="font-size:12px">${esc(b.textContent.trim())}</b>` : ic.tagName === 'I' ? `<i class="${esc(ic.className.replace(/\bmr-\S+/g, ''))}"></i>` : ic.outerHTML;
+      const tone = ic ? Array.from(ic.classList).filter(c => /^text-/.test(c)).join(' ') : '';
+      return `<button type="button" class="act${danger ? ' danger' : ''}" onclick="HGI_M.runRowAction(${i})"><span class="ic ${tone}">${icon}</span>${esc(t(label))}</button>`;
     }).join(''));
   }
   function runRowAction(i) {
@@ -887,6 +897,7 @@
     enhanceDashboard();
     enhanceEditor();
     buildDocChips();
+    if (window.HGI_STUDIO) HGI_STUDIO.shell();   // v8 interface: icons, rail / dock, bento dashboard, live paper
     installRowSheets();
     limitToasts();
     initApp();                                   // the original v6 app start
@@ -897,6 +908,8 @@
     labelAll();
     renderPrefs();
     installNativeEvents();
+    if (window.HGI_STUDIO) HGI_STUDIO.ready();
+    applyTheme();                                // system bar colours from the final page colour
     document.documentElement.classList.toggle('is-native', isNative);
     if (isNative) {
       const ro = document.getElementById('login-overlay');

@@ -21,7 +21,8 @@ for (const k of ['FAVICON', 'LOGO_ICON', 'LOGO_FULL']) html = html.split(`{{${k}
 if (/\{\{[A-Z_]+\}\}/.test(html)) throw new Error('unresolved template placeholder');
 if (/https:\/\/(cdn\.tailwindcss|cdnjs\.cloudflare|fonts\.googleapis)/.test(html)) throw new Error('CDN reference left in app — the APK must work offline');
 fs.writeFileSync(www('index.html'), html);
-for (const f of ['compat.css', 'mobile.css', 'theme.css', 'mobile.js', 'i18n.js', 'demo-data.js']) copy(src(f), www(f));
+for (const f of ['compat.css', 'mobile.css', 'theme.css', 'studio.css', 'mobile.js', 'studio.js', 'i18n.js', 'demo-data.js']) copy(src(f), www(f));
+copy(src('fonts'), www('fonts'));   // Inter Display + Lora Italic (OFL), app chrome only
 
 // 2. vendor libraries (versions pinned in package.json)
 copy(path.join(mod('chart.js'), 'dist/chart.umd.js'), www('vendor/chart.umd.js'));
