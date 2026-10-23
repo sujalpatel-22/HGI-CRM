@@ -1,0 +1,4 @@
+HGI Billing 8.0.0 (versionCode 132) — commit e0e2986ed700d06149338a79eba1221ef42d2dd2
+Signing mode: test-key
+Certificate SHA-256: 23CABE2AEC9DE6275D3DC44FBEA61C92C7FC963B908975B1BBAE33C253CBE9F3
+INTERNAL TEST BUILD — throw-away key. NOT for Google Play, NOT for customers. Updates from this build cannot be installed over a Play/release install.

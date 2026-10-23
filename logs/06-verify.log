@@ -1,0 +1,31 @@
+Verifies
+Verified using v1 scheme (JAR signing): false
+Verified using v2 scheme (APK Signature Scheme v2): true
+Verified using v3 scheme (APK Signature Scheme v3): false
+Verified using v3.1 scheme (APK Signature Scheme v3.1): false
+Verified using v3.2 scheme (APK Signature Scheme v3.2): false
+Verified using v4 scheme (APK Signature Scheme v4): false
+Verified for SourceStamp: false
+Number of signers: 1
+V2 Signer: certificate DN: CN=HGI Billing TEST, O=HARIGURU INDUSTRIES, C=IN
+V2 Signer: certificate SHA-256 digest: 23cabe2aec9de6275d3dc44fbea61c92c7fc963b908975b1bbae33c253cbe9f3
+V2 Signer: certificate SHA-1 digest: 9d1255f7c0476928025ad20fc078e0c01f098a18
+V2 Signer: certificate MD5 digest: 2e4040e59b0af2446b7f88cecf642d2e
+V2 Signer: key algorithm: RSA
+V2 Signer: key size (bits): 2048
+V2 Signer: public key SHA-256 digest: ba08bc63ea6c6b978edf4d2c69cf198c8c3a854068e8b3dfb1b14b473b4f70bb
+V2 Signer: public key SHA-1 digest: 2d653f5e4ecb7609155a0fa8bcbbaa68b1f8a1f6
+V2 Signer: public key MD5 digest: 368f0e6cf4e4d8294239a660e46964f7
+Re-run with the -verbose and -certs options for more details.
+
+The signer certificate will expire on 2027-10-23.
+package: name='in.hariguru.billing' versionCode='132' versionName='8.0.0' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'
+targetSdkVersion:'36'
+uses-permission: name='android.permission.INTERNET'
+uses-permission: name='in.hariguru.billing.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'
+application-label:'HGI Billing'
+        A: http://schemas.android.com/apk/res/android:allowBackup(0x01010280)=true
+        A: http://schemas.android.com/apk/res/android:fullBackupContent(0x010104eb)=@0x7f100000
+        A: http://schemas.android.com/apk/res/android:usesCleartextTraffic(0x010104ec)=false
+        A: http://schemas.android.com/apk/res/android:dataExtractionRules(0x0101063e)=@0x7f100002
+Signing certificate: CN=HGI Billing TEST, O=HARIGURU INDUSTRIES, C=IN  SHA-256 23CABE2AEC9DE6275D3DC44FBEA61C92C7FC963B908975B1BBAE33C253CBE9F3  (mode: test-key)
