@@ -221,6 +221,16 @@ html.dark #invoice-preview-container { background: #060a14; }
 #tab-returns .uppercase:not(.a4-page *) { text-transform: none !important; letter-spacing: 0 !important; }
 #tab-returns .text-\[10px\].uppercase, #tab-returns p.uppercase { font-size: 12px !important; font-weight: 600 !important; }
 
+/* login / setup / lock: the ink of the header and hero, one ring motif, roomy fields */
+#login-overlay.brand-bg, #onboarding.brand-bg, #lock-screen.brand-bg { background: var(--ink) !important; overflow: hidden; }
+#login-overlay::before, #onboarding::before, #lock-screen::before { content: ''; position: fixed; right: -120px; top: -140px; width: 420px; height: 420px; border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, .06); box-shadow: 0 0 0 46px rgba(255, 255, 255, .02), 0 0 0 110px rgba(255, 255, 255, .015); pointer-events: none; }
+#login-overlay > .bg-white, #onboarding > .bg-white, #lock-screen > .bg-white { border-radius: 24px !important; position: relative; box-shadow: 0 30px 60px -20px rgba(0, 0, 0, .55) !important; }
+#onboarding .inp, #login-overlay .inp { min-height: 48px; }
+#onboarding #ob-next, #login-overlay button[type=submit] { min-height: 50px; border-radius: 14px !important; }
+#onboarding .ob-lang { border-radius: 14px !important; }
+#login-overlay > .bg-white > div:first-child { border-bottom-color: var(--saffron) !important; }
+
 /* =====================================================================
    PHONES
    ===================================================================== */
@@ -370,3 +380,12 @@ html.dark #dash-recent-table tr { background: transparent !important; }
 html.dark .sec-parties > .ed-pick select { background: var(--surface-2) !important; }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+
+/* status chips in dark mode: tinted, not pastel blocks */
+html.dark main .bg-amber-100:not(.a4-page *) { background: rgba(227, 166, 70, .16) !important; color: #f1c27a !important; }
+html.dark main .bg-emerald-100:not(.a4-page *) { background: rgba(52, 192, 143, .15) !important; color: #6fdcb2 !important; }
+html.dark main .bg-rose-100:not(.a4-page *) { background: rgba(240, 103, 131, .16) !important; color: #ff9db1 !important; }
+html.dark main .bg-teal-100:not(.a4-page *) { background: rgba(45, 212, 191, .14) !important; color: #7ee8d8 !important; }
+html.dark main .bg-blue-100:not(.a4-page *) { background: rgba(120, 160, 230, .15) !important; color: #a8c4f5 !important; }
+html.dark main .bg-purple-100:not(.a4-page *) { background: rgba(170, 130, 240, .15) !important; color: #c9b0f7 !important; }
+html.dark main .bg-slate-100.text-slate-700:not(.a4-page *), html.dark main .bg-slate-200:not(.a4-page *) { background: rgba(255, 255, 255, .08) !important; color: #c7cfe0 !important; }

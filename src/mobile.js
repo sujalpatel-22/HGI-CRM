@@ -103,6 +103,7 @@
     const pref = ui().theme || 'system';
     const dark = pref === 'dark' || (pref === 'system' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
     document.documentElement.classList.toggle('dark', dark);
+    if (typeof salesChart !== 'undefined' && salesChart && salesChart.__dark !== dark && typeof renderChart === 'function') { try { renderChart(); } catch (e) { /* chart optional */ } }
     const meta = document.querySelector('meta[name="theme-color"]'); if (meta) meta.content = dark ? '#0b1430' : '#0d1b3e';
     try {
       const sb = isNative && cap.Plugins.SystemBars;

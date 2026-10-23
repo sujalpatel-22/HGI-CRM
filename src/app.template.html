@@ -2541,13 +2541,19 @@
       const billed = new Array(12).fill(0), received = new Array(12).fill(0);
       liveDocs().forEach(d => { const k = keys.indexOf(monthKey(d.date)); if (k >= 0) billed[k] += signed(d) * (d.grandTotal || 0); });
       state.invoices.forEach(d => (d.payments || []).forEach(p => { const k = keys.indexOf(monthKey(p.date)); if (k >= 0) received[k] += (Number(p.amount) || 0) + (Number(p.tds) || 0); }));
+      const dark = document.documentElement.classList.contains('dark');
+      const C = { billed: dark ? '#7f96cc' : '#0d1b3e', received: dark ? '#34c08f' : '#12805c', grid: dark ? 'rgba(255,255,255,.06)' : 'rgba(13,27,62,.06)', tick: dark ? '#93a0bc' : '#6b7590' };
       const data = { labels, datasets: [
-        { label: 'Billed (net)', data: billed.map(round2), backgroundColor: '#f58220', borderRadius: 4 },
-        { label: 'Received', data: received.map(round2), backgroundColor: '#0b3a6f', borderRadius: 4 }] };
-      if (salesChart) { salesChart.data = data; salesChart.update(); return; }
+        { label: 'Billed (net)', data: billed.map(round2), backgroundColor: C.billed, borderRadius: 6, borderSkipped: false, maxBarThickness: 14 },
+        { label: 'Received', data: received.map(round2), backgroundColor: C.received, borderRadius: 6, borderSkipped: false, maxBarThickness: 14 }] };
+      if (salesChart && salesChart.__dark === dark) { salesChart.data = data; salesChart.update(); return; }
+      if (salesChart) salesChart.destroy();
       salesChart = new Chart($('sales-chart'), { type: 'bar', data, options: { maintainAspectRatio: false,
-        plugins: { tooltip: { callbacks: { label: c => `${c.dataset.label}: ${money(c.raw)}` } } },
-        scales: { y: { ticks: { callback: v => '₹' + Number(v).toLocaleString('en-IN', { notation: 'compact' }) } } } } });
+        plugins: { legend: { align: 'start', labels: { usePointStyle: true, pointStyle: 'rectRounded', boxWidth: 10, color: C.tick, font: { family: 'Inter', size: 12 } } },
+          tooltip: { callbacks: { label: c => `${c.dataset.label}: ${money(c.raw)}` } } },
+        scales: { x: { grid: { display: false }, border: { display: false }, ticks: { color: C.tick, font: { family: 'Inter', size: 11 } } },
+          y: { grid: { color: C.grid }, border: { display: false }, ticks: { color: C.tick, font: { family: 'Inter', size: 11 }, maxTicksLimit: 5, callback: v => '₹' + Number(v).toLocaleString('en-IN', { notation: 'compact' }) } } } } });
+      salesChart.__dark = dark;
     }
 
     /* =====================================================================
