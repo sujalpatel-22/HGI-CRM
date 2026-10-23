@@ -23,4 +23,4 @@ Next (needs owner input): release key secrets → tag `v7.2.0`; Phase C backend 
 | Phase B: Documents filter chips with counts, Settings groups with icons, dialogs in sentence case, buyers list cleanup | ✅ CI 39942266663: web 226/226, Android 31/31 on API 30/33/35/36 (first attempt), build 7.4.0 (128) |
 | v7.5: GST Returns (output-tax hero with IGST/CGST/SGST split + due dates, period stepper, sections as disclosures with GSTR table chips, empty sections listed once, scroll shadows) | ✅ web |
 | v7.5: dialogs as sheets (grab handle, slide-up, full-width Cancel / primary), full-height setup steps with fixed action row, More menu icon chips | ✅ web |
-| v7.5: motion (screen fade on tab change, press scale), small-phone demo banner, tablet one-row icon navigation, wider item description on tablets, live total outside phones | ✅ web 236/236; Android CI pending |
+| v7.5: motion (screen fade on tab change, press scale), small-phone demo banner, tablet one-row icon navigation, wider item description on tablets, live total outside phones | ✅ CI 40010536181: web 235/235, Android 31/31 on API 30/33/35/36 (first attempt), build 7.5.0 (129) |
