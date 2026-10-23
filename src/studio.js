@@ -340,7 +340,7 @@
     const totB = round2(billed.reduce((a, b) => a + b, 0)), totR = round2(received.reduce((a, b) => a + b, 0));
     $('flow-sub').innerHTML = `<span data-i18n>FY</span> ${esc2(fyOf(todayISO()))} · ${esc2(compact(totB))} <span data-i18n>billed</span> · ${esc2(compact(totR))} <span data-i18n>received</span>`;
     const W = Math.max(280, plot.clientWidth || 640), H = isPhone() ? 190 : 230, padL = 44, padR = 10, padT = 14, padB = 28;
-    const max = Math.max(1, ...billed, ...received);
+    const max = Math.max(1000, ...billed, ...received);   // empty / tiny years still get a readable ₹0–₹1K scale
     const nice = (() => { const p = Math.pow(10, Math.floor(Math.log10(max))); const m = max / p; return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 2.5 ? 2.5 : m <= 5 ? 5 : 10) * p; })();
     const iw = W - padL - padR, ih = H - padT - padB, slot = iw / 12;
     const y = v => padT + ih - Math.max(0, v) / nice * ih, x = i => padL + slot * i + slot / 2;

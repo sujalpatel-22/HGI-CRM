@@ -234,6 +234,7 @@ for (const vp of VIEWPORTS) {
       const billed = liveDocs().filter(d => monthKey(d.date) === cur).reduce((a, d) => a + signed(d) * (d.grandTotal || 0), 0);
       return { bars: bars.length, read: document.getElementById('flow-read').textContent.includes(money(round2(billed))), ring: !!document.querySelector('#ring-card .r-arc'), kpis: document.querySelectorAll('#stat-strip .kpi').length,
         months: document.querySelectorAll('#invoices-list-tbody tr.month-row').length }; });
+    check(await page.evaluate(() => { const l = [...document.querySelectorAll('svg.flow .gt')].map(e => e.textContent); return new Set(l).size === l.length; }), 'cash-flow scale labels are all different');
     check(v8.bars === 12 && v8.read && v8.ring && v8.kpis === 4, `cash-flow chart (12 months, this month's billing in the readout), collection ring and 4 KPI tiles`);
     await page.evaluate(() => switchTab('invoices'));
     check(await page.evaluate(() => document.querySelectorAll('#invoices-list-tbody tr.month-row').length >= 1), 'documents grouped under month headings');
