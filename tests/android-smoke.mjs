@@ -89,7 +89,7 @@ const phone = await page.evaluate(() => window.innerWidth < 768);
 check(!(await page.isVisible('#onboarding')) && (await page.isVisible('#bottom-nav')) === phone, `onboarding done, ${phone ? 'bottom tab bar' : 'tablet top navigation'} shown`);
 await shot('02-dashboard');
 // ₹ must take its own space (old WebViews drew the fallback-font glyph on top of the first digit)
-const rupee = await page.evaluate(async () => { await document.fonts.ready; await new Promise(r => setTimeout(r, 300)); const h = document.getElementById('dash-total-billed'); const sp = document.createElement('span'); sp.textContent = '₹'; h.appendChild(sp);
+const rupee = await page.evaluate(async () => { await document.fonts.ready; await new Promise(r => setTimeout(r, 300)); const h = document.getElementById('hero-amount'); const sp = document.createElement('span'); sp.textContent = '₹'; h.appendChild(sp);
   const w = sp.getBoundingClientRect().width, fs = parseFloat(getComputedStyle(h).fontSize); sp.remove(); return { w, fs, fix: !!window.HGI_APP.rupeeFix, probe: window.HGI_APP.rupeeWidths }; });
 check(rupee.w > rupee.fs * 0.35, `₹ sign has its own width (${rupee.w.toFixed(1)}px at ${rupee.fs}px${rupee.fix ? ', system-font fallback active' : ''}, probe ${JSON.stringify(rupee.probe)})`);
 const ui = (await device.shell('uiautomator dump /sdcard/hgi-ui.xml >/dev/null 2>&1; cat /sdcard/hgi-ui.xml')).toString();

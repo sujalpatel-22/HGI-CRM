@@ -6,7 +6,7 @@
    ===================================================================== */
 (function () {
   'use strict';
-  const APP_VERSION = '7.2.0';
+  const APP_VERSION = '7.3.0';
   const cap = window.Capacitor;
   const isNative = !!(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform());
   // Without a bundler the native bridge exposes registered plugins on Capacitor.Plugins
@@ -103,7 +103,7 @@
     const pref = ui().theme || 'system';
     const dark = pref === 'dark' || (pref === 'system' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
     document.documentElement.classList.toggle('dark', dark);
-    const meta = document.querySelector('meta[name="theme-color"]'); if (meta) meta.content = dark ? '#0b1220' : '#0b3a6f';
+    const meta = document.querySelector('meta[name="theme-color"]'); if (meta) meta.content = dark ? '#0b1430' : '#0d1b3e';
     try {
       const sb = isNative && cap.Plugins.SystemBars;
       if (sb) {   // light icons over the navy header; nav-bar icons follow the bottom tab bar colour
@@ -113,7 +113,7 @@
       if (Native && Native.setBarColors) {
         const nav = document.getElementById('bottom-nav');
         const bottom = (nav && getComputedStyle(nav).display !== 'none') ? rgbHex(getComputedStyle(nav).backgroundColor) : rgbHex(getComputedStyle(document.body).backgroundColor);
-        Promise.resolve(Native.setBarColors({ top: '#062a52', bottom: bottom || (dark ? '#0f1728' : '#ffffff') })).catch(() => {});
+        Promise.resolve(Native.setBarColors({ top: '#0d1b3e', bottom: bottom || (dark ? '#0f1728' : '#ffffff') })).catch(() => {});
       }
     } catch (e) { /* optional */ }
   }
@@ -552,16 +552,102 @@
     if (grids[0]) grids[0].classList.add('dash-kpis');
     if (grids[1]) grids[1].classList.add('dash-insights');
     if (grids[2]) grids[2].classList.add('dash-lists');
+    sec.children[0].classList.add('dash-head');
+    if (!document.getElementById('hero') && grids[0]) {
+      const hero = document.createElement('div'); hero.id = 'hero'; hero.className = 'no-print';
+      grids[0].before(hero);
+      const strip = document.createElement('div'); strip.id = 'stat-strip'; strip.className = 'no-print';
+      grids[0].before(strip);
+    }
     if (!document.getElementById('quick-actions') && grids[0]) {
       const qa = document.createElement('div'); qa.id = 'quick-actions'; qa.className = 'no-print';
       qa.innerHTML = `
-        <button type="button" onclick="newDocument('INV'); switchTab('create-invoice')"><i class="fa-solid fa-file-invoice"></i><span>Invoice</span></button>
-        <button type="button" onclick="newDocument('QUO'); switchTab('create-invoice')"><i class="fa-solid fa-file-signature"></i><span>Quotation</span></button>
-        <button type="button" onclick="switchTab('customers'); openCustomerModal()"><i class="fa-solid fa-user-plus"></i><span>Buyer</span></button>
+        <button type="button" class="qa-primary" onclick="newDocument('INV'); switchTab('create-invoice')"><i class="fa-solid fa-plus"></i><span>New invoice</span></button>
+        <button type="button" onclick="newDocument('QUO'); switchTab('create-invoice')"><i class="fa-regular fa-file-lines"></i><span>Quotation</span></button>
+        <button type="button" onclick="switchTab('customers'); openCustomerModal()"><i class="fa-regular fa-user"></i><span>Buyer</span></button>
         <button type="button" onclick="switchTab('items'); openItemModal()"><i class="fa-solid fa-box-open"></i><span>Item</span></button>`;
-      grids[0].before(qa);
+      document.getElementById('stat-strip').after(qa);
       i18n.translateTree(qa);
     }
+  }
+
+  // Dashboard hero: what is still to be collected, how this FY's billing splits into received / due / overdue,
+  // and billing per month. Uses the same functions as the GST reports (balanceOf, isOverdue, signed, liveDocs).
+  const splitMoney = n => { const t = money(n), i = t.lastIndexOf('.'); return i < 0 ? [t, ''] : [t.slice(0, i), t.slice(i)]; };
+  function renderHero() {
+    const hero = document.getElementById('hero'); if (!hero) return;
+    const today = todayISO(), fyStart = fyStartISO(today), fyEnd = fyEndISO(today);
+    const invs = liveDocs().filter(d => d.docType === 'INV');
+    let due = 0, overdue = 0, dueN = 0, overN = 0;
+    invs.forEach(d => { const b = balanceOf(d); if (b > 0.009) { due += b; dueN++; if (isOverdue(d)) { overdue += b; overN++; } } });
+    let received = 0;
+    state.invoices.forEach(d => (d.payments || []).forEach(p => { if (p.date >= fyStart && p.date <= fyEnd) received += (Number(p.amount) || 0) + (Number(p.tds) || 0); }));
+    const fyDocs = liveDocs().filter(d => d.date >= fyStart && d.date <= fyEnd);
+    const net = fyDocs.reduce((a, d) => a + signed(d) * (d.grandTotal || 0), 0);
+    const notDue = Math.max(0, due - overdue);
+    const months = [], y0 = Number(fyStart.slice(0, 4)), curKey = today.slice(0, 7);
+    for (let i = 0; i < 12; i++) { const m = (3 + i) % 12, y = y0 + (3 + i >= 12 ? 1 : 0); months.push(`${y}-${String(m + 1).padStart(2, '0')}`); }
+    const billed = months.map(k => fyDocs.filter(d => monthKey(d.date) === k).reduce((a, d) => a + signed(d) * (d.grandTotal || 0), 0));
+    const max = Math.max(1, ...billed);
+    const bars = months.map((k, i) => {
+      const h = Math.max(billed[i] > 0 ? 3 : 1.5, Math.round(billed[i] / max * 40));
+      const cls = k === curKey ? 'cur' : k > curKey ? 'fut' : '';
+      return `<rect class="${cls}" x="${i * 10 + 1}" y="${44 - h}" width="7" height="${h}" rx="1.5"><title>${k}: ${money(billed[i])}</title></rect>`;
+    }).join('');
+    const [whole, dec] = splitMoney(due);
+    const sum = received + notDue + overdue;
+    hero.innerHTML = `
+      <div class="hero-top"><span class="hero-label" data-i18n>To collect</span><span class="hero-fy">FY ${fyOf(today)}</span></div>
+      <div class="hero-amount" id="hero-amount">${esc(whole)}<span class="dec">${esc(dec)}</span></div>
+      <div class="hero-sub">${dueN ? `${dueN} ${dueN === 1 ? t('invoice') : t('invoices')} ${t('pending')}${overN ? ` <span class="hero-warn"><i class="fa-solid fa-circle-exclamation"></i> ${esc(money(overdue))} ${t('overdue')}</span>` : ''}` : t('Nothing pending — all invoices are paid')}</div>
+      <div class="ledger" role="img" aria-label="${esc(`Received ${money(received)}, due ${money(notDue)}, overdue ${money(overdue)}`)}">
+        ${sum > 0 ? `<i class="seg rec" style="flex:${received}"></i><i class="seg due" style="flex:${notDue}"></i><i class="seg ovd" style="flex:${overdue}"></i>` : '<i class="seg none" style="flex:1"></i>'}
+      </div>
+      <div class="hero-legend">
+        <div><span class="dot rec"></span><span data-i18n>Received</span><b>${esc(money(received))}</b></div>
+        <div><span class="dot due"></span><span data-i18n>Due</span><b>${esc(money(notDue))}</b></div>
+        <div><span class="dot ovd"></span><span data-i18n>Overdue</span><b>${esc(money(overdue))}</b></div>
+      </div>
+      <div class="hero-spark"><svg viewBox="0 0 120 46" preserveAspectRatio="none" aria-hidden="true">${bars}</svg>
+        <div class="spark-cap"><span data-i18n>Billed by month</span><span>${esc(money(net))} <span data-i18n>this FY</span></span></div></div>`;
+    const r = gstSummaryFor(today.slice(0, 7));
+    const monthDocs = fyDocs.filter(d => monthKey(d.date) === curKey && d.docType === 'INV').length;
+    document.getElementById('stat-strip').innerHTML = `
+      <div><span data-i18n>Sales this month</span><b>${esc(money(r.taxable))}</b><small>${monthDocs} ${t(monthDocs === 1 ? 'invoice' : 'invoices')}</small></div>
+      <div><span data-i18n>Output GST this month</span><b>${esc(money(r.tax))}</b><small data-i18n>for GSTR-3B</small></div>`;
+    i18n.translateTree(hero); i18n.translateTree(document.getElementById('stat-strip'));
+  }
+
+  // Invoice editor: the long form becomes named sections in the order people fill it in.
+  // Elements are only tagged and re-ordered visually (CSS order); IDs and form logic are unchanged.
+  const EDITOR_SECTIONS = [
+    ['sec-doc', 'fa-regular fa-file-lines', 'Document'], ['sec-noteref', 'fa-solid fa-link', 'Original invoice'],
+    ['sec-supply', 'fa-solid fa-scale-balanced', 'Tax settings'], ['sec-transport', 'fa-solid fa-truck', 'Order & transport'],
+    ['sec-edoc', '', ''], ['sec-parties', 'fa-regular fa-user', 'Customer'], ['sec-items', 'fa-solid fa-list', 'Items'],
+    ['sec-charges', 'fa-solid fa-percent', 'Discount & charges'], ['sec-terms', 'fa-regular fa-note-sticky', 'Terms'], ['sec-summary', 'fa-solid fa-receipt', 'Summary']
+  ];
+  function enhanceEditor() {
+    const form = document.getElementById('invoice-form'); if (!form || form.classList.contains('editor-v2')) return;
+    const kids = Array.from(form.children);
+    EDITOR_SECTIONS.forEach(([cls, icon, title], i) => {
+      const el = kids[i]; if (!el) return;
+      el.classList.add('ed-sec', cls);
+      if (title) {
+        const h = document.createElement('div'); h.className = 'ed-head';
+        h.innerHTML = `<i class="${icon}"></i><span data-i18n>${title}</span>`;
+        el.prepend(h);
+      }
+    });
+    if (kids[EDITOR_SECTIONS.length]) kids[EDITOR_SECTIONS.length].classList.add('ed-savebar');
+    // the saved-buyer picker belongs to the customer section
+    const pick = document.getElementById('inv-customer-select');
+    const parties = form.querySelector('.sec-parties');
+    if (pick && parties) {
+      const wrapEl = pick.closest('div'); wrapEl.classList.add('ed-pick');
+      parties.querySelector('.ed-head').after(wrapEl);
+    }
+    form.classList.add('editor-v2');
+    i18n.translateTree(form);
   }
 
   // Phones: a list row is one tap target; its actions open in a labelled bottom sheet instead of 9 tiny icons.
@@ -642,6 +728,7 @@
   function installHooks() {
     wrap('switchTab', (out, tab) => { currentTab = tab; setActiveNav(tab); closeMore(); if (mq.matches) window.scrollTo(0, 0); });
     ['renderInvoiceList', 'renderItemList', 'renderCustomerList', 'renderDashboard', 'addInvoiceRow'].forEach(n => wrap(n, () => labelAll()));
+    wrap('renderDashboard', () => renderHero());
     wrap('fitInvoicePages', () => scalePreview());
     window.addEventListener('resize', () => { if (previewDoc) scalePreview(); });
     wrap('saveState', () => mirrorState());
@@ -727,6 +814,7 @@
     demoBanner();
     checkRupeeGlyph();
     enhanceDashboard();
+    enhanceEditor();
     installRowSheets();
     limitToasts();
     initApp();                                   // the original v6 app start

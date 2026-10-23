@@ -113,6 +113,21 @@ for (const vp of VIEWPORTS) {
   check(saved === true, 'invoice saved');
   check(await page.evaluate(() => stockOf(state.products[0]) === -2), 'stock reduced by invoiced quantity');
 
+  // dashboard hero agrees with the ledger; editor sections in fill-in order
+  await page.evaluate(() => switchTab('dashboard')); await page.waitForTimeout(200);
+  const hero = await page.evaluate(() => {
+    const due = liveDocs().filter(d => d.docType === 'INV').reduce((a, d) => a + Math.max(0, balanceOf(d)), 0);
+    const r = gstSummaryFor(todayISO().slice(0, 7));
+    return { shown: document.getElementById('hero-amount').textContent, expect: money(due), segs: document.querySelectorAll('#hero .ledger .seg').length,
+      strip: document.getElementById('stat-strip').textContent.includes(money(r.tax)), kpisHidden: getComputedStyle(document.querySelector('.dash-kpis')).display === 'none' };
+  });
+  check(hero.shown === hero.expect && hero.segs >= 1 && hero.strip && hero.kpisHidden, `dashboard hero shows amount to collect ${hero.shown} and this month's GST`);
+  await page.evaluate(() => switchTab('create-invoice')); await page.waitForTimeout(150);
+  const ed = await page.evaluate(() => { const y = s => document.querySelector(s).getBoundingClientRect().top;
+    return { ordered: y('.sec-doc') < y('.sec-parties') && y('.sec-parties') < y('.sec-items') && y('.sec-items') < y('.sec-charges') && y('.sec-charges') < y('.sec-summary') && y('.sec-summary') < y('.sec-supply'),
+      pick: !!document.querySelector('.sec-parties #inv-customer-select'), heads: document.querySelectorAll('#invoice-form .ed-head').length }; });
+  check(ed.ordered && ed.pick && ed.heads >= 8, `invoice editor: ${ed.heads} named sections in fill-in order, saved-buyer picker in Customer`);
+
   // preview, scaling and print/PDF
   await page.evaluate(() => renderPreview()); await page.waitForTimeout(500);
   const sc = await page.evaluate(() => { const w = document.querySelector('.page-scale-wrap'); return { wrap: w ? w.getBoundingClientRect().width : 0, vw: window.innerWidth }; });
@@ -168,6 +183,7 @@ for (const vp of VIEWPORTS) {
   await page.evaluate(() => HGI_M.setLang('hi')); await page.waitForTimeout(300);
   const hi = await page.evaluate(() => ({ nav: document.querySelector('#bottom-nav button[data-tab="customers"] span').textContent, h: document.querySelector('#tab-dashboard h2').textContent }));
   check(hi.nav === 'ग्राहक' && hi.h === 'व्यापार सारांश', `Hindi labels applied (${hi.nav} / ${hi.h})`);
+  check(await page.evaluate(() => document.querySelector('#hero .hero-label').textContent === 'वसूली बाकी'), 'dashboard hero translated');
   await page.evaluate(() => { renderPreview(); }); await page.waitForTimeout(400);
   check(await page.evaluate(() => document.querySelector('#invoice-preview-container').textContent.includes('TAX INVOICE')), 'invoice print stays in English');
   await page.evaluate(() => switchTab('dashboard')); await shot('08-hindi');
