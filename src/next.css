@@ -467,3 +467,13 @@
     padding: 0 18px !important; border-radius: 10px; font-size: 13px; white-space: nowrap;
   }
 }
+
+@media screen {
+  html.hgi-next #app-container .search-box > input.inp { padding-left: 42px !important; }
+  html.hgi-next #app-container #invoice-form > .ed-savebar > button.bg-emerald-600 {
+    background: var(--saffron-soft) !important; color: var(--saffron-ink) !important; --ic-ac: currentColor;
+  }
+  html.hgi-next #app-container #invoice-form input[type="date"].inp {
+    min-width: 0; padding-left: 9px !important; padding-right: 9px !important; font-size: 13px !important;
+  }
+}
