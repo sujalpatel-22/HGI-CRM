@@ -6,7 +6,7 @@
    ===================================================================== */
 (function () {
   'use strict';
-  const APP_VERSION = '8.0.0';
+  const APP_VERSION = '8.1.0';
   const cap = window.Capacitor;
   const isNative = !!(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform());
   // Without a bundler the native bridge exposes registered plugins on Capacitor.Plugins
@@ -912,6 +912,7 @@
     renderPrefs();
     installNativeEvents();
     if (window.HGI_STUDIO) HGI_STUDIO.ready();
+    if (window.HGI_NEXT) HGI_NEXT.init();
     applyTheme();                                // system bar colours from the final page colour
     document.documentElement.classList.toggle('is-native', isNative);
     if (isNative) {

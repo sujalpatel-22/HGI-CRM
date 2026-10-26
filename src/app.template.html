@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="hgi-next">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -21,6 +21,7 @@
   <link rel="stylesheet" href="theme.css">
   <link rel="stylesheet" href="fonts/fonts.css">
   <link rel="stylesheet" href="studio.css">
+  <link rel="stylesheet" href="next.css">
 
   <style>
     body { font-family: 'Inter', sans-serif; }
@@ -471,7 +472,7 @@
                 <option value="">All Types</option><option value="INV">Invoices</option><option value="CRN">Credit Notes</option><option value="DBN">Debit Notes</option><option value="QUO">Quotations</option>
               </select>
               <select id="inv-filter-status" onchange="renderInvoiceList()" class="inp !w-auto">
-                <option value="">All Status</option><option>Unpaid</option><option>Partial</option><option>Paid</option><option>Overdue</option><option>Cancelled</option><option>Open</option><option>Converted</option><option>Expired</option>
+                <option value="">All Status</option><option value="Outstanding">Outstanding</option><option>Unpaid</option><option>Partial</option><option>Paid</option><option>Overdue</option><option>Cancelled</option><option>Open</option><option>Converted</option><option>Expired</option>
               </select>
               <input type="date" id="inv-filter-from" onchange="renderInvoiceList()" class="inp !w-auto" title="From date">
               <input type="date" id="inv-filter-to" onchange="renderInvoiceList()" class="inp !w-auto" title="To date">
@@ -2575,7 +2576,8 @@
       return state.invoices.filter(d => {
         if (q && !(`${d.num} ${d.buyerName} ${d.buyerGstin || ''} ${d.poNum || ''} ${d.ewbNo || ''}`.toLowerCase().includes(q))) return false;
         if (ty && d.docType !== ty) return false;
-        if (st && displayStatus(d) !== st) return false;
+        if (st === 'Outstanding') { if (d.docType !== 'INV' || d.cancelled || balanceOf(d) <= 0.009) return false; }
+        else if (st && displayStatus(d) !== st) return false;
         if (from && d.date < from) return false;
         if (to && d.date > to) return false;
         return true;
@@ -3118,5 +3120,6 @@
   <script src="demo-data.js"></script>
   <script src="mobile.js"></script>
   <script src="studio.js"></script>
+  <script src="next.js"></script>
 </body>
 </html>

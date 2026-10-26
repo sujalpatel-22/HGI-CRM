@@ -419,7 +419,7 @@
     const jb = document.createElement('div'); jb.id = 'ed-jump'; jb.className = 'no-print'; jb.setAttribute('role', 'tablist');
     jb.innerHTML = JUMP.map(([c, l]) => `<button type="button" data-s="${c}"><span data-i18n>${l}</span></button>`).join('');
     const seg = $('doc-seg'); if (seg) seg.after(jb);
-    jb.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; const s = form.querySelector('.' + b.dataset.s); if (s) window.scrollTo({ top: s.getBoundingClientRect().top + window.scrollY - (isPhone() ? 112 : 24), behavior: reduced() ? 'auto' : 'smooth' }); });
+    jb.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; const s = form.querySelector('.' + b.dataset.s); if (s) window.scrollTo({ top: s.getBoundingClientRect().top + window.scrollY - (isPhone() ? ((document.querySelector('#app-container > header')?.offsetHeight || 60) + jb.offsetHeight + 16) : 24), behavior: reduced() ? 'auto' : 'smooth' }); });
     if ('IntersectionObserver' in window) {
       const io = new IntersectionObserver(es => es.forEach(en => { if (en.isIntersecting) { const c = JUMP.find(([k]) => en.target.classList.contains(k)); if (c) jb.querySelectorAll('button').forEach(b => { const on = b.dataset.s === c[0]; b.classList.toggle('on', on); if (on && b.scrollIntoView && isPhone()) jb.scrollTo({ left: b.offsetLeft - 16, behavior: reduced() ? 'auto' : 'smooth' }); }); } }), { rootMargin: '-120px 0px -60% 0px' });
       JUMP.forEach(([c]) => { const s = form.querySelector('.' + c); if (s) io.observe(s); });
