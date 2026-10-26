@@ -1020,3 +1020,9 @@ html.dark #toast-container .st { background: rgba(26, 35, 64, .96) !important; }
   #app-container #invoices-list-tbody > tr.show-more-row > td { display: block !important; padding: 18px !important; text-align: center; opacity: 1 !important; }
   #app-container #invoices-list-tbody > tr.show-more-row button { height: 44px; padding: 0 22px; border-radius: 14px; }
 }
+
+/* Keep full state names readable while retaining a numeric keypad for codes. */
+@media screen and (max-width: 767px) {
+  #invoice-form .address-region-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #invoice-form .address-region-grid > div:first-child { grid-column: 1 / -1; }
+}

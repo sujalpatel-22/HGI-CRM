@@ -4,11 +4,12 @@
 // invoice + GST maths, native PDF rendering to Downloads, data mirror, restart persistence, back button.
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { _android as android } from 'playwright';
 
 const PKG = 'in.hariguru.billing';
 const label = process.env.HGI_TEST_LABEL || 'device';
-const OUT = path.resolve(path.dirname(new URL(import.meta.url).pathname), 'out-android');
+const OUT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'out-android');
 fs.mkdirSync(OUT, { recursive: true });
 let pass = 0, fail = 0;
 const check = (c, m) => { c ? pass++ : fail++; console.log(`  ${c ? '✓' : '✗'} ${m}`); };

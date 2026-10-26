@@ -4,9 +4,10 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const WWW = path.join(root, 'www');
 const OUT = path.join(root, 'tests', 'out');
 fs.mkdirSync(OUT, { recursive: true });
@@ -121,6 +122,10 @@ for (const vp of VIEWPORTS) {
   await row.locator('.item-qty').fill('12');
   await page.waitForTimeout(400);
   if (vp.width < 768) check(await page.evaluate(() => document.querySelector('#live-total b').textContent.replace(/[^\d.]/g, '') === String(collectDocFromForm().grandTotal.toFixed(2))), 'save bar shows the live grand total');
+  if (vp.width < 768) check(await page.evaluate(() => {
+    const stateField = $('inv-buyer-state'), code = $('inv-buyer-state-code');
+    return stateField.getBoundingClientRect().width > code.getBoundingClientRect().width * 1.8 && code.inputMode === 'numeric' && $('inv-buyer-pin').inputMode === 'numeric';
+  }), 'phone address: full-width state and numeric keypad for code/PIN');
   await shot('03-invoice-form'); await noHScroll('invoice form');
   const stockWarn = await page.evaluate(() => [...document.querySelectorAll('#check-list > div')].some(d => d.textContent.includes('only 10 available')));
   check(stockWarn, 'stock check warns when selling more than available');
@@ -354,6 +359,22 @@ for (const vp of VIEWPORTS) {
   const restore = obj => page.evaluate(o => new Promise(res => { importJSONBackup({ target: { files: [new File([JSON.stringify(o)], 'b.json')], set value(v) {} } }); setTimeout(res, 600); }), obj);
   await restore({ company: { name: 'X' }, invoices: [{ foo: 1 }] });
   check(await n() === 4, 'invalid backup file rejected (data unchanged)');
+  for (const invalid of [
+    { company: [], invoices: [] },
+    { company: { name: 'X' }, invoices: [], customers: [null] },
+    { company: { name: 'X' }, invoices: [], products: [{ name: 42 }] },
+    { company: { name: 'X' }, invoices: [{ num: '01', date: '2026-10-01', items: [null] }] },
+    { company: { name: 'X' }, invoices: [{ num: '01', date: '2026-10-01', items: [], payments: [null] }] }
+  ]) {
+    await restore(invalid);
+    check(await page.evaluate(() => state.company.name === 'Guard Test Co' && state.invoices.length === 4), 'malformed backup rejected before replacing current data');
+  }
+  check(await page.evaluate(async () => {
+    const original = window.downloadBlob, before = state.ui.lastBackup;
+    window.downloadBlob = async () => false;
+    try { await exportJSONBackup(); return state.ui.lastBackup === before; }
+    finally { window.downloadBlob = original; }
+  }), 'failed backup export does not mark data as backed up');
   await restore({ company: { name: 'Restored Co', stateCode: '24' }, invoices: [], products: [], customers: [] });
   check(await page.evaluate(() => state.company.name === 'Restored Co' && state.invoices.length === 0 && !!localStorage.getItem('hgi_billing_v7_prod_before_restore') && !document.getElementById('onboarding')), 'valid backup restored (no setup wizard), safety copy kept');
   await page.evaluate(() => switchTab('settings'));

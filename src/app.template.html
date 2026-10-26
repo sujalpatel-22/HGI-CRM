@@ -376,10 +376,10 @@
                   <div><label class="field-label">Phone</label><input type="text" id="inv-buyer-phone" class="inp" placeholder="9876543210"></div>
                 </div>
                 <div><label class="field-label">Billing Address</label><textarea id="inv-buyer-address" rows="2" class="inp"></textarea></div>
-                <div class="grid grid-cols-3 gap-2">
+                <div class="grid grid-cols-3 gap-2 address-region-grid">
                   <div><label class="field-label">State</label><input type="text" id="inv-buyer-state" class="inp"></div>
-                  <div><label class="field-label">State Code</label><input type="text" id="inv-buyer-state-code" maxlength="2" oninput="onBuyerStateCodeInput()" class="inp font-bold"></div>
-                  <div><label class="field-label">PIN</label><input type="text" id="inv-buyer-pin" maxlength="6" class="inp"></div>
+                  <div><label class="field-label">State Code</label><input type="text" id="inv-buyer-state-code" inputmode="numeric" maxlength="2" oninput="onBuyerStateCodeInput()" class="inp font-bold"></div>
+                  <div><label class="field-label">PIN</label><input type="text" id="inv-buyer-pin" inputmode="numeric" maxlength="6" class="inp"></div>
                 </div>
               </div>
 
@@ -394,10 +394,10 @@
                   <div><label class="field-label">Phone</label><input type="text" id="inv-ship-phone" class="inp"></div>
                 </div>
                 <div><label class="field-label">Delivery Address</label><textarea id="inv-ship-address" rows="2" class="inp"></textarea></div>
-                <div class="grid grid-cols-3 gap-2">
+                <div class="grid grid-cols-3 gap-2 address-region-grid">
                   <div><label class="field-label">State</label><input type="text" id="inv-ship-state" class="inp"></div>
-                  <div><label class="field-label">State Code</label><input type="text" id="inv-ship-state-code" maxlength="2" oninput="onShipStateCodeInput()" class="inp font-bold"></div>
-                  <div><label class="field-label">PIN</label><input type="text" id="inv-ship-pin" maxlength="6" class="inp"></div>
+                  <div><label class="field-label">State Code</label><input type="text" id="inv-ship-state-code" inputmode="numeric" maxlength="2" oninput="onShipStateCodeInput()" class="inp font-bold"></div>
+                  <div><label class="field-label">PIN</label><input type="text" id="inv-ship-pin" inputmode="numeric" maxlength="6" class="inp"></div>
                 </div>
               </div>
             </div>
@@ -3040,15 +3040,27 @@
       $('last-backup-label').innerHTML = state.ui.lastBackup ? `Last backup: <strong>${new Date(state.ui.lastBackup).toLocaleString('en-IN')}</strong>`
         : '<span class="text-rose-600 font-semibold">No backup taken yet — all data lives only in this browser!</span>';
     }
-    function exportJSONBackup() {
-      state.ui.lastBackup = new Date().toISOString(); saveState();
-      downloadBlob(new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' }), `${DEMO_MODE ? 'DEMO_' : ''}HGI_ERP_Backup_${todayISO()}.json`);
-      updateBackupLabel(); renderAlerts(); toast('Backup downloaded');
+    async function exportJSONBackup() {
+      try {
+        const result = await downloadBlob(new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' }), `${DEMO_MODE ? 'DEMO_' : ''}HGI_ERP_Backup_${todayISO()}.json`);
+        if (result === false) return;
+        state.ui.lastBackup = new Date().toISOString(); saveState();
+        updateBackupLabel(); renderAlerts(); toast('Backup export ready');
+      } catch (err) { toast('Could not export backup: ' + (err.message || err), 'error'); }
     }
     function backupProblem(b) {
       if (!b || typeof b !== 'object' || Array.isArray(b)) return 'file is not a backup object';
-      if (!b.company || typeof b.company !== 'object') return 'company details missing';
+      if (!b.company || typeof b.company !== 'object' || Array.isArray(b.company)) return 'company details missing';
       for (const k of ['invoices', 'products', 'customers']) if (b[k] !== undefined && !Array.isArray(b[k])) return `${k} is not a list`;
+      const record = v => !!v && typeof v === 'object' && !Array.isArray(v);
+      for (const k of ['products', 'customers']) {
+        if ((b[k] || []).some(v => !record(v) || typeof v.name !== 'string' || !v.name.trim())) return `${k} contains an invalid entry`;
+      }
+      for (const d of (b.invoices || [])) {
+        if (!record(d)) continue;
+        if (Array.isArray(d.items) && d.items.some(v => !record(v))) return 'document contains an invalid item';
+        if (d.payments !== undefined && (!Array.isArray(d.payments) || d.payments.some(v => !record(v)))) return 'document contains invalid payments';
+      }
       if (!Array.isArray(b.invoices)) b.invoices = [];
       const bad = b.invoices.findIndex(d => !d || typeof d !== 'object' || !d.num || !d.date || !Array.isArray(d.items));
       if (bad >= 0) return `document #${bad + 1} is incomplete (number, date or items missing)`;

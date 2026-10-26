@@ -235,9 +235,12 @@
     closeMore();
     const json = JSON.stringify(state, null, 1);
     const name = `${DEMO_MODE ? 'DEMO_' : ''}HGI_Backup_${todayISO()}.json`;
-    state.ui.lastBackup = new Date().toISOString(); saveState();
     if (isNative) {
-      try { await Native.shareFile({ fileName: name, base64: btoa(unescape(encodeURIComponent(json))), mime: 'application/json', text: 'HGI Billing backup' }); }
+      try {
+        await Native.shareFile({ fileName: name, base64: btoa(unescape(encodeURIComponent(json))), mime: 'application/json', text: 'HGI Billing backup' });
+        state.ui.lastBackup = new Date().toISOString(); saveState();
+        updateBackupLabel(); renderAlerts();
+      }
       catch (e) { toast('Share failed: ' + (e.message || e), 'error'); }
     } else exportJSONBackup();
   }
@@ -825,7 +828,7 @@
           toast(`Saved to ${r.location || 'Downloads'}: ${filename}`);
         } catch (e) {
           try { await Native.shareFile({ fileName: filename, base64: await blobToBase64(blob), mime: blob.type || 'application/octet-stream' }); }
-          catch (e2) { toast('Could not save file: ' + (e2.message || e2), 'error'); }
+          catch (e2) { toast('Could not save file: ' + (e2.message || e2), 'error'); return false; }
         }
       };
       // external links (WhatsApp wa.me, etc.) open in the right app

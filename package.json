@@ -11,7 +11,7 @@
     "android:add": "cap add android",
     "android:patch": "node tools/patch-android.mjs",
     "android:sync": "cap sync android",
-    "android:prepare": "npm run build:web && (test -d android || cap add android) && node tools/patch-android.mjs && cap sync android",
+    "android:prepare": "node tools/prepare-android.mjs",
     "test:android": "node tests/android-smoke.mjs"
   },
   "dependencies": {

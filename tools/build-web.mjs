@@ -3,9 +3,10 @@
 // compiles Tailwind CSS. Run after `npm install`.
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const src = p => path.join(root, 'src', p);
 const www = p => path.join(root, 'www', p);
 const mod = p => { const d = path.join(root, 'node_modules', p); if (!fs.existsSync(d)) throw new Error(`missing dependency ${p} — run npm install`); return d; };
