@@ -70,3 +70,22 @@ The Android CI run for 8.0.1 passed, but the PDFs the emulators themselves produ
 
 ### v8.0.5 (29 Oct 2026)
 8.0.4 fixed the logo spacing on WebView 83 (verified: 9 px, margin fallback) but its PDF still had 4 sheets: copy 2 (the first copy after a page break) is laid out progressively taller than measured (+1.5 pt by the party boxes, +7 pt by the item table, +14 pt by the terms) and crosses that engine's sheet boundary. Engines without flexbox gap (Chrome < 84) now use a 270 mm page target; all others keep 280 mm.
+
+### v8.1.0 — Google Play readiness: sign-in, per-account data, automatic cloud sync (29 Oct 2026)
+- **Sign in with Google required** (Android Credential Manager). The app gets a Google ID token, the sync service verifies it
+  (signature, issuer, audience, expiry, verified e-mail) and issues its own session. No Google API credential is in the app.
+- **Per-account data:** storage slot `hgi_billing_u_<key>` + mirror file `state-u-<key>`, key = SHA-256 of the Google account ID.
+  Data from ≤ 8.0 (`hgi_billing_v7_prod` / `state`) is offered to the first account that signs in, then marked as claimed.
+- **Sync service** `backend/` (Cloud Run, no dependencies): one spreadsheet per account in the company Drive (readable tabs +
+  gzip/base64 restore copy in hidden A/B tabs, checksum-verified before it goes live), version check → 409 on concurrent edits,
+  account deletion (in-app + `/delete-account` web page, deletion marker revokes old sessions), `/privacy`.
+- **App sync engine** (`src/account.js`): debounced upload after each save + on app background, offline retry with backoff,
+  pull of other-device changes (never under an open form/dialog), conflict dialog with safety copy, Settings → Account card,
+  sign out (optionally remove data from a shared phone), delete account. No backup reminders while synced.
+- **Bug fixed:** with Demo Mode open, sending the app to the background wrote sample data into the real-data mirror file.
+- **Release pipeline:** builds signed with the owner key must have sign-in configured; versionCode 100 + run (+ offset);
+  debug APK renamed `*-debug-TESTONLY.apk`; key scripts for Windows/macOS/Linux print the SHA-1 for the Android OAuth client.
+- **Tests:** backend 36/36 (fake Google); sync e2e in Chromium 44/44; web 270/270 locally (266 in CI); Android 44/44 on API 30/33/35/36 (run 40874486585; 3 of 4 needed the CI retry: WebView renderer died on reload (API 30), emulator ANR (API 33, 36)). The emulator test now signs in,
+  syncs, really uninstalls + reinstalls the APK and checks the restore, separates two accounts, adopts pre-8.1 data.
+- CI found that a slow first bridge reply made the app fall back to "no sign-in" — fixed (retries, never the web default on native).
+- Setup for the owner: `docs/PLAY-RELEASE.md`.
