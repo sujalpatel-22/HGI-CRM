@@ -42,6 +42,19 @@
       .a4-page + .a4-page { page-break-before: always; }
       .inv-table thead { display: table-header-group; }
       .inv-table tr { page-break-inside: avoid; }
+      /* Print = the paper only. The screen preview wraps each page in .page-scale-wrap (to fit small screens) and the
+         v7/v8 shell adds a side rail, shadows and a desk; none of that may reach the printer or the PDF.
+         ID + !important so later screen stylesheets (theme/studio) can never override these. */
+      html body, html body #app-container, html body #preview-section, html body #invoice-preview-container {
+        padding: 0 !important; margin: 0 !important; border: 0 !important; background: #fff !important; box-shadow: none !important;
+        min-height: 0 !important; max-width: none !important; width: auto !important; display: block !important; }
+      html body #invoice-preview-container .page-scale-wrap { display: block !important; width: auto !important; height: auto !important; overflow: visible !important;
+        margin: 0 !important; padding: 0 !important; transform: none !important; animation: none !important; }
+      html body #invoice-preview-container .a4-page { box-shadow: none !important; margin: 0 !important; transform: none !important; animation: none !important; }
+      /* every copy (Original / Duplicate / Triplicate) starts on a new sheet, whether or not it is wrapped */
+      html body #invoice-preview-container .page-scale-wrap + .page-scale-wrap,
+      html body #invoice-preview-container .a4-page + .a4-page { break-before: page !important; page-break-before: always !important; }
+      html body #invoice-preview-container > :first-child, html body #invoice-preview-container > :first-child > .a4-page { break-before: auto !important; page-break-before: auto !important; }
     }
 
     .a4-page {
@@ -1378,6 +1391,7 @@
        DOCUMENT FORM
        ===================================================================== */
     const currentDocType = () => $('inv-doc-type').value;
+    const isNoteType = t => t === 'CRN' || t === 'DBN';
 
     function setEditMode(id) {
       currentEditId = id;
@@ -1635,8 +1649,8 @@
         num: v('inv-num'), date: $('inv-date').value,
         supplyType: resolveSupplyType(), pos: normalizeStateCode($('inv-pos').value),
         reverseCharge: $('inv-rcm').value === 'Y',
-        refId: docType !== 'INV' && ref ? ref.id : '', refNum: docType !== 'INV' && ref ? ref.num : '', refDate: docType !== 'INV' && ref ? ref.date : '',
-        noteReason: docType !== 'INV' ? $('inv-note-reason').value : '',
+        refId: isNoteType(docType) && ref ? ref.id : '', refNum: isNoteType(docType) && ref ? ref.num : '', refDate: isNoteType(docType) && ref ? ref.date : '',
+        noteReason: isNoteType(docType) ? $('inv-note-reason').value : '',
         creditDays: parseInt($('inv-credit-days').value, 10) || 0,
         poNum: v('inv-po-num'), poDate: $('inv-po-date').value,
         transport: v('inv-transport'), lr: v('inv-lr').toUpperCase(), deliveryTerms: v('inv-delivery-terms'),
@@ -1674,7 +1688,7 @@
       set('inv-terms', d.terms);
       $('invoice-items-body').innerHTML = '';
       (d.items && d.items.length ? d.items : [null]).forEach(it => addInvoiceRow(it || undefined));
-      if (d.docType !== 'INV') { populateRefInvoices(); $('inv-ref-id').value = d.refId || ''; $('inv-ref-date').value = d.refDate ? fmtDate(d.refDate) : ''; $('inv-note-reason').value = d.noteReason || 'Others'; }
+      if (isNoteType(d.docType)) { populateRefInvoices(); $('inv-ref-id').value = d.refId || ''; $('inv-ref-date').value = d.refDate ? fmtDate(d.refDate) : ''; $('inv-note-reason').value = d.noteReason || 'Others'; }
       showGstinStatus('buyer-gstin-status', validateGSTIN(d.buyerGstin));
       updateDueDateLabel();
     }
@@ -1847,8 +1861,8 @@
       if (c.discount > c.subtotal + c.pf + c.other) E('Discount is more than the value of supply.');
       if (c.subtotal > 0 && c.items.length && !out.some(o => o.lvl === 'error' && /^Row/.test(o.msg))) OK('All item lines have HSN, quantity, UQC and rate.');
 
-      // --- Notes
-      if (d.docType !== 'INV') {
+      // --- Notes (credit / debit notes only — a quotation is not issued against an invoice)
+      if (isNoteType(d.docType)) {
         const ref = state.invoices.find(x => x.id === d.refId);
         if (!ref) E('Select the original invoice this note is issued against.', 'Rule 53(1A)');
         else {
@@ -2015,7 +2029,7 @@
 
     function docMeta(d, c) {
       const m = [];
-      if (d.docType !== 'INV') { m.push(['Against Invoice', `${d.refNum || '-'} dt. ${fmtDate(d.refDate)}`]); m.push(['Reason', d.noteReason]); }
+      if (isNoteType(d.docType)) { m.push(['Against Invoice', `${d.refNum || '-'} dt. ${fmtDate(d.refDate)}`]); m.push(['Reason', d.noteReason]); }
       m.push(['Place of Supply', stateLabel(d.pos)]);
       m.push(['Reverse Charge', d.reverseCharge ? 'Yes' : 'No']);
       if (d.poNum) m.push(['PO No. / Date', `${d.poNum}${d.poDate ? ' dt. ' + fmtDate(d.poDate) : ''}`]);
@@ -2432,13 +2446,14 @@
       const bal = d.docType === 'INV' ? (saved ? balanceOf(saved) : d.grandTotal) : 0;
       const co = state.company;
       let msg = `Namaste ${d.buyerName},\n\nGreetings from *${co.name}*.\n\n*${DOC_TYPES[d.docType].short} No:* ${d.num}\n*Date:* ${fmtDate(d.date)}\n*Amount:* ${money(d.grandTotal)}\n`;
-      if (d.docType !== 'INV') msg += `*Against Invoice:* ${d.refNum} (${d.noteReason})\n`;
+      if (d.docType === 'CRN' || d.docType === 'DBN') msg += `*Against Invoice:* ${d.refNum}${d.noteReason ? ` (${d.noteReason})` : ''}\n`;
+      else if (d.docType === 'QUO') msg += `*Valid till:* ${fmtDate(getDueDate(d))}\n`;
       else if (bal > 0) {
         msg += `*Balance Due:* ${money(bal)}\n*Due Date:* ${fmtDate(getDueDate(d))}\n`;
         if (saved && isOverdue(saved)) msg += `⚠️ Overdue by ${daysBetween(getDueDate(saved), todayISO())} days.\n`;
         msg += `\n*Bank:* ${co.bankName}\n*A/c:* ${co.bankAcc}\n*IFSC:* ${co.bankIfsc}\n${co.upiId ? `*UPI:* ${co.upiId}\n` : ''}`;
       } else msg += `\n✅ Fully paid — thank you!\n`;
-      msg += `\nPDF attached. Thank you for your business!\n— ${co.name}${co.phone ? '\n' + co.phone : ''}`;
+      msg += `\nThe PDF copy is shared separately. Thank you for your business!\n— ${co.name}${co.phone ? '\n' + co.phone : ''}`;
       let phone = (d.buyerPhone || '').replace(/\D/g, '');
       if (phone.length === 10) phone = '91' + phone;
       if (phone.length === 11 && phone.startsWith('0')) phone = '91' + phone.slice(1);

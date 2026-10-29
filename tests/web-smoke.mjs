@@ -5,6 +5,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright';
+import { execFileSync } from 'node:child_process';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const WWW = path.join(root, 'www');
@@ -150,11 +151,27 @@ for (const vp of VIEWPORTS) {
   await page.evaluate(() => document.getElementById('preview-section').scrollIntoView()); await shot('04-preview'); await noHScroll('preview');
   await page.evaluate(() => renderPreviewPages(selectedCopies()));
   await page.emulateMedia({ media: 'print' });
-  const pdf = await page.pdf({ format: 'A4', printBackground: true });
+  // a page count alone is not enough: three copies running into each other also come to ~3 sheets (user-reported, Oct 2026)
+  const pl = await page.evaluate(() => {
+    const box = document.getElementById('invoice-preview-container'), pg = [...box.querySelectorAll('.a4-page')];
+    const unit = p => (p.parentElement.classList.contains('page-scale-wrap') ? p.parentElement : p);
+    return { n: pg.length, breaks: pg.slice(1).every(p => getComputedStyle(unit(p)).breakBefore === 'page'), first: getComputedStyle(unit(pg[0])).breakBefore !== 'page',
+      shadow: pg.some(p => getComputedStyle(p).boxShadow !== 'none'), left: Math.round(pg[0].getBoundingClientRect().left),
+      chrome: ['app-container', 'preview-section', 'invoice-preview-container'].map(id => getComputedStyle(document.getElementById(id))).some(cs => parseFloat(cs.paddingLeft) > 0 || parseFloat(cs.marginLeft) > 0),
+      scaled: pg.some(p => getComputedStyle(p).transform !== 'none') };
+  });
+  check(pl.n === 3 && pl.breaks && pl.first, `print: each of the 3 copies starts on a new A4 sheet`);
+  check(!pl.shadow && !pl.chrome && !pl.scaled && pl.left <= 1, `print: paper only — no shadow, side offset or screen scaling (left ${pl.left}px)`);
+  const pdf = await page.pdf({ format: 'A4', printBackground: true, preferCSSPageSize: true });
   await page.emulateMedia({ media: 'screen' });
   const pages = (pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length;
   check(pages === 3, `print: 3 copies → 3 A4 pages (got ${pages})`);
   fs.writeFileSync(path.join(OUT, `${vp.name}-invoice.pdf`), pdf);
+  try {   // where poppler is installed, read each sheet's copy label from the PDF itself
+    const txt = p => execFileSync('pdftotext', ['-f', String(p), '-l', String(p), path.join(OUT, `${vp.name}-invoice.pdf`), '-'], { encoding: 'utf8' });
+    const labels = [1, 2, 3].map(p => (txt(p).match(/(ORIGINAL|DUPLICATE|TRIPLICATE) FOR/) || [])[1]);
+    check(labels.join() === 'ORIGINAL,DUPLICATE,TRIPLICATE', `PDF sheets carry Original / Duplicate / Triplicate in order (${labels.join(' / ')})`);
+  } catch (e) { if (e.code !== 'ENOENT') throw e; }
 
   // quotation → invoice
   await page.evaluate(() => newDocument('QUO'));
@@ -166,6 +183,11 @@ for (const vp of VIEWPORTS) {
   check(await page.evaluate(() => saveCurrentInvoice()) === true, 'quotation saved');
   const qid = await page.evaluate(() => state.invoices.find(d => d.docType === 'QUO').id);
   check(await page.evaluate(id => displayStatus(state.invoices.find(d => d.id === id)) === 'Open', qid), 'quotation status Open');
+  const qd = await page.evaluate(id => { const d = state.invoices.find(x => x.id === id); const keep = previewDoc; previewDoc = d; renderPreviewPages(['THIS IS A QUOTATION — NOT A TAX INVOICE']); const t = document.getElementById('invoice-preview-container').textContent; previewDoc = keep;
+    const wa = []; const o = window.open; window.open = u => { wa.push(decodeURIComponent(String(u))); return null; }; shareWhatsApp(d.id); window.open = o; return { t, wa: wa[0] || '', reason: d.noteReason, checks: runChecks(d).map(c => c.msg).join(' ') }; }, qid);
+  check(!/Against Invoice|Sales Return/i.test(qd.t) && !qd.reason && !/original invoice this note/i.test(qd.checks), 'quotation: no credit-note fields on paper, in data or in checks');
+  check(/Valid till/.test(qd.wa) && !/Against Invoice/.test(qd.wa), 'quotation WhatsApp text shows validity, not "Against Invoice"');
+
   check(await page.evaluate(() => buildReturns(todayISO().slice(0, 7)).b2cs ? Object.keys(buildReturns(todayISO().slice(0, 7)).b2cs).length === 0 : true), 'quotation not in GST returns');
   await page.evaluate(id => convertQuote(id), qid); await page.waitForTimeout(300);
   check(await page.evaluate(() => currentDocType() === 'INV' && $('inv-buyer-name').value === 'Patel Hardware'), 'convert loads quotation into a new invoice');

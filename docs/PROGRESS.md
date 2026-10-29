@@ -43,3 +43,18 @@ Why v7.5 still looked like an admin template: identical white cards on grey ever
 | GST Returns hero in the ink statement style; dialogs, toasts, sign-in, setup, PIN pad restyled; light + dark | ✅ |
 | Android status/nav bars follow the page colour | ✅ (verify on device) |
 | Web tests: 244/244 (tests updated for rail + month headings; new checks for chart, ring, KPIs, month grouping, icons) | ✅ |
+
+## v8.0.1 — print/PDF fix + QA (29 Oct 2026)
+
+User report: invoice 59/26-27 printed from the web app with the three copies running into each other (Duplicate split across sheets 1–2), the preview's drop shadow printed, and the page shifted sideways.
+
+| Finding | Cause | Fix | Test |
+|---|---|---|---|
+| Copies not on separate A4 sheets (since v7 on browsers; same CSS drives Android print/PDF) | the screen preview wraps each page in `.page-scale-wrap`, so the print rule `.a4-page + .a4-page { page-break-before }` never matched | print rules in the core stylesheet: each wrapper/page after the first starts a new sheet | web test reads each PDF sheet: Original / Duplicate / Triplicate in order; checks break-before per copy |
+| Shadow and left offset printed | v8 screen styles (paper shadow, 252/84 px rail padding) outranked the print rules | print rules use IDs + !important: paper only, no padding, shadow, transform or animation | web test: no shadow, no offset, no scaling in print |
+| Old test passed while broken | it only counted pages (3 short copies run together also make ~3 sheets) | test strengthened (above) | fails on the old build, passes on the fix |
+| Quotation printed "Against Invoice – dt. – / Reason: Sales Return" | note-only fields shown for every non-invoice | note fields only for credit/debit notes (paper, stored data, form load) | web test |
+| Quotation compliance panel said "Select the original invoice this note is issued against" | same | same | web test |
+| WhatsApp text for a quotation said "Against Invoice: (Sales Return)"; every message claimed "PDF attached" although the web button sends text only | same; wording | quotation shows "Valid till"; text says the PDF is shared separately | web test |
+
+Print matrix verified with real Chromium PDFs: 1366 / 800 / 412 px windows × Modern / Classic × 5 / 45 items × 3 copies → one copy per sheet (45 items: 2 sheets per copy, header row repeated, totals on the last), text inside the printable area; dark mode + Hindi UI → white paper, English invoice. End-to-end QA (25 checks): intra/inter-state GST, part payment + TDS, mark paid, delete receipt, edit & re-save, duplicate, cancel, bill of supply, export under LUT, reverse charge, credit note, quotation, stock with returns + stock-in, sales register / GSTR CSV, JSON backup, settings, password change. Web tests 266/266.
