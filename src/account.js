@@ -181,7 +181,10 @@
       await openAccount(s);           // reloads the app on success
     } catch (e) {
       busy = false; if (btn) btn.disabled = false;
-      msg(e.code === 'cancelled' ? '' : e.code === 'offline' ? t('No internet connection. You need internet to sign in the first time on this phone.') : e.message, e.code !== 'cancelled');
+      msg(e.code === 'cancelled' ? '' : e.code === 'offline'
+        ? (config.auth === 'test' ? t('This TEST build signs in only to the automatic test server, which is not reachable from a normal phone. Install the INTERNAL-TESTKEY APK instead.')
+          : t('No internet connection. You need internet to sign in the first time on this phone.'))
+        : e.message, e.code !== 'cancelled');
     }
   }
 
