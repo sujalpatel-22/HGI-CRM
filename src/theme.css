@@ -106,7 +106,7 @@ main button.rounded, main button.rounded-lg { border-radius: 10px; }
 #quick-actions button.qa-primary i { background: var(--saffron); color: #fff; border-color: transparent; box-shadow: 0 8px 18px -8px rgba(245, 130, 32, .8); }
 #quick-actions button:active i { transform: scale(.94); }
 html.dark #quick-actions button:not(.qa-primary) i { color: #dbe3f5; }
-@media (min-width: 768px) { #quick-actions { display: none; } }
+@media screen and (min-width: 768px) { #quick-actions { display: none; } }
 
 /* alerts as a quiet list with an icon per severity */
 #dash-alerts > div { border: 0 !important; border-radius: 12px !important; padding: 11px 12px 11px 40px !important; font-size: 13px !important; line-height: 1.45; position: relative; color: var(--text-2) !important; }
@@ -149,7 +149,7 @@ html.dark .ed-head i { color: #9fbdf0; }
 .sec-summary { order: 6; } .sec-supply { order: 7; } .sec-transport { order: 8; } .sec-edoc { order: 9; } .sec-terms { order: 10; } .ed-savebar { order: 11; }
 /* customer: the saved-buyer picker leads, billing / shipping blocks become plain columns */
 .sec-parties { display: grid !important; grid-template-columns: 1fr; gap: 14px !important; }
-@media (min-width: 768px) { .sec-parties { grid-template-columns: 1fr 1fr; } .sec-parties > .ed-head, .sec-parties > .ed-pick { grid-column: 1 / -1; } }
+@media screen and (min-width: 768px) { .sec-parties { grid-template-columns: 1fr 1fr; } .sec-parties > .ed-head, .sec-parties > .ed-pick { grid-column: 1 / -1; } }
 .sec-parties > .ed-pick select { background: var(--surface-2) !important; border-style: dashed !important; font-weight: 600; }
 .sec-parties > .ed-pick label { color: var(--muted) !important; }
 .sec-parties > .ed-pick label i { color: var(--saffron); }
@@ -234,7 +234,7 @@ html.dark #invoice-preview-container { background: #060a14; }
 /* =====================================================================
    PHONES
    ===================================================================== */
-@media (max-width: 767px) {
+@media screen and (max-width: 767px) {
   #app-container > header > div { padding-top: 10px !important; padding-bottom: 10px !important; }
   #app-container > header p.text-xs.text-blue-200 { display: none; }
   #app-container > header h1 { font-size: 16px !important; }
@@ -364,7 +364,7 @@ html.dark #invoice-preview-container { background: #060a14; }
 }
 
 /* ---------- desktop / tablet: the hero sits in the first row ---------- */
-@media (min-width: 768px) {
+@media screen and (min-width: 768px) {
   #hero { display: grid; grid-template-columns: 1.1fr 1fr; column-gap: 32px; align-items: end; }
   #hero .hero-top, #hero .hero-amount, #hero .hero-sub { grid-column: 1; }
   #hero .ledger, #hero .hero-legend { grid-column: 1; }
@@ -404,7 +404,7 @@ html.dark main .bg-slate-100.text-slate-700:not(.a4-page *), html.dark main .bg-
 #hero .age:nth-child(2) .age-bar i { background: #f5b84a; } #hero .age:nth-child(3) .age-bar i { background: #ff9461; }
 #hero .age b { font-weight: 600; color: #fff; min-width: 84px; text-align: right; }
 #hero .age.zero b, #hero .age.zero .age-l { color: rgba(255, 255, 255, .38); }
-@media (min-width: 768px) {
+@media screen and (min-width: 768px) {
   #hero .hero-aging { grid-column: 2; grid-row: 1 / span 5; border-top: 0; padding-top: 0; margin: 0; align-self: center; }
 }
 
@@ -454,7 +454,7 @@ input.uppercase::placeholder { text-transform: none; }
 .inp::placeholder { color: var(--faint); }
 
 /* item card: description full width, amount as the card's figure */
-@media (max-width: 767px) {
+@media screen and (max-width: 767px) {
   #invoice-items-body tr { padding: 12px !important; gap: 8px 8px !important; }
   #invoice-items-body td:nth-child(2) { padding-right: 48px !important; }
   #invoice-items-body td:nth-child(2) input { width: 100% !important; }
@@ -465,11 +465,11 @@ input.uppercase::placeholder { text-transform: none; }
   #invoice-items-body td:nth-child(9) button { background: rgba(200, 54, 79, .08) !important; }
 }
 /* list rows: the avatar sits in its own gutter so the party name keeps its width */
-@media (max-width: 767px) {
+@media screen and (max-width: 767px) {
   #dash-recent-table tr { padding-left: 62px !important; min-height: 64px; }
   #dash-recent-table .avatar { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); margin: 0; }
 }
-@media (max-width: 767px) { .dash-lists > div.bg-white:first-child > .panel-h { padding: 0 16px; } }
+@media screen and (max-width: 767px) { .dash-lists > div.bg-white:first-child > .panel-h { padding: 0 16px; } }
 
 /* Documents: filter chips (counts per status); selects/dates behind "Filters" on phones */
 .chips { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 10px; margin: 4px 0 6px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
@@ -484,7 +484,7 @@ html.dark .chips button.on { background: #e9edf6; border-color: #e9edf6; color: 
 html.dark .chips button.on b { color: #4b5878; }
 .chips .chip-more { margin-left: auto; }
 .chips .chip-more.has-extra { border-color: var(--saffron); color: var(--saffron-ink); }
-@media (max-width: 767px) {
+@media screen and (max-width: 767px) {
   .doc-filters > select, .doc-filters > input[type=date] { display: none !important; }
   .doc-filters.show-more > select, .doc-filters.show-more > input[type=date] { display: block !important; flex: 1 1 45%; }
   .doc-filters { gap: 8px !important; }
@@ -492,7 +492,7 @@ html.dark .chips button.on b { color: #4b5878; }
   .doc-filters > button[onclick="exportCSV()"] { display: none; }
   .doc-filters.show-more > button[onclick="exportCSV()"] { display: inline-flex; background: var(--surface) !important; color: var(--text-2) !important; border: 1px solid var(--line-2); }
 }
-@media (min-width: 768px) { .chips .chip-more { display: none; } }
+@media screen and (min-width: 768px) { .chips .chip-more { display: none; } }
 /* dialogs: sentence-case headings and labels like the rest of the app */
 .fixed.inset-0.z-50 .uppercase:not(.a4-page *) { text-transform: none !important; letter-spacing: 0 !important; }
 .fixed.inset-0.z-50 h3, .fixed.inset-0.z-50 h4 { color: var(--text); }
@@ -565,7 +565,7 @@ html.dark .p-igst { background: #c7d6f5; } html.dark .p-cgst { background: #6f9b
 .re-list em { font-style: normal; color: var(--faint); margin-left: 4px; }
 #tab-returns { display: grid; gap: 14px; }
 #tab-returns.hidden { display: none; }
-@media (max-width: 767px) {
+@media screen and (max-width: 767px) {
   .period { width: 100%; justify-content: space-between; }
   .rh-amount { font-size: 30px; }
   .ret-sec > summary { grid-template-columns: auto 1fr auto; padding: 13px 14px; }
@@ -587,9 +587,9 @@ html.dark .p-igst { background: #c7d6f5; } html.dark .p-cgst { background: #6f9b
 .dlg-actions button:last-child { box-shadow: 0 8px 18px -10px rgba(245, 130, 32, .9); }
 #payment-modal .dlg-actions button:last-child { box-shadow: 0 8px 18px -10px rgba(18, 128, 92, .9); }
 #payment-modal .dlg-actions button:first-child { color: var(--green) !important; border-color: rgba(18, 128, 92, .45) !important; }
-@media (min-width: 768px) { .dlg-actions { grid-template-columns: auto auto; justify-content: end; } .dlg-actions button { padding: 0 20px !important; } }
+@media screen and (min-width: 768px) { .dlg-actions { grid-template-columns: auto auto; justify-content: end; } .dlg-actions button { padding: 0 20px !important; } }
 /* the grab handle that says "this is a sheet" on phones */
-@media (max-width: 767px) {
+@media screen and (max-width: 767px) {
   .fixed.inset-0.z-50:not(#login-overlay):not(#reset-password-modal) > .bg-white { position: relative; padding-top: 26px !important; }
   .fixed.inset-0.z-50:not(#login-overlay):not(#reset-password-modal) > .bg-white::before { content: ''; position: absolute; top: 9px; left: 50%; width: 40px; height: 5px; margin-left: -20px; border-radius: 9px; background: var(--line-2); }
   .fixed.inset-0.z-50.flex:not(#login-overlay) > .bg-white { animation: sheetUp .24s var(--ease); }
@@ -614,16 +614,16 @@ main button:active, #bottom-nav button:active { transform: scale(.97); }
 #hero .ledger .seg { transition: flex-grow .5s var(--ease); }
 
 /* small phones: the demo banner stays on one line */
-@media (max-width: 400px) { #demo-banner .db-more { display: none; } }
+@media screen and (max-width: 400px) { #demo-banner .db-more { display: none; } }
 /* tablets: the top navigation fits one row (icons only between 768 and 1180 px; names stay for screen readers) */
-@media (min-width: 768px) and (max-width: 1180px) {
+@media screen and (min-width: 768px) and (max-width: 1180px) {
   #app-container > header nav { flex-wrap: nowrap !important; }
   #app-container > header nav .nav-btn { font-size: 0 !important; padding: 9px 11px !important; }
   #app-container > header nav .nav-btn i { font-size: 15px; margin: 0 !important; }
   #app-container > header > div > div:first-child p { display: none; }
 }
 /* tablet/desktop item table: the description gets the room */
-@media (min-width: 768px) { #invoice-items-body .item-desc { min-width: 200px; } }
+@media screen and (min-width: 768px) { #invoice-items-body .item-desc { min-width: 200px; } }
 #live-total { display: inline-flex; flex-direction: column; justify-content: center; margin-right: auto; padding: 0 10px; line-height: 1.15; }
 #live-total small { font-size: 11px; color: var(--muted); font-weight: 500; }
 #live-total b { font-size: 17px; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }

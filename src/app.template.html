@@ -38,23 +38,24 @@
       .no-print { display: none !important; }
       .page-break-avoid { page-break-inside: avoid; }
       .a4-page { box-shadow: none !important; border: none !important; max-width: none !important; width: 200mm !important;
-        padding: 5mm !important; min-height: 284mm !important; margin: 0 !important; }
+        padding: 5mm !important; min-height: 280mm !important; margin: 0 !important; }
       .a4-page + .a4-page { page-break-before: always; }
       .inv-table thead { display: table-header-group; }
       .inv-table tr { page-break-inside: avoid; }
       /* Print = the paper only. The screen preview wraps each page in .page-scale-wrap (to fit small screens) and the
          v7/v8 shell adds a side rail, shadows and a desk; none of that may reach the printer or the PDF.
          ID + !important so later screen stylesheets (theme/studio) can never override these. */
-      html body, html body #app-container, html body #preview-section, html body #invoice-preview-container {
+      html body, html body #app-container#app-container, html body #preview-section#preview-section, html body #invoice-preview-container#invoice-preview-container {
         padding: 0 !important; margin: 0 !important; border: 0 !important; background: #fff !important; box-shadow: none !important;
         min-height: 0 !important; max-width: none !important; width: auto !important; display: block !important; }
-      html body #invoice-preview-container .page-scale-wrap { display: block !important; width: auto !important; height: auto !important; overflow: visible !important;
+      html body #invoice-preview-container#invoice-preview-container .page-scale-wrap { display: block !important; width: auto !important; height: auto !important; overflow: visible !important;
         margin: 0 !important; padding: 0 !important; transform: none !important; animation: none !important; }
-      html body #invoice-preview-container .a4-page { box-shadow: none !important; margin: 0 !important; transform: none !important; animation: none !important; }
+      html body #invoice-preview-container#invoice-preview-container .a4-page { box-shadow: none !important; margin: 0 !important; transform: none !important; animation: none !important; }
       /* every copy (Original / Duplicate / Triplicate) starts on a new sheet, whether or not it is wrapped */
-      html body #invoice-preview-container .page-scale-wrap + .page-scale-wrap,
-      html body #invoice-preview-container .a4-page + .a4-page { break-before: page !important; page-break-before: always !important; }
-      html body #invoice-preview-container > :first-child, html body #invoice-preview-container > :first-child > .a4-page { break-before: auto !important; page-break-before: auto !important; }
+      html body #invoice-preview-container#invoice-preview-container .page-scale-wrap + .page-scale-wrap,
+      html body #invoice-preview-container#invoice-preview-container .a4-page + .a4-page { break-before: page !important; page-break-before: always !important; }
+      html body #invoice-preview-container#invoice-preview-container > :first-child,
+      html body #invoice-preview-container#invoice-preview-container > :first-child > .a4-page { break-before: auto !important; page-break-before: auto !important; }
     }
 
     .a4-page {
@@ -2205,20 +2206,23 @@
 
     // Short invoices: grow the item table to fill the page so there is no blank gap above the totals.
     // Long invoices (more than one page) are left as they are.
+    // The filler is sized against the PRINTED page height (280 mm; the printable area is 287 mm), not the on-screen box,
+    // so a print engine that sets text a little taller than the screen (older Android WebViews: ~5 mm) still fits one sheet.
+    const PRINT_PAGE_H = '280mm';
     function fitInvoicePages() {
       const container = $('invoice-preview-container');
       if (!container) return;
       container.querySelectorAll('.a4-page').forEach(page => {
         page.querySelectorAll('tr.fill-row').forEach(r => r.remove());
         const tbody = page.querySelector('.inv-table tbody');
-        if (!tbody || !tbody.rows.length) return;
-        const target = page.offsetHeight;                 // height forced by min-height (one A4 page)
-        if (!target) return;                              // not visible yet
+        if (!tbody || !tbody.rows.length || !page.offsetHeight) return;   // not visible yet
+        page.style.minHeight = PRINT_PAGE_H;
+        const target = page.offsetHeight;                 // one printed page
         page.style.minHeight = '0px';
         const natural = page.offsetHeight;                // height the content really needs
         page.style.minHeight = '';
-        const gap = Math.floor(target - natural - 16);    // ~4 mm safety margin: phone print engines lay text out a few px taller (blank spill-over sheets seen on Android 11/13)
-        if (natural > target || gap < 10) return;
+        const gap = Math.floor(target - natural - 6);
+        if (natural > target || gap < 10) return;         // long invoice: let it run onto more sheets
         const tr = document.createElement('tr');
         tr.className = 'fill-row';
         tr.innerHTML = Array.from(tbody.rows[0].cells, () => `<td style="height:${gap}px"></td>`).join('');

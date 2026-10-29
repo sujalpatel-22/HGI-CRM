@@ -17,7 +17,7 @@ body { overscroll-behavior-y: none; }
 /* ---------- bottom tab bar (phones & small tablets) ---------- */
 #bottom-nav { display: none; }
 #more-sheet { display: none; }
-@media (max-width: 767px) {
+@media screen and (max-width: 767px) {
   #bottom-nav {
     display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
     height: calc(var(--nav-h) + var(--sab)); padding-bottom: var(--sab); padding-left: var(--sal); padding-right: var(--sar);

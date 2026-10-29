@@ -157,11 +157,13 @@ for (const vp of VIEWPORTS) {
     const unit = p => (p.parentElement.classList.contains('page-scale-wrap') ? p.parentElement : p);
     return { n: pg.length, breaks: pg.slice(1).every(p => getComputedStyle(unit(p)).breakBefore === 'page'), first: getComputedStyle(unit(pg[0])).breakBefore !== 'page',
       shadow: pg.some(p => getComputedStyle(p).boxShadow !== 'none'), left: Math.round(pg[0].getBoundingClientRect().left),
-      chrome: ['app-container', 'preview-section', 'invoice-preview-container'].map(id => getComputedStyle(document.getElementById(id))).some(cs => parseFloat(cs.paddingLeft) > 0 || parseFloat(cs.marginLeft) > 0),
-      scaled: pg.some(p => getComputedStyle(p).transform !== 'none') };
+      chrome: ['app-container', 'preview-section', 'invoice-preview-container'].map(id => getComputedStyle(document.getElementById(id))).some(cs => ['paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight', 'marginTop', 'marginBottom', 'marginLeft'].some(k => parseFloat(cs[k]) > 0)),
+      scaled: pg.some(p => getComputedStyle(p).transform !== 'none'),
+      fillOk: pg.every(p => { const mm = p.getBoundingClientRect().height * 25.4 / 96; return mm <= 287; }) };
   });
   check(pl.n === 3 && pl.breaks && pl.first, `print: each of the 3 copies starts on a new A4 sheet`);
-  check(!pl.shadow && !pl.chrome && !pl.scaled && pl.left <= 1, `print: paper only — no shadow, side offset or screen scaling (left ${pl.left}px)`);
+  check(!pl.shadow && !pl.chrome && !pl.scaled && pl.left <= 1, `print: paper only — no shadow, padding, offset or screen scaling (left ${pl.left}px)`);
+  check(pl.fillOk, `print: page filler sized for one printed sheet (≤ 280 mm)`);
   const pdf = await page.pdf({ format: 'A4', printBackground: true, preferCSSPageSize: true });
   await page.emulateMedia({ media: 'screen' });
   const pages = (pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length;

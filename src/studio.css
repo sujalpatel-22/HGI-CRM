@@ -45,8 +45,8 @@ html.dark {
     linear-gradient(160deg, #18275e 0%, #0f1a42 55%, #0a1230 100%);
 }
 html.rupee-fix { --f-display: 'HGI Rupee', 'Inter Display', 'Inter', sans-serif; }
-@media (min-width: 768px) { html.studio { --rail-w: 84px; } }
-@media (min-width: 1180px) { html.studio { --rail-w: 252px; } }
+@media screen and (min-width: 768px) { html.studio { --rail-w: 84px; } }
+@media screen and (min-width: 1180px) { html.studio { --rail-w: 252px; } }
 
 /* ---------- canvas ---------- */
 body { background-color: var(--paper) !important; color: var(--text);
@@ -83,7 +83,7 @@ html.dark #app-container .page-ic { background: var(--surface-3); border: 1px so
    SHELL — side rail (tablet / desktop)
    ===================================================================== */
 #rail { display: none; }
-@media (min-width: 768px) {
+@media screen and (min-width: 768px) {
   html.studio #app-container > header { display: none !important; }
   html.studio #app-container { padding-left: var(--rail-w); }
   #rail { display: flex; flex-direction: column; position: fixed; z-index: 36; left: 0; top: 0; bottom: 0; width: var(--rail-w);
@@ -119,7 +119,7 @@ html.dark #app-container .page-ic { background: var(--surface-3); border: 1px so
   html.studio #demo-banner { margin-left: 0; }
 }
 /* tablets: icon rail */
-@media (min-width: 768px) and (max-width: 1179px) {
+@media screen and (min-width: 768px) and (max-width: 1179px) {
   #rail { padding-left: 14px; padding-right: 14px; align-items: stretch; }
   .rail-brand { justify-content: center; padding: 2px 0 14px; }
   .rail-co, .rail-cap, .rail-btn span, .rail-new span { display: none; }
@@ -134,7 +134,7 @@ html.dark #app-container .page-ic { background: var(--surface-3); border: 1px so
    SHELL — phones: light app bar + floating dock
    ===================================================================== */
 .app-avatar { display: none; }
-@media (max-width: 767px) {
+@media screen and (max-width: 767px) {
   :root { --nav-h: 80px; }
   html.studio #app-container > header { position: sticky; top: 0; z-index: 32; color: var(--text) !important; border-bottom: 1px solid transparent !important;
     background: color-mix(in srgb, var(--paper) 84%, transparent) !important; -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5);
@@ -179,14 +179,14 @@ html.dark #app-container .page-ic { background: var(--surface-3); border: 1px so
 #demo-banner button { border-radius: 999px !important; border-color: rgba(245, 130, 32, .45) !important; background: var(--surface) !important; color: var(--saffron-ink) !important; padding: 5px 12px !important; }
 html.dark #demo-banner { color: #ffb36b !important; }
 html.dark #demo-banner button { color: #ffb36b !important; }
-@media (max-width: 767px) { html.studio #demo-banner { position: static; } }
+@media screen and (max-width: 767px) { html.studio #demo-banner { position: static; } }
 
 /* ---------- main column ---------- */
-@media (min-width: 768px) {
+@media screen and (min-width: 768px) {
   html.studio main { padding: 30px 32px 56px !important; max-width: 1480px !important; }
   html.studio #preview-section { max-width: none !important; }
 }
-@media (min-width: 1180px) { html.studio main { padding: 36px 44px 64px !important; } }
+@media screen and (min-width: 1180px) { html.studio main { padding: 36px 44px 64px !important; } }
 
 /* =====================================================================
    CARDS (shared)
@@ -223,12 +223,12 @@ html.dark #app-container .panel-link { color: var(--saffron-2) !important; }
 #bento .b-recent { grid-column: span 8; }
 #bento .b-owes { grid-column: span 4; }
 #bento .b-qa { grid-column: 1 / -1; }
-@media (min-width: 768px) and (max-width: 1179px) {
+@media screen and (min-width: 768px) and (max-width: 1179px) {
   #bento { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   #bento .b-hero, #bento .b-kpis, #bento .b-flow, #bento .b-recent { grid-column: 1 / -1; }
   #bento .b-ring, #bento .b-alerts, #bento .b-owes { grid-column: span 3; }
 }
-@media (max-width: 767px) {
+@media screen and (max-width: 767px) {
   #bento { display: flex; flex-direction: column; gap: 18px; }
   #bento .b-hero { order: 1; } #bento .b-qa { order: 2; } #bento .b-kpis { order: 3; } #bento .b-flow { order: 4; } #bento .b-alerts { order: 5; }
   #bento .b-ring { order: 6; } #bento .b-recent { order: 7; } #bento .b-owes { order: 8; }
@@ -275,8 +275,8 @@ html.dark #app-container .panel-link { color: var(--saffron-2) !important; }
 #hero.b-hero .age .age-bar i { background: #ff8aa3 !important; }
 #hero.b-hero .age.zero { background: rgba(255, 255, 255, .035); }
 #hero.b-hero .age.zero b, #hero.b-hero .age.zero .age-l { color: rgba(255, 255, 255, .36); }
-@media (max-width: 1179px) and (min-width: 768px) { #hero.b-hero .hero-amount { font-size: 56px !important; } }
-@media (max-width: 767px) {
+@media screen and (max-width: 1179px) and (min-width: 768px) { #hero.b-hero .hero-amount { font-size: 56px !important; } }
+@media screen and (max-width: 767px) {
   #hero.b-hero { display: block; padding: 22px 20px 20px !important; border-radius: 26px !important; }
   #hero.b-hero::before { width: 420px; height: 420px; right: -170px; top: -150px; }
   #hero.b-hero .hero-amount { font-size: 46px !important; margin-top: 14px; }
@@ -285,7 +285,7 @@ html.dark #app-container .panel-link { color: var(--saffron-2) !important; }
   #hero.b-hero .age { min-height: 64px; padding: 10px 12px; }
   #hero.b-hero .age b { font-size: 15px !important; }
 }
-@media (max-width: 380px) { #hero.b-hero .hero-amount { font-size: 40px !important; } }
+@media screen and (max-width: 380px) { #hero.b-hero .hero-amount { font-size: 40px !important; } }
 
 /* ---------- collection ring ---------- */
 #app-container .b-ring { display: flex; flex-direction: column; }
@@ -329,8 +329,8 @@ html.dark #app-container .panel-link { color: var(--saffron-2) !important; }
 #app-container .spark.sp-saffron .sp-line { stroke: var(--saffron); } #app-container .spark.sp-saffron .sp-area, #app-container .spark.sp-saffron circle { fill: var(--saffron); }
 #app-container .spark.sp-mint .sp-line { stroke: var(--mint); } #app-container .spark.sp-mint .sp-area, #app-container .spark.sp-mint circle { fill: var(--mint); }
 #app-container .spark circle { stroke: var(--surface); stroke-width: 2; }
-@media (min-width: 768px) and (max-width: 1179px) { #app-container #stat-strip.b-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; } }
-@media (max-width: 767px) {
+@media screen and (min-width: 768px) and (max-width: 1179px) { #app-container #stat-strip.b-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; } }
+@media screen and (max-width: 767px) {
   #app-container #stat-strip.b-kpis { display: grid !important; grid-auto-flow: column; grid-template-columns: none; grid-auto-columns: 74%; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory;
     margin: 0 -16px !important; padding: 2px 16px 6px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
   #app-container #stat-strip.b-kpis::-webkit-scrollbar { display: none; }
@@ -385,7 +385,7 @@ html.dark #app-container .panel-link { color: var(--saffron-2) !important; }
 #app-container .b-flow.hide-received svg.flow .r-line, #app-container .b-flow.hide-received svg.flow .r-area, #app-container .b-flow.hide-received svg.flow .r-dot, #app-container .b-flow.hide-received svg.flow .hot { opacity: 0 !important; }
 #app-container .b-flow.hide-billed .fr-b, #app-container .b-flow.hide-received .fr-r { display: none; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-@media (max-width: 767px) { #app-container .flow-read .fr-p { margin-left: 0; } #app-container .b-flow .card-h { flex-wrap: wrap; } }
+@media screen and (max-width: 767px) { #app-container .flow-read .fr-p { margin-left: 0; } #app-container .b-flow .card-h { flex-wrap: wrap; } }
 
 /* ---------- needs attention ---------- */
 #app-container #dash-alerts { display: grid; gap: 8px; }
@@ -405,7 +405,7 @@ html.dark #app-container .panel-link { color: var(--saffron-2) !important; }
 #app-container .al-go { align-self: center; color: var(--faint); transition: transform .2s var(--ease), color .2s; }
 
 /* ---------- recent documents & refined tables ---------- */
-@media (min-width: 768px) {
+@media screen and (min-width: 768px) {
   #app-container table thead.bg-slate-50, #app-container table thead.bg-slate-100, #app-container .rpt-table thead th { background: transparent !important; }
   #app-container main table:not(.rpt-table):not(.inv-table) thead th { font: 600 11px var(--f-ui) !important; letter-spacing: .1em; text-transform: uppercase !important; color: var(--faint) !important;
     border-bottom: 1px solid var(--line) !important; padding: 10px 12px !important; background: transparent !important; }
@@ -441,11 +441,11 @@ html.dark #app-container .avatar[data-tone], html.dark .item-glyph[data-tone] { 
 /* =====================================================================
    INVOICE EDITOR
    ===================================================================== */
-@media (min-width: 1180px) {
+@media screen and (min-width: 1180px) {
   #tab-create-invoice > .grid { grid-template-columns: minmax(0, 1fr) 400px !important; gap: 30px !important; }
   #tab-create-invoice aside.ed-side { position: sticky; top: 24px; }
 }
-@media (max-width: 1179px) { #paper-live { display: none !important; } }
+@media screen and (max-width: 1179px) { #paper-live { display: none !important; } }
 #tab-create-invoice > .grid > div.bg-white:first-child > div:first-child { margin-bottom: 18px !important; align-items: center !important; }
 #tab-create-invoice > .grid > div.bg-white:first-child > div:first-child button { height: 40px; padding: 0 16px !important; border-radius: 12px !important; }
 #app-container #edit-mode-badge { background: var(--saffron-soft) !important; color: var(--saffron-ink) !important; border-radius: 999px !important; padding: 5px 12px !important; font-weight: 600 !important; }
@@ -458,7 +458,7 @@ html.dark #app-container #doc-seg .seg-ind { background: #222c49; }
 #app-container #doc-seg button.on { color: var(--text); }
 /* phones: section jump bar */
 #ed-jump { display: none; }
-@media (max-width: 767px) {
+@media screen and (max-width: 767px) {
   #ed-jump { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; position: sticky; top: calc(60px + var(--sat)); z-index: 22; margin: -4px -16px 14px; padding: 8px 16px;
     background: color-mix(in srgb, var(--paper) 86%, transparent); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
   #ed-jump::-webkit-scrollbar { display: none; }
@@ -485,7 +485,7 @@ html.dark #app-container #doc-seg .seg-ind { background: #222c49; }
 #app-container #inv-num { font: 700 16px var(--f-display) !important; color: var(--text) !important; letter-spacing: .01em; background: var(--surface-2) !important; }
 #app-container .sec-parties > .ed-pick select { border-style: dashed !important; background: var(--surface-2) !important; font-weight: 600; min-height: 50px; }
 /* line items: an inline-edit ledger on tablet/desktop */
-@media (min-width: 768px) {
+@media screen and (min-width: 768px) {
   #app-container .sec-items table thead tr { background: transparent !important; border: 0 !important; }
   #app-container .sec-items table th { border: 0 !important; border-bottom: 1px solid var(--line) !important; background: transparent !important; font: 600 10.5px var(--f-ui) !important;
     letter-spacing: .1em; text-transform: uppercase; color: var(--faint) !important; padding: 8px 6px !important; }
@@ -529,7 +529,7 @@ html.dark #app-container #invoice-form > .ed-savebar { background: rgba(26, 35, 
 #app-container .ed-savebar button span.text-\[10px\] { display: none; }
 #app-container .ed-savebar button.saved, #preview-section button.saved { animation: saved 1.3s var(--ease); }
 @keyframes saved { 0% { box-shadow: 0 0 0 0 rgba(61, 220, 151, .7); background-color: #12a77a; } 60% { box-shadow: 0 0 0 12px rgba(61, 220, 151, 0); background-color: #12a77a; } 100% { box-shadow: none; } }
-@media (max-width: 767px) {
+@media screen and (max-width: 767px) {
   #app-container #invoice-form > .ed-savebar { bottom: calc(var(--nav-h) + var(--sab) + 4px) !important; padding: 8px !important; border-radius: 20px !important; }
   #app-container .ed-savebar button { height: 48px; padding: 0 14px !important; font-size: 14px !important; flex: 1; }
   #app-container #live-total b { font-size: 18px !important; }
@@ -611,7 +611,7 @@ html.dark #preview-section .pv-actions button[onclick="triggerPrint()"] { backgr
 #invoice-preview-container .a4-page { box-shadow: 0 1px 2px rgba(11, 20, 48, .06), 0 8px 16px -8px rgba(11, 20, 48, .12), 0 40px 70px -36px rgba(11, 20, 48, .5) !important; margin-bottom: 26px !important; }
 #invoice-preview-container.rise .page-scale-wrap, #invoice-preview-container.rise > .a4-page { animation: rise .55s var(--ease) both; }
 @keyframes rise { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: none; } }
-@media (max-width: 767px) {
+@media screen and (max-width: 767px) {
   #preview-section.studio { padding: 14px 12px calc(var(--nav-h) + var(--sab) + 28px) !important; }
   #preview-section .pv-bar { top: calc(64px + var(--sat)); padding: 10px !important; border-radius: 18px !important; }
   #preview-section .pv-actions button { flex: 1 1 45%; justify-content: center; }
@@ -633,7 +633,7 @@ html.dark #preview-section .pv-actions button[onclick="triggerPrint()"] { backgr
 #app-container .search-box > .inp { padding-left: 42px !important; width: 100% !important; border-radius: 14px !important; background: var(--surface) !important; }
 #app-container .studio-list > .bg-white > .flex:first-child button[onclick^="open"] { height: 46px; padding: 0 20px !important; border-radius: 14px !important; display: inline-flex; align-items: center; gap: 8px;
   background: linear-gradient(180deg, var(--saffron-2), var(--saffron)) !important; box-shadow: 0 10px 22px -10px rgba(245, 130, 32, .9); --ic-ac: #fff; white-space: nowrap; }
-@media (max-width: 767px) {
+@media screen and (max-width: 767px) {
   #app-container .page-ic { width: 42px; height: 42px; border-radius: 14px; font-size: 18px; }
   #app-container .page-title, #app-container #form-title, #app-container .dash-head h2, #app-container .ret-head h2 { font-size: 27px !important; }
   #app-container .page-sub { font-size: 14px !important; }
@@ -643,14 +643,14 @@ html.dark #preview-section .pv-actions button[onclick="triggerPrint()"] { backgr
 }
 /* documents register */
 #app-container .doc-filters > .search-box { flex: 1 1 260px; }
-@media (max-width: 767px) { #app-container .doc-filters > .search-box { flex: 1 1 100%; } }
+@media screen and (max-width: 767px) { #app-container .doc-filters > .search-box { flex: 1 1 100%; } }
 #app-container #tab-invoices .doc-filters > .inp, #app-container #tab-invoices .doc-filters > select { min-height: 46px; border-radius: 14px !important; }
 #app-container #tab-invoices .doc-filters > button[onclick="exportCSV()"] { height: 46px; border-radius: 14px !important; background: var(--surface) !important; color: var(--text) !important; border: 1px solid var(--line-2); padding: 0 16px !important; display: inline-flex; align-items: center; gap: 8px; }
 #app-container .chips { padding-bottom: 14px; }
 #app-container .chips button { height: 38px; min-height: 38px !important; padding: 0 15px; font-size: 13.5px; transition: all .2s var(--ease); }
 #app-container .chips button:hover { border-color: var(--text-2); }
 #app-container #tab-invoices .overflow-x-auto { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); box-shadow: var(--sh-card); max-height: none !important; }
-@media (min-width: 768px) {
+@media screen and (min-width: 768px) {
   #app-container #tab-invoices thead { position: static !important; }
   #app-container #invoices-list-tbody td:nth-child(2) { font: 650 14px var(--f-display) !important; color: var(--text) !important; }
   #app-container #invoices-list-tbody td:nth-child(5) { font-weight: 600; color: var(--text); }
@@ -667,11 +667,11 @@ html.dark #preview-section .pv-actions button[onclick="triggerPrint()"] { backgr
 #app-container #invoices-list-tbody tr.month-row:first-child td { padding-top: 16px !important; border-radius: var(--r-card) var(--r-card) 0 0; }
 #app-container #invoices-list-tbody tr.month-row:hover { background: transparent !important; }
 #app-container tr.month-row td { display: flex !important; align-items: baseline; gap: 12px; }
-@media (min-width: 768px) { #app-container tr.month-row td { display: table-cell !important; } #app-container tr.month-row td > span { margin-right: 12px; } }
+@media screen and (min-width: 768px) { #app-container tr.month-row td { display: table-cell !important; } #app-container tr.month-row td > span { margin-right: 12px; } }
 #app-container .mr-m { font: 700 15.5px var(--f-display); color: var(--text); letter-spacing: -.01em; }
 #app-container .mr-n { font-size: 12.5px; color: var(--muted); }
 #app-container .mr-v { margin-left: auto; float: right; font: 650 14px var(--f-display); color: var(--text-2); font-variant-numeric: tabular-nums; }
-@media (max-width: 767px) {
+@media screen and (max-width: 767px) {
   #app-container #tab-invoices .overflow-x-auto { background: transparent; border: 0; box-shadow: none; }
   #app-container #invoices-list-tbody tr.month-row { display: block !important; padding: 0 !important; background: var(--surface-2) !important; cursor: default; }
   #app-container #invoices-list-tbody tr.month-row::after { display: none !important; }
@@ -685,7 +685,7 @@ html.dark #preview-section .pv-actions button[onclick="triggerPrint()"] { backgr
 #app-container .meter i { display: block; height: 100%; border-radius: 5px; background: linear-gradient(90deg, var(--mint), #4fe3a8); animation: grow .9s var(--ease) both; transform-origin: left; }
 #app-container .meter.low i { background: linear-gradient(90deg, var(--amber), #ffc55c); }
 #app-container .meter.neg i { background: var(--rose); }
-@media (min-width: 768px) {
+@media screen and (min-width: 768px) {
   #app-container #tab-items table, #app-container #tab-customers table { display: block; }
   #app-container #tab-items thead, #app-container #tab-customers thead { display: none; }
   #app-container #tab-items .overflow-x-auto, #app-container #tab-customers .overflow-x-auto { overflow: visible !important; max-height: none !important; }
@@ -723,7 +723,7 @@ html.dark #preview-section .pv-actions button[onclick="triggerPrint()"] { backgr
   #app-container #items-list-tbody td:last-child button:hover, #app-container #customers-list-tbody td:last-child button:hover { background: var(--surface); border-color: var(--text-2); }
   #app-container #items-list-tbody td:last-child button:last-child:hover, #app-container #customers-list-tbody td:last-child button:last-child:hover { color: var(--rose) !important; border-color: var(--rose); --ic-ac: var(--rose); }
 }
-@media (max-width: 767px) {
+@media screen and (max-width: 767px) {
   #app-container #items-list-tbody td:nth-child(1) { display: flex !important; align-items: center; }
   #app-container #items-list-tbody .item-glyph { width: 34px; height: 34px; border-radius: 11px; font-size: 14px; margin-right: 10px; }
   #app-container #items-list-tbody .meter { margin-top: 4px; }
@@ -768,7 +768,7 @@ html.dark #app-container .rs-form { background: var(--surface-3); }
 #app-container .rs-name { font: 650 15px var(--f-display); letter-spacing: -.01em; }
 #app-container .rs-total { font: 700 16px var(--f-display); }
 #app-container .ret-warn { border-radius: 18px; }
-@media (max-width: 767px) {
+@media screen and (max-width: 767px) {
   #app-container .ret-hero { padding: 22px 20px !important; border-radius: 26px !important; }
   #app-container .ret-hero .rh-amount { font-size: 42px !important; }
   #app-container .ret-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
@@ -800,12 +800,12 @@ html.dark #app-container .set-group svg.ic { background: var(--surface-3); }
 #app-container #settings-form > .flex.justify-end { position: sticky; bottom: 18px; z-index: 15; padding: 0 !important; }
 #app-container #settings-form > .flex.justify-end button[type=submit] { height: 52px; padding: 0 28px !important; border-radius: 16px !important; font-size: 15px !important;
   background: linear-gradient(180deg, var(--saffron-2), var(--saffron)) !important; box-shadow: 0 1px 0 rgba(255, 255, 255, .35) inset, 0 14px 28px -12px rgba(245, 130, 32, .95); }
-@media (max-width: 1179px) {
+@media screen and (max-width: 1179px) {
   #tab-settings .set-shell { display: block; }
   #tab-settings .set-index { position: static; flex-direction: row; overflow-x: auto; scrollbar-width: none; margin-bottom: 18px; padding: 6px; }
   #tab-settings .set-index button { flex: 0 0 auto; white-space: nowrap; padding: 9px 13px; }
 }
-@media (max-width: 767px) {
+@media screen and (max-width: 767px) {
   #app-container .set-card { padding: 18px 16px !important; border-radius: 20px !important; }
   #app-container #settings-form > .flex.justify-end { bottom: calc(var(--nav-h) + var(--sab) + 6px); }
   #app-container #settings-form > .flex.justify-end button[type=submit] { width: 100%; }
@@ -820,9 +820,9 @@ html.dark #app-container .set-group svg.ic { background: var(--surface-3); }
 .fixed.inset-0.z-50 .inp { min-height: 46px; border-radius: 12px !important; }
 .dlg-actions button { height: 50px; border-radius: 15px !important; }
 .dlg-actions button:last-child:not(.bg-emerald-600) { background: linear-gradient(180deg, var(--saffron-2), var(--saffron)) !important; }
-@media (min-width: 768px) { .fixed.inset-0.z-50.flex > .bg-white { animation: dlgIn .32s var(--spring); } }
+@media screen and (min-width: 768px) { .fixed.inset-0.z-50.flex > .bg-white { animation: dlgIn .32s var(--spring); } }
 @keyframes dlgIn { from { opacity: 0; transform: translateY(14px) scale(.97); } to { opacity: 1; transform: none; } }
-@media (max-width: 767px) { .fixed.inset-0.z-50 > .bg-white { border-radius: 28px 28px 0 0 !important; padding: 28px 18px calc(20px + var(--sab)) !important; } }
+@media screen and (max-width: 767px) { .fixed.inset-0.z-50 > .bg-white { border-radius: 28px 28px 0 0 !important; padding: 28px 18px calc(20px + var(--sab)) !important; } }
 #more-sheet .sheet { border-radius: 30px 30px 0 0 !important; padding-top: 12px !important; }
 #more-sheet .tile { border-radius: 20px !important; padding: 16px 6px 13px !important; background: var(--surface-2) !important; transition: transform .2s var(--spring); }
 #more-sheet .tile:active { transform: scale(.95); }
@@ -849,7 +849,7 @@ html.dark #more-sheet .sheet { background: var(--surface) !important; }
   font-size: 15px !important; min-height: 52px; border-radius: 16px !important; }
 #login-overlay .inp, #onboarding .inp { min-height: 50px; border-radius: 14px !important; font-size: 15px; }
 #login-overlay > .bg-white > div:first-child { border-bottom: 0 !important; background: var(--surface-2) !important; }
-@media (min-width: 900px) {
+@media screen and (min-width: 900px) {
   #login-overlay > .bg-white { max-width: 900px !important; display: grid; grid-template-columns: 1fr 1fr; min-height: 520px; }
   #login-overlay > .bg-white > div:first-child { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px !important;
     background: radial-gradient(rgba(11, 20, 48, .07) 1px, transparent 1.3px) 0 0 / 16px 16px, #f7f5f0 !important; }
@@ -860,7 +860,7 @@ html.dark #more-sheet .sheet { background: var(--surface) !important; }
 #onboarding .ob-dots span.on { width: 40px; background: var(--saffron); }
 #onboarding .ob-lang { min-height: 54px; border-radius: 16px !important; transition: all .2s var(--ease); }
 #onboarding > .bg-white { padding: 28px !important; }
-@media (min-width: 768px) { #onboarding > .bg-white { max-width: 500px !important; } }
+@media screen and (min-width: 768px) { #onboarding > .bg-white { max-width: 500px !important; } }
 #lock-screen .pin-pad button { height: 66px; border-radius: 22px; font: 600 24px var(--f-display); background: var(--surface-2); transition: transform .15s var(--spring), background .2s; }
 #lock-screen .pin-pad button:active { transform: scale(.92); background: var(--surface-3); }
 #lock-screen .pin-dots span { width: 14px; height: 14px; border-color: var(--ink); transition: background .2s, transform .25s var(--spring); }
@@ -896,12 +896,12 @@ html.dark .fixed.inset-0.z-50 > .bg-white { background: var(--surface) !importan
 html.dark #toast-container .st { background: rgba(26, 35, 64, .96) !important; }
 
 /* ---------- refinements after first render ---------- */
-@media (min-width: 768px) { #rail::before { opacity: .22; inset: auto -220px -160px auto; } }
+@media screen and (min-width: 768px) { #rail::before { opacity: .22; inset: auto -220px -160px auto; } }
 #hero.b-hero .aging-cap { align-items: baseline; white-space: nowrap; }
 #hero.b-hero .aging-cap > span:last-child { overflow: hidden; text-overflow: ellipsis; }
 #app-container .owe-name { min-width: 0; }
 #app-container .owe-line { min-width: 0; }
-@media (min-width: 768px) {
+@media screen and (min-width: 768px) {
   /* recent documents: number, date, party, value, status — balance & actions live in Documents */
   #app-container .b-recent th:nth-child(5), #app-container .b-recent td:nth-child(5), #app-container .b-recent th:nth-child(7), #app-container .b-recent td:nth-child(7) { display: none; }
   #app-container .b-recent td:nth-child(3) { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
@@ -909,7 +909,7 @@ html.dark #toast-container .st { background: rgba(26, 35, 64, .96) !important; }
 #app-container svg.flow.still .bar, #app-container svg.flow.still .r-area, #app-container svg.flow.still .r-dot { animation: none !important; }
 #app-container #dash-top-buyers > * { min-width: 0; }
 /* recent documents on tablet/desktop: a two-line list instead of a wide table */
-@media (min-width: 768px) {
+@media screen and (min-width: 768px) {
   #app-container .b-recent table, #app-container .b-recent tbody { display: block; width: 100%; }
   #app-container .b-recent thead { display: none; }
   #app-container .b-recent .overflow-x-auto { margin: 0 -8px; overflow: visible; }
@@ -926,7 +926,7 @@ html.dark #toast-container .st { background: rgba(26, 35, 64, .96) !important; }
   #app-container .b-recent td:nth-child(6) { grid-area: status; justify-self: end; }
 }
 
-@media (min-width: 768px) { #hero.b-hero .aging-cap > span:last-child { display: none; } }
+@media screen and (min-width: 768px) { #hero.b-hero .aging-cap > span:last-child { display: none; } }
 
 /* ---------- documents: page head above the toolbar ---------- */
 #app-container #tab-invoices > .bg-white > .flex:first-child { flex-direction: column !important; align-items: stretch !important; gap: 18px !important; }
@@ -936,7 +936,7 @@ html.dark #toast-container .st { background: rgba(26, 35, 64, .96) !important; }
 #app-container .mr-v { margin-left: auto; float: none; }
 #app-container #invoices-list-tbody tr.month-row td { opacity: 1 !important; }
 /* ---------- documents on tablet/desktop: a two-line ledger ---------- */
-@media (min-width: 768px) {
+@media screen and (min-width: 768px) {
   #app-container #tab-invoices table, #app-container #tab-invoices tbody, #app-container #tab-invoices tfoot { display: block; width: 100%; }
   #app-container #tab-invoices thead { display: none; }
   #app-container #tab-invoices .overflow-x-auto { overflow: visible !important; }
@@ -975,7 +975,7 @@ html.dark #toast-container .st { background: rgba(26, 35, 64, .96) !important; }
   #app-container #invoices-list-tfoot td[data-label]::before { content: attr(data-label); display: block; font: 600 10px var(--f-ui); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin-bottom: 4px; }
   #app-container #invoices-list-tfoot td:last-child:empty { display: none; }
 }
-@media (min-width: 768px) and (max-width: 1100px) {
+@media screen and (min-width: 768px) and (max-width: 1100px) {
   #app-container #invoices-list-tbody > tr:not(.month-row):not(.show-more-row) { grid-template-columns: 46px minmax(96px, .8fr) minmax(0, 1.6fr) minmax(0, .9fr) 120px; grid-template-areas: "type num party total status" "type date party bal due"; }
   #app-container #invoices-list-tbody td:nth-child(6), #app-container #invoices-list-tbody td:nth-child(7) { display: none !important; }
 }
@@ -985,7 +985,7 @@ html.dark #toast-container .st { background: rgba(26, 35, 64, .96) !important; }
 #app-container .sec-parties { grid-template-columns: minmax(0, 1fr) !important; }
 #tab-create-invoice > .grid > div.bg-white:first-child > div:first-child button { display: inline-flex !important; align-items: center; gap: 7px; white-space: nowrap; }
 #app-container .sec-parties h3 { font: 650 14.5px var(--f-display) !important; color: var(--text) !important; display: flex; align-items: center; gap: 8px; }
-@media (min-width: 768px) {
+@media screen and (min-width: 768px) {
   #app-container .sec-items table, #app-container .sec-items tbody { display: block; width: 100%; }
   #app-container .sec-items thead { display: none; }
   #app-container .sec-items .overflow-x-auto { overflow: visible; }
@@ -1011,11 +1011,11 @@ html.dark #toast-container .st { background: rgba(26, 35, 64, .96) !important; }
   html.dark #app-container #invoice-items-body > tr > td.row-index { background: var(--surface-3); }
 }
 #tab-create-invoice .justify-between > .flex.gap-2 > button[onclick^="newDocument('CRN')"], #tab-create-invoice .justify-between > .flex.gap-2 > button[onclick^="newDocument('DBN')"] { display: none !important; }
-@media (min-width: 768px) { #app-container #invoice-items-body > tr { grid-template-columns: minmax(0, 1fr) minmax(0, .85fr) minmax(0, .7fr) minmax(0, .9fr) minmax(0, 1fr) minmax(0, 1.1fr); } }
-@media (max-width: 767px) { #bento { align-items: stretch !important; } }
+@media screen and (min-width: 768px) { #app-container #invoice-items-body > tr { grid-template-columns: minmax(0, 1fr) minmax(0, .85fr) minmax(0, .7fr) minmax(0, .9fr) minmax(0, 1fr) minmax(0, 1.1fr); } }
+@media screen and (max-width: 767px) { #bento { align-items: stretch !important; } }
 #tab-create-invoice > .grid > div.bg-white:first-child > div:first-child button[onclick^="newDocument('CRN')"],
 #tab-create-invoice > .grid > div.bg-white:first-child > div:first-child button[onclick^="newDocument('DBN')"] { display: none !important; }
-@media (min-width: 768px) {
+@media screen and (min-width: 768px) {
   #app-container #invoices-list-tbody > tr.show-more-row { display: block !important; }
   #app-container #invoices-list-tbody > tr.show-more-row > td { display: block !important; padding: 18px !important; text-align: center; opacity: 1 !important; }
   #app-container #invoices-list-tbody > tr.show-more-row button { height: 44px; padding: 0 22px; border-radius: 14px; }
