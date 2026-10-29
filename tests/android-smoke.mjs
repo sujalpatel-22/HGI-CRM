@@ -136,7 +136,14 @@ if (sdkNum >= 29) {
   const head = (await device.shell(`head -c 8 "/sdcard/Download/HGI Billing/"*.pdf`)).toString();
   check(head.startsWith('%PDF-'), 'file is a valid PDF');
   await device.shell(`cp "/sdcard/Download/HGI Billing/"*.pdf /data/local/tmp/hgi.pdf`);
-  try { fs.writeFileSync(path.join(OUT, `${label}-invoice.pdf`), await device.shell('cat /data/local/tmp/hgi.pdf')); } catch (e) { /* best effort */ }
+  let pdfBuf = null;
+  try { pdfBuf = await device.shell('cat /data/local/tmp/hgi.pdf'); fs.writeFileSync(path.join(OUT, `${label}-invoice.pdf`), pdfBuf); } catch (e) { /* best effort */ }
+  // one A4 sheet per copy: a copy that overflows its sheet by a few pixels adds a blank page (seen on small phones, v8.0.1 CI)
+  const copies = await page.evaluate(() => selectedCopies().length);
+  const pdfText = pdfBuf ? Buffer.from(pdfBuf).toString('latin1') : '';
+  const counts = [...pdfText.matchAll(/\/Type\s*\/Pages\b[^>]*?\/Count\s+(\d+)|\/Count\s+(\d+)[^>]*?\/Type\s*\/Pages\b/g)].map(m => Number(m[1] || m[2]));
+  const sheets = counts.length ? Math.max(...counts) : (pdfText.match(/\/Type\s*\/Page[^s]/g) || []).length;
+  check(sheets === copies, `native PDF: ${copies} copies → ${sheets} A4 sheets (one per copy, no spill-over pages)`);
 }
 
 // back button closes the open modal instead of leaving the app

@@ -38,7 +38,7 @@
       .no-print { display: none !important; }
       .page-break-avoid { page-break-inside: avoid; }
       .a4-page { box-shadow: none !important; border: none !important; max-width: none !important; width: 200mm !important;
-        padding: 5mm !important; min-height: 286mm !important; margin: 0 !important; }
+        padding: 5mm !important; min-height: 284mm !important; margin: 0 !important; }
       .a4-page + .a4-page { page-break-before: always; }
       .inv-table thead { display: table-header-group; }
       .inv-table tr { page-break-inside: avoid; }
@@ -2217,7 +2217,7 @@
         page.style.minHeight = '0px';
         const natural = page.offsetHeight;                // height the content really needs
         page.style.minHeight = '';
-        const gap = Math.floor(target - natural - 4);     // small safety margin so it never spills to a 2nd page
+        const gap = Math.floor(target - natural - 16);    // ~4 mm safety margin: phone print engines lay text out a few px taller (blank spill-over sheets seen on Android 11/13)
         if (natural > target || gap < 10) return;
         const tr = document.createElement('tr');
         tr.className = 'fill-row';
