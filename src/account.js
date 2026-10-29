@@ -38,17 +38,31 @@
   const t = s => (window.HGI_I18N ? window.HGI_I18N.t(s) : s);
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const timeout = (p, ms, v = null) => Promise.race([p, new Promise(res => setTimeout(() => res(v), ms))]);
-  const nativeWrite = async (key, data) => { const N = Native(); if (!N) return; try { await timeout(N.writeState({ key, data }), 4000); } catch (e) { /* localStorage copy still exists */ } };
-  const nativeRead = async key => { const N = Native(); if (!N) return null; try { const r = await timeout(N.readState({ key }), 3000); return r && r.data ? r.data : null; } catch (e) { return null; } };
+  // Bridge calls can go unanswered on a slow cold start or right after an in-app reload (seen on Android 11/13/15
+  // emulators): wait generously and retry instead of acting on a missing answer.
+  const LOST = { lost: true };
+  async function bridge(call, tries = 3, ms = 5000) {
+    for (let i = 0; i < tries; i++) {
+      try { const r = await timeout(call(), ms, LOST); if (r !== LOST) return r; } catch (e) { return { error: e }; }
+      console.warn('[HGI] native call not answered — retrying');
+    }
+    return LOST;
+  }
+  const nativeWrite = async (key, data) => { const N = Native(); if (!N) return; await bridge(() => N.writeState({ key, data }), 2, 5000); };
+  const nativeRead = async key => { const N = Native(); if (!N) return null; const r = await bridge(() => N.readState({ key })); return r && r !== LOST && !r.error && r.data ? r.data : null; };
   const device = () => { const m = /Android [\d.]+; ([^;)]+)/.exec(navigator.userAgent || ''); return (m ? m[1].replace(/ Build.*/, '') : (isNative ? 'Android' : 'Browser')).slice(0, 60); };
 
   let config = { auth: 'off' };
   async function loadConfig() {
     let c = window.HGI_CONFIG || {};
     const N = Native();
-    if (N && typeof N.getConfig === 'function') { try { const r = await timeout(N.getConfig(), 3000); if (r && r.auth) c = r; } catch (e) { /* older shell */ } }
+    if (isNative) {
+      // the Android build's own settings decide — never fall back to the web default ("off") when the answer is missing
+      const r = N && typeof N.getConfig === 'function' ? await bridge(() => N.getConfig(), 4, 5000) : LOST;
+      c = r && r !== LOST && !r.error && r.auth ? r : { auth: 'unavailable' };
+    }
     config = { auth: c.auth || 'off', syncUrl: String(c.syncUrl || '').replace(/\/$/, ''), webClientId: c.webClientId || '' };
-    if (config.auth !== 'off' && !config.syncUrl) config.auth = 'misconfigured';
+    if (config.auth !== 'off' && config.auth !== 'unavailable' && !config.syncUrl) config.auth = 'misconfigured';
     if (config.auth === 'google' && !config.webClientId) config.auth = 'misconfigured';
     return config;
   }
@@ -123,13 +137,14 @@
       <img src="${esc((document.getElementById('login-logo') || {}).src || '')}" alt="" class="si-logo">
       <h1>HGI Billing</h1>
       <p class="si-sub">${esc(t('Sign in to open your business data. It is saved on this phone and synced automatically to your HGI cloud account, so a reinstall or a new phone brings everything back.'))}</p>
-      ${config.auth === 'misconfigured' ? `<p class="si-err">${esc(t('This build is not set up for sign-in (sync service address or Google client ID missing). Please install the official app from Google Play.'))}</p>` : test
+      ${config.auth === 'unavailable' ? `<button type="button" id="si-retry" class="si-google">${esc(t('Try again'))}</button>` : config.auth === 'misconfigured' ? `<p class="si-err">${esc(t('This build is not set up for sign-in (sync service address or Google client ID missing). Please install the official app from Google Play.'))}</p>` : test
         ? `<p class="si-test">TEST BUILD — test accounts only</p><input id="si-email" type="email" class="inp" placeholder="name@example.com" value="qa@example.com" autocomplete="off"><button type="button" id="si-go" class="si-google">${esc(t('Test sign-in'))}</button>`
         : `<button type="button" id="si-go" class="si-google">${G_LOGO}<span>${esc(t('Continue with Google'))}</span></button>`}
       <p id="si-msg" class="si-msg" role="status">${note ? esc(note) : ''}</p>
       <p class="si-foot">${esc(t('Your data is visible only to you and authorised HGI support staff.'))} ${config.syncUrl ? `<a href="#" id="si-privacy">${esc(t('Privacy policy'))}</a>` : ''}</p>
     </div>`;
     const go = el.querySelector('#si-go'); if (go) go.onclick = () => signInFlow(go);
+    const rt = el.querySelector('#si-retry'); if (rt) rt.onclick = () => { try { sessionStorage.removeItem('hgi_cfg_retry'); } catch (e) { /* ignore */ } location.reload(); };
     const pp = el.querySelector('#si-privacy'); if (pp) pp.onclick = e => { e.preventDefault(); openUrl(config.syncUrl + '/privacy'); };
     if (window.HGI_I18N && window.HGI_I18N.translateTree) window.HGI_I18N.translateTree(el);
   }
@@ -180,7 +195,6 @@
 
     let local = ls.get(slotKey(key));
     if (!local) { const m = await nativeRead(mirrorKey(key)); if (m) { local = m; ls.set(slotKey(key), m); } }
-    account = next;
     const cloud = await api('GET', '/v1/sync', undefined, s.session);
     const cloudState = cloud.data ? parse(cloud.data) : null;
     const cv = Number(cloud.cloud && cloud.cloud.version) || 0;
@@ -223,6 +237,7 @@
       const fp = use && !pushNeeded ? await fingerprint(contentOf(parse(use))) : '';
       writeSync(key, { version: cv, hash: fp, at: cloudState && !pushNeeded ? Date.now() : 0 });
     }
+    account = next;
     saveAccount(next);
     location.reload();
   }
@@ -232,10 +247,24 @@
   async function gate() {
     await loadConfig();
     if (config.auth === 'off') return true;                       // web versions without cloud sync: unchanged behaviour
+    if (config.auth === 'unavailable') {
+      // the app shell did not answer: start again (twice), then offer a retry button — the data stays closed meanwhile
+      let n = 0; try { n = Number(sessionStorage.getItem('hgi_cfg_retry') || 0); sessionStorage.setItem('hgi_cfg_retry', String(n + 1)); } catch (e) { /* ignore */ }
+      if (n < 2) { location.reload(); return false; }
+      document.documentElement.classList.add('signed-out');
+      signInScreen(t('The app could not start properly. Please try again.'));
+      window.HGI_READY = true; window.HGI_SIGNIN_READY = true;
+      return false;
+    }
+    try { sessionStorage.removeItem('hgi_cfg_retry'); } catch (e) { /* ignore */ }
     if (account && account.session) return true;
     // WebView storage was cleared but the app files survived: pick the account up again
     const saved = parse(await nativeRead('account'));
-    if (saved && /^[a-f0-9]{24}$/.test(String(saved.key || '')) && saved.session) { ls.set(ACCOUNT_KEY, JSON.stringify(saved)); location.reload(); return false; }
+    if (saved && /^[a-f0-9]{24}$/.test(String(saved.key || '')) && saved.session) {
+      ls.set(ACCOUNT_KEY, JSON.stringify(saved));
+      const sy = await nativeRead('sync-u-' + saved.key); if (sy && !ls.get(syncKey(saved.key))) ls.set(syncKey(saved.key), sy);
+      location.reload(); return false;
+    }
     document.documentElement.classList.add('signed-out');
     signInScreen();
     window.HGI_READY = true; window.HGI_SIGNIN_READY = true;
@@ -297,10 +326,15 @@
     const modal = Array.from(document.querySelectorAll('.fixed.inset-0.z-50.flex')).some(m => !m.classList.contains('hidden') && m.id !== 'login-overlay');
     return formOpen || modal || !!document.querySelector('.acct-dlg, #onboarding');
   }
-  async function syncNow() {
-    if (!active()) return;
-    if (running) { again = true; return; }
+  let currentRun = null;
+  function syncNow() {
+    if (!active()) return Promise.resolve();
+    if (running) { again = true; return currentRun; }
     running = true; clearTimeout(timer);
+    currentRun = runSync();
+    return currentRun;
+  }
+  async function runSync() {
     try {
       do {
         again = false;
