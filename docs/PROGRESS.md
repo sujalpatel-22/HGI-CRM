@@ -64,3 +64,6 @@ The Android CI run for 8.0.1 passed, but the PDFs the emulators themselves produ
 
 ### v8.0.3 — print isolated from the phone layout (29 Oct 2026)
 8.0.2 did not fix the Android 11/13 PDFs (still 5 / 4 sheets). The sheet-by-sheet reading showed: (1) Android's print engine applies `max-width: 767px` screen rules to the printout, so the phone layout's dock padding landed after the last copy (blank last sheet); (2) older WebViews set invoice text ~5 mm taller than the screen measurement. Fixes: every layout media query is now `@media screen and …`; print rules use doubled-ID selectors so no screen rule can outrank them; the page filler targets a 280 mm printed page (printable area 287 mm). The web print test now checks padding/margins on all sides at phone widths (it fails on 8.0.2, passes on 8.0.3).
+
+### v8.0.4 — WebView 83 (Android 11 stock) (29 Oct 2026)
+8.0.3 fixed Android 13 (3 sheets); Android 11's original WebView 83 still made 4: copy 2 sat ~14 pt (one table-header row) lower and pushed a blank sheet. A one-sheet copy now prints its item header as a normal row (only multi-sheet invoices repeat it). WebView 83 also lacks flexbox `gap` (Chrome 84+), so the company name ran into the logo: start-up detects this and compat.css spaces the invoice paper with margins. New Android check: company name clear of the logo.

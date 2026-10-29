@@ -16,3 +16,9 @@ abbr[title] { text-decoration: underline dotted; }
 @font-face { font-family: 'HGI Rupee'; src: local('Roboto'), local('Roboto-Regular'), local('Noto Sans'), local('NotoSans-Regular'), local('Droid Sans');
   unicode-range: U+20B9; }
 html.rupee-fix body { font-family: 'HGI Rupee', 'Inter', sans-serif !important; }
+
+/* Flexbox `gap` is Chrome 84+. On Android System WebView 83 and older, the invoice paper's flex rows lost their spacing
+   (company name ran into the logo). mobile.js adds html.no-flex-gap only where gap is unsupported; spacing then comes from margins. */
+html.no-flex-gap .a4-page .flex.gap-2:not(.flex-col) > * + * { margin-left: .5rem; }
+html.no-flex-gap .a4-page .flex.gap-3:not(.flex-col) > * + * { margin-left: .75rem; }
+html.no-flex-gap .a4-page .flex.gap-4:not(.flex-col) > * + * { margin-left: 1rem; }

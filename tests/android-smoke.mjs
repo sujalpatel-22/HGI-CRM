@@ -123,6 +123,11 @@ check(await page.evaluate(() => { const d = state.invoices[0]; return d.igst ===
 await page.evaluate(() => renderPreview()); await page.waitForTimeout(1200);
 check(await page.evaluate(() => [...document.querySelectorAll('#invoice-preview-container img')].some(i => i.src.startsWith('data:image/png') && i.naturalWidth > 100)), 'UPI scan-to-pay QR rendered');
 await shot('04-preview');
+const hdr = await page.evaluate(() => { const pg = document.querySelector('#invoice-preview-container .a4-page'), h = pg && pg.querySelector('.modern-header');
+  const img = h && h.querySelector('img'); const name = h && [...h.querySelectorAll('*')].find(e => e.children.length === 0 && e.textContent.trim() === state.company.name);
+  if (!img || !name) return { skip: true, flexGap: window.HGI_APP.flexGap };
+  const a = img.getBoundingClientRect(), b = name.getBoundingClientRect(); return { gap: Math.round(b.left - a.right), flexGap: window.HGI_APP.flexGap }; });
+check(hdr.skip || hdr.gap >= 4, `invoice header: company name clear of the logo (${hdr.skip ? 'n/a' : hdr.gap + 'px'}, flex gap ${hdr.flexGap ? 'native' : 'margin fallback'})`);
 const sdkNum = Number(sdk);
 await device.shell(`rm -rf "/sdcard/Download/HGI Billing"`);
 const saveRes = await page.evaluate(async () => { try { await HGI_M.savePdf(); return 'ok'; } catch (e) { return String(e); } });

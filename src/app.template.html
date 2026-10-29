@@ -54,6 +54,8 @@
       /* every copy (Original / Duplicate / Triplicate) starts on a new sheet, whether or not it is wrapped */
       html body #invoice-preview-container#invoice-preview-container .page-scale-wrap + .page-scale-wrap,
       html body #invoice-preview-container#invoice-preview-container .a4-page + .a4-page { break-before: page !important; page-break-before: always !important; }
+      /* a one-sheet copy never needs its item header repeated; WebView 83 otherwise added a phantom header row (blank sheet) */
+      html body #invoice-preview-container#invoice-preview-container .a4-page.one-sheet .inv-table thead { display: table-row-group !important; }
       html body #invoice-preview-container#invoice-preview-container > :first-child,
       html body #invoice-preview-container#invoice-preview-container > :first-child > .a4-page { break-before: auto !important; page-break-before: auto !important; }
     }
@@ -2214,6 +2216,7 @@
       if (!container) return;
       container.querySelectorAll('.a4-page').forEach(page => {
         page.querySelectorAll('tr.fill-row').forEach(r => r.remove());
+        page.classList.remove('one-sheet');
         const tbody = page.querySelector('.inv-table tbody');
         if (!tbody || !tbody.rows.length || !page.offsetHeight) return;   // not visible yet
         page.style.minHeight = PRINT_PAGE_H;
@@ -2227,6 +2230,7 @@
         tr.className = 'fill-row';
         tr.innerHTML = Array.from(tbody.rows[0].cells, () => `<td style="height:${gap}px"></td>`).join('');
         tbody.appendChild(tr);
+        page.classList.add('one-sheet');                  // fits one sheet: no repeating table header needed
       });
     }
     window.addEventListener('resize', () => { if (previewDoc && !$('preview-section').classList.contains('hidden')) fitInvoicePages(); });

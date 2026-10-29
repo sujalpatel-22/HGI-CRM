@@ -6,7 +6,7 @@
    ===================================================================== */
 (function () {
   'use strict';
-  const APP_VERSION = '8.0.3';
+  const APP_VERSION = '8.0.4';
   const cap = window.Capacitor;
   const isNative = !!(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform());
   // Without a bundler the native bridge exposes registered plugins on Capacitor.Plugins
@@ -545,6 +545,16 @@
     const r = document.createRange(); r.setStart(el.firstChild, 0); r.setEnd(el.firstChild, 1);
     const w = r.getBoundingClientRect().width; el.remove(); return w;
   }
+  // flexbox gap (Chrome 84+): detect, so compat.css can space the invoice paper with margins on older WebViews
+  function checkFlexGap() {
+    const d = document.createElement('div');
+    d.style.cssText = 'display:flex;flex-direction:column;row-gap:1px;position:absolute;visibility:hidden';
+    d.appendChild(document.createElement('div')); d.appendChild(document.createElement('div'));
+    document.body.appendChild(d);
+    const ok = d.scrollHeight === 1; d.remove();
+    if (!ok) document.documentElement.classList.add('no-flex-gap');
+    window.HGI_APP.flexGap = ok;
+  }
   function checkRupeeGlyph() {
     const run = () => {
       const host = document.querySelector('#tab-dashboard') || document.body;
@@ -894,6 +904,7 @@
     buildShell();                                // nav must exist before the app's first switchTab()
     demoBanner();
     checkRupeeGlyph();
+    checkFlexGap();
     enhanceDashboard();
     enhanceEditor();
     buildDocChips();
