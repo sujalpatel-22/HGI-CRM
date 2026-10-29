@@ -6,7 +6,7 @@
    ===================================================================== */
 (function () {
   'use strict';
-  const APP_VERSION = '8.0.5';
+  const APP_VERSION = '8.1.0';
   const cap = window.Capacitor;
   const isNative = !!(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform());
   // Without a bundler the native bridge exposes registered plugins on Capacitor.Plugins
@@ -245,7 +245,10 @@
   /* ------------------------------------------------------------------ on-device durability (native) */
   let mirrorTimer = null;
   // real data and demo data have separate mirror files, so Demo Mode can never overwrite the real mirror
-  const MIRROR_KEY = DEMO_MODE ? 'state-demo' : 'state';
+  // signed-in accounts (v8.1+) each have their own mirror file; 'state' is the pre-account (v8.0) file
+  const ACCT = window.HGI_ACCOUNT;
+  const MIRROR_KEY = DEMO_MODE ? 'state-demo' : ACCT ? 'state-u-' + ACCT.key : 'state';
+  const SNAP_PREFIX = DEMO_MODE ? 'demo-' : ACCT ? 'u-' + ACCT.key + '-' : '';
   function mirrorState() {
     if (!Native) return;
     clearTimeout(mirrorTimer);
@@ -307,10 +310,10 @@
     } catch (e) { /* first run */ }
   }
   // safety copy before a backup restore replaces the data (called by the core app)
-  window.HGI_nativeSnapshot = (key, data) => { if (Native) Native.writeState({ key: (DEMO_MODE ? 'demo-' : '') + key, data }).catch(() => {}); };
+  window.HGI_nativeSnapshot = (key, data) => { if (Native) Native.writeState({ key: SNAP_PREFIX + key, data }).catch(() => {}); };
   async function undoRestore() {
     let snap = storeGet('local', STORAGE_KEY + '_before_restore');
-    if (!snap && Native) { try { const r = await Native.readState({ key: (DEMO_MODE ? 'demo-' : '') + 'before-restore' }); snap = r && r.data; } catch (e) { /* none */ } }
+    if (!snap && Native) { try { const r = await Native.readState({ key: SNAP_PREFIX + 'before-restore' }); snap = r && r.data; } catch (e) { /* none */ } }
     if (!snap) return toast('No earlier data to go back to.', 'info');
     let parsed; try { parsed = JSON.parse(snap); } catch (e) { return toast('The safety copy could not be read.', 'error'); }
     if (!confirm(`Go back to the data from before the last restore (${(parsed.invoices || []).length} documents)?`)) return;
@@ -510,6 +513,7 @@
   }
 
   /* ------------------------------------------------------------------ app preferences card (Settings) */
+  const synced = () => !!(window.HGI_SYNC && HGI_SYNC.active());
   function renderPrefs() {
     let card = document.getElementById('app-prefs');
     if (!card) {
@@ -526,13 +530,13 @@
         ${isNative ? `<div><label class="field-label">App Lock (PIN)</label>${ui().pinHash
           ? `<div class="flex gap-2"><button type="button" onclick="HGI_M.setPin()" class="flex-1 px-3 py-2.5 border rounded text-xs font-bold">Change PIN</button><button type="button" onclick="HGI_M.removePin()" class="px-3 py-2.5 border border-rose-300 text-rose-700 rounded text-xs font-bold">Turn off</button></div>`
           : `<button type="button" onclick="HGI_M.setPin()" class="w-full px-3 py-2.5 bg-slate-800 text-white rounded text-xs font-bold"><i class="fa-solid fa-lock mr-1"></i>Set PIN</button>`}</div>` : ''}
-        <div><label class="field-label">Backup</label><button type="button" onclick="HGI_M.shareBackup()" class="w-full px-3 py-2.5 bg-emerald-600 text-white rounded text-xs font-bold"><i class="fa-solid fa-share-nodes mr-1"></i>Share Backup</button></div>
+        <div><label class="field-label">${synced() ? 'Backup file (optional)' : 'Backup'}</label><button type="button" onclick="HGI_M.shareBackup()" class="w-full px-3 py-2.5 ${synced() ? 'border' : 'bg-emerald-600 text-white'} rounded text-xs font-bold"><i class="fa-solid fa-share-nodes mr-1"></i>Share Backup</button></div>
         ${ui().restoredAt ? `<div><label class="field-label">Last restore</label><button type="button" id="prefs-undo-restore" onclick="HGI_M.undoRestore()" class="w-full px-3 py-2.5 border rounded text-xs font-bold"><i class="fa-solid fa-rotate-left mr-1"></i>Undo restore</button></div>` : ''}
         <div><label class="field-label">Demo Mode</label>${DEMO_MODE
           ? `<button type="button" id="prefs-exit-demo" onclick="HGI_M.exitDemo()" class="w-full px-3 py-2.5 border-2 border-rose-300 text-rose-700 rounded text-xs font-bold"><i class="fa-solid fa-right-from-bracket mr-1"></i>Exit Demo Mode</button>`
           : `<button type="button" id="prefs-enter-demo" onclick="HGI_M.enterDemo()" class="w-full px-3 py-2.5 border rounded text-xs font-bold"><i class="fa-solid fa-flask mr-1"></i>Try with sample data</button>`}</div>
       </div>
-      <p class="text-[11px] text-slate-400 mt-3">HGI Billing ${APP_VERSION} · ${isNative ? 'Android app — data is stored on this device and mirrored to the app\'s private storage.' : 'Web version — data is stored in this browser.'}</p>`;
+      <p class="text-[11px] text-slate-400 mt-3">HGI Billing ${APP_VERSION} · ${synced() ? 'Data is stored on this device and synced automatically to your HGI cloud account.' : isNative ? 'Android app — data is stored on this device and mirrored to the app\'s private storage.' : 'Web version — data is stored in this browser.'}</p>`;
     i18n.translateTree(card);
   }
 
@@ -805,7 +809,7 @@
     about() { closeMore(); toast(`HGI Billing ${APP_VERSION} ${isNative ? '(Android)' : '(Web)'}`, 'info'); },
     enterDemo, exitDemo, undoRestore, runRowAction,
     restoreAndClose(ev) { const el = document.getElementById('onboarding'); ui().onboarded = true; if (el) el.remove(); importJSONBackup(ev); },
-    sharePdf, savePdf
+    sharePdf, savePdf, flushMirror, renderPrefs
   };
 
   /* ------------------------------------------------------------------ hook into the core app */
@@ -861,8 +865,8 @@
       }
     }
 
-    // auth: on Android the phone itself is the account — PIN lock instead of admin/123
-    if (isNative) {
+    // auth: on Android (and in any build signed in with a Google account) — PIN lock instead of admin/123
+    if (isNative || window.HGI_ACCOUNT) {
       window.checkAuth = function () {
         if (ui().pinHash && !unlocked) { document.getElementById('login-overlay').classList.add('hidden'); showLock(); }
         else { storeSet('session', 'hgi_auth_session', 'true'); showMainApp(); }
@@ -885,7 +889,7 @@
       if (AppPlugin.minimizeApp) AppPlugin.minimizeApp(); else AppPlugin.exitApp();
     });
     AppPlugin.addListener('appStateChange', ({ isActive }) => {
-      if (!isActive) { backgroundAt = Date.now(); if (mirrorTimer) { clearTimeout(mirrorTimer); Native.writeState({ key: 'state', data: JSON.stringify(state) }).catch(() => {}); } return; }
+      if (!isActive) { backgroundAt = Date.now(); if (mirrorTimer) { clearTimeout(mirrorTimer); mirrorTimer = null; Native.writeState({ key: MIRROR_KEY, data: JSON.stringify(state) }).catch(() => {}); } return; }
       if (restoreAfterPrint) restoreAfterPrint();
       if (ui().pinHash && backgroundAt && Date.now() - backgroundAt > 120000) { unlocked = false; showLock(); }
     });
@@ -899,6 +903,8 @@
 
   /* ------------------------------------------------------------------ boot */
   window.onload = async function () {
+    // v8.1: sign in first (Google account) — the account decides which data slot opens. Web builds without sync skip this.
+    if (window.HGI_SYNC && !(await HGI_SYNC.gate())) return;
     await restoreFromMirror();
     installHooks();
     buildShell();                                // nav must exist before the app's first switchTab()
@@ -920,9 +926,10 @@
     renderPrefs();
     installNativeEvents();
     if (window.HGI_STUDIO) HGI_STUDIO.ready();
+    if (window.HGI_SYNC) HGI_SYNC.start();       // automatic cloud sync + Settings → Account card
     applyTheme();                                // system bar colours from the final page colour
     document.documentElement.classList.toggle('is-native', isNative);
-    if (isNative) {
+    if (isNative || window.HGI_ACCOUNT) {
       const ro = document.getElementById('login-overlay');
       if (ro && !ro.classList.contains('hidden') && !ui().pinHash) { storeSet('session', 'hgi_auth_session', 'true'); showMainApp(); }
     }

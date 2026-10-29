@@ -19,19 +19,27 @@ for daily use at HARIGURU INDUSTRIES, so it is designed for real day-to-day bill
 • Share invoice PDFs on WhatsApp or e-mail, or print through any Android printer
 • UPI scan-to-pay QR on every invoice
 • English, हिन्दी and ગુજરાતી app interface, plus dark mode
-• Works fully offline. Your data stays on your phone, with no account and no ads
-• PIN lock and one-tap backup
+• Sign in with Google: your data syncs automatically to your HGI cloud account and comes back after a reinstall or on a new phone
+• Works offline: billing never waits for the internet, changes sync when you are back online
+• No ads. PIN lock. Optional backup file
 
 HGI Billing does not file returns or generate e-invoices / e-way bills on the government portal. Please verify the GST rate of each
 product with your tax adviser.
 
 **Category:** Business · **Tags:** invoice, GST, billing, accounting · **Contact e-mail:** info@hariguru.com
 
-## Data safety form (answers for this version)
-- Does the app collect or share user data? **No.** Data is stored on the device only. Files are shared only by the user, through the Android share sheet.
-- Is data encrypted in transit? Not applicable, because there is no network transfer by the app.
-- Can users request deletion? Yes: uninstall or clear app data.
-- Ads: **No**. In-app purchases: **No** (Phase 1).
+## Data safety form (answers for version 8.1 — cloud sync)
+- **Does the app collect or share user data?** Collects: **Yes**. Shares: **No**. Google Cloud and Drive act only as HGI's service providers, which Play does not count as sharing.
+- **Data types collected:**
+  - Personal info: **Name, Email address, User IDs**. Purposes: Account management, App functionality.
+  - Personal info: **Address, Phone number**. These are business contact details you enter for your company and buyers. Purpose: App functionality.
+  - Financial info: **Other financial info**, meaning invoices, payments, GSTIN and bank/UPI details you enter. Purpose: App functionality.
+  - Collection is **required** (sign-in is needed to use the app). It is not processed ephemerally: it is stored to sync and restore.
+- **Encrypted in transit:** Yes (HTTPS only; cleartext is blocked in the app).
+- **Users can request deletion:** Yes. In the app: Settings → Account → Delete account and cloud data. On the web: `<sync-url>/delete-account`.
+- **Privacy policy URL:** `<sync-url>/privacy` (generated from PRIVACY.md).
+- **App access (for Google's review):** all features are available after "Sign in with any Google account". No special credentials are needed.
+- Ads: **No**. In-app purchases: **No**.
 
 ## Screenshots
 Use the 1080×1920+ emulator screenshots from the CI artifact `emulator-api33-pixel_6` (phone) and `emulator-api35-pixel_c` (tablet).

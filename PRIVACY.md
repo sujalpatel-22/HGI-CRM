@@ -1,30 +1,46 @@
 # Privacy Policy — HGI Billing (Android)
 
-_Last updated: 23 October 2026_
+_Last updated: 29 October 2026 — applies from app version 8.1 (cloud sync)._
 
-HGI Billing is published by HARIGURU INDUSTRIES, Ahmedabad, Gujarat, India ("we").
+HGI Billing is published by HARIGURU INDUSTRIES, Ahmedabad, Gujarat, India ("HGI", "we").
 
-**What the app stores.** You enter business data: your company profile, customers and buyers, products, invoices, quotations, payments and stock.
-All of it is stored **only on your device**, in the app's private storage. The app has no account system and no servers of its own. It does not
-upload, sell or share your data, and it contains no advertising or analytics SDKs.
+## 1. Your account
+You sign in with your Google account. From Google we receive your **name, e-mail address and Google account ID**.
+We use them only to identify your account and keep your data separate from every other user. We never receive your Google password.
 
-**When data leaves the device.** Only when you choose to:
-- when you share a PDF, CSV or backup file (WhatsApp, e-mail, Drive, etc.);
-- when you open a link (for example a WhatsApp message or a UPI payment);
-- when you move to a new phone using Android's phone-to-phone transfer (Android 12 and newer), which copies the app's data directly between your devices.
+## 2. The data you enter
+You enter business data: company profile (including GSTIN, bank and UPI details), customers and buyers, products and stock,
+invoices, quotations, credit/debit notes and payments.
 
-The app's data is **excluded from Google cloud backup**. Take your own backups with *Share Backup*.
+- It is stored **on your phone**, in the app's private storage.
+- A copy is **synced automatically to HGI's cloud storage** so it can be restored when you reinstall the app or move to another phone.
+  The copy is kept as a Google Sheets spreadsheet for your account in a Google Drive controlled by HARIGURU INDUSTRIES.
+  Google LLC hosts it as our service provider (Google Cloud and Google Workspace/Drive).
+- **Authorised HGI staff can open your spreadsheet** — for example to help you with support or to recover data. We do not use your
+  business data for advertising, do not sell it, and do not share it with anyone else except where the law requires.
 
-**Permissions.** The app needs no special permissions. Saving to *Downloads* uses Android's standard storage API, without access to your other files.
+## 3. When data leaves the phone
+- Automatic sync to HGI's cloud storage (above), always over an encrypted HTTPS connection.
+- When you choose to share a PDF, CSV or backup file (WhatsApp, e-mail, Drive, …) or open a link (WhatsApp, UPI payment).
 
-**Security.** You can protect the app with a PIN. Keep your device secure and take backups. If you uninstall the app or clear its data,
-the information on the device is deleted.
+The app contains no advertising or analytics SDKs. Android's own Google cloud backup of the app is switched off; the HGI sync replaces it.
 
-**Children.** The app is a business tool and is not directed at children.
+## 4. Security
+Connections are encrypted (HTTPS). The app never holds a key to Drive or Sheets: only HGI's sync server, running on Google Cloud,
+can write to the spreadsheets, and it lets each signed-in account read and write **only its own** data.
+You can also protect the app with a PIN. Data on the phone is deleted when you uninstall the app or clear its data.
 
-**Your rights.** Your data is under your control on your device. You can export it (Share Backup) or delete it at any time
-(clear app data or uninstall).
+## 5. Keeping and deleting your data
+We keep your cloud copy while your account exists. You can delete it at any time:
+- in the app: **Settings → Account → Delete account and cloud data**, or
+- on the web: the account-deletion page linked from the app's Google Play listing (sign in with the same Google account), or
+- by e-mail to info@hariguru.com from the account's e-mail address.
 
-**Contact.** info@hariguru.com
+Deletion removes the spreadsheet with your business data at once (if our storage moves it to the Drive trash first, it is erased from there within 30 days). We keep only a small marker (a random-looking account code and the deletion
+date, no business data) so that phones still signed in to the deleted account stop syncing.
 
-_If a future version adds cloud sync, this policy will be updated before that feature is enabled._
+## 6. Children
+The app is a business tool and is not directed at children.
+
+## 7. Contact
+HARIGURU INDUSTRIES, Ahmedabad, Gujarat, India · info@hariguru.com

@@ -12,6 +12,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
+import android.os.CancellationSignal;
 import android.os.Environment;
 import android.print.HgiPdfWriter;
 import android.print.PrintAttributes;
@@ -21,7 +22,22 @@ import android.provider.MediaStore;
 import android.util.Base64;
 import android.webkit.WebView;
 
+import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
+import androidx.credentials.ClearCredentialStateRequest;
+import androidx.credentials.Credential;
+import androidx.credentials.CredentialManager;
+import androidx.credentials.CredentialManagerCallback;
+import androidx.credentials.CustomCredential;
+import androidx.credentials.GetCredentialRequest;
+import androidx.credentials.GetCredentialResponse;
+import androidx.credentials.exceptions.ClearCredentialException;
+import androidx.credentials.exceptions.GetCredentialCancellationException;
+import androidx.credentials.exceptions.GetCredentialException;
+import androidx.credentials.exceptions.NoCredentialException;
+
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption;
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -44,6 +60,9 @@ import java.nio.charset.StandardCharsets;
  *  - saveFile() / shareFile(): CSV / JSON backups
  *  - openUrl():    wa.me, mailto:, upi: links in the right app
  *  - writeState() / readState(): durable copy of the app data in private app storage
+ *  - getConfig():  public cloud-sync settings of this build (sync service URL, OAuth web client ID) — no secrets
+ *  - googleSignIn() / googleSignOut(): "Sign in with Google" (Android Credential Manager) → Google ID token,
+ *                  which the app exchanges for its own session at the HGI sync service
  */
 @CapacitorPlugin(name = "HgiNative")
 public class HgiNativePlugin extends Plugin {
@@ -266,5 +285,62 @@ public class HgiNativePlugin extends Plugin {
             r.put("data", new String(buf, 0, off, StandardCharsets.UTF_8));
             call.resolve(r);
         } catch (Exception e) { call.reject("Read failed: " + e.getMessage(), e); }
+    }
+
+    /* ------------------------------------------------------------------ cloud sync config + Sign in with Google */
+    private String res(String name) {
+        int id = getContext().getResources().getIdentifier(name, "string", getContext().getPackageName());
+        return id == 0 ? "" : getContext().getString(id);
+    }
+
+    @PluginMethod
+    public void getConfig(PluginCall call) {
+        JSObject r = new JSObject();
+        r.put("auth", res("hgi_auth").isEmpty() ? "off" : res("hgi_auth"));
+        r.put("syncUrl", res("hgi_sync_url"));
+        r.put("webClientId", res("hgi_web_client_id"));
+        call.resolve(r);
+    }
+
+    @PluginMethod
+    public void googleSignIn(PluginCall call) {
+        String serverClientId = call.getString("serverClientId", "");
+        if (serverClientId == null || serverClientId.isEmpty()) { call.reject("Google client ID missing in this build", "not_configured"); return; }
+        GetSignInWithGoogleOption option = new GetSignInWithGoogleOption.Builder(serverClientId).build();
+        GetCredentialRequest request = new GetCredentialRequest.Builder().addCredentialOption(option).build();
+        CredentialManager cm = CredentialManager.create(getContext());
+        cm.getCredentialAsync(getActivity(), request, new CancellationSignal(), ContextCompat.getMainExecutor(getContext()),
+            new CredentialManagerCallback<GetCredentialResponse, GetCredentialException>() {
+                @Override
+                public void onResult(GetCredentialResponse response) {
+                    Credential c = response.getCredential();
+                    if (c instanceof CustomCredential && GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL.equals(c.getType())) {
+                        try {
+                            GoogleIdTokenCredential g = GoogleIdTokenCredential.createFrom(c.getData());
+                            JSObject r = new JSObject();
+                            r.put("idToken", g.getIdToken());
+                            r.put("email", g.getId());
+                            r.put("name", g.getDisplayName());
+                            call.resolve(r);
+                        } catch (Exception e) { call.reject("Google sign-in returned an unreadable answer", "google_failed", e); }
+                    } else call.reject("Unexpected sign-in answer", "google_failed");
+                }
+                @Override
+                public void onError(GetCredentialException e) {
+                    if (e instanceof GetCredentialCancellationException) call.reject("Sign-in cancelled", "cancelled");
+                    else if (e instanceof NoCredentialException) call.reject("No Google account on this device", "no_account");
+                    else call.reject(e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage(), "google_failed", e);
+                }
+            });
+    }
+
+    @PluginMethod
+    public void googleSignOut(PluginCall call) {
+        CredentialManager cm = CredentialManager.create(getContext());
+        cm.clearCredentialStateAsync(new ClearCredentialStateRequest(), new CancellationSignal(), ContextCompat.getMainExecutor(getContext()),
+            new CredentialManagerCallback<Void, ClearCredentialException>() {
+                @Override public void onResult(Void v) { call.resolve(); }
+                @Override public void onError(ClearCredentialException e) { call.resolve(); }   // nothing stored is fine
+            });
     }
 }

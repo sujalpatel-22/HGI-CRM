@@ -1,0 +1,42 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HGI Billing — Delete account</title>
+<style>body{font:16px/1.6 system-ui,sans-serif;max-width:620px;margin:0 auto;padding:24px 16px;color:#1c1917;background:#fff}
+h1{font-size:1.5rem}.box{border:1px solid #e7e5e4;border-radius:12px;padding:16px;margin:16px 0}button{font:inherit;padding:10px 16px;border-radius:8px;border:0;background:#b91c1c;color:#fff;cursor:pointer}
+button[disabled]{opacity:.5}#msg{font-weight:600}a{color:#c2410c}@media(prefers-color-scheme:dark){body{background:#141210;color:#eee}.box{border-color:#3a3330}}</style>
+<script src="https://accounts.google.com/gsi/client" async defer></script></head>
+<body>
+<h1>Delete your HGI Billing account</h1>
+<p>This deletes the cloud copy of your business data (company profile, customers, products, invoices, quotations, notes and payments)
+that HGI Billing keeps for your Google account. It cannot be undone. Data still on your phone is removed when the app next connects, or when you uninstall it.</p>
+<p>You can also do this in the app: <strong>Settings → Account → Delete account and cloud data</strong>, or e-mail <a href="mailto:{{SUPPORT_EMAIL}}">{{SUPPORT_EMAIL}}</a> from your account's address.</p>
+<div class="box">
+  <p><strong>Step 1.</strong> Sign in with the Google account you use in HGI Billing.</p>
+  <div id="g_id_onload" data-client_id="{{CLIENT_ID}}" data-callback="onGoogle" data-auto_prompt="false"></div>
+  <div class="g_id_signin" data-type="standard" data-text="signin_with"></div>
+  <p id="who"></p>
+  <p><strong>Step 2.</strong> <label><input type="checkbox" id="sure"> I understand my cloud data will be permanently deleted.</label></p>
+  <button id="go" disabled>Delete my account and cloud data</button>
+  <p id="msg" role="status"></p>
+</div>
+<p><a href="/privacy">Privacy policy</a></p>
+<script>
+let idToken = null;
+const $ = id => document.getElementById(id);
+function ready() { $('go').disabled = !(idToken && $('sure').checked); }
+window.onGoogle = r => {
+  idToken = r.credential;
+  try { const p = JSON.parse(atob(idToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); $('who').textContent = 'Signed in as ' + p.email; } catch (e) {}
+  ready();
+};
+$('sure').onchange = ready;
+$('go').onclick = async () => {
+  $('go').disabled = true; $('msg').textContent = 'Deleting…';
+  try {
+    const r = await fetch('/v1/account/delete-with-google', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idToken }) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.message || ('HTTP ' + r.status));
+    $('msg').textContent = j.deleted ? 'Done. The cloud data of ' + j.email + ' has been deleted.' : 'There was no cloud data for ' + j.email + '. Nothing to delete.';
+  } catch (e) { $('msg').textContent = 'Could not delete: ' + e.message; $('go').disabled = false; }
+};
+</script>
+</body></html>

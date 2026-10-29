@@ -1,0 +1,17 @@
+{
+  "name": "hgi-billing-sync",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "HGI Billing cloud sync service: Sign in with Google + per-user Google Sheets copy in the company Drive. No third-party dependencies.",
+  "main": "server.js",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/run-tests.js",
+    "pages": "node scripts/build-pages.js",
+    "owner-token": "node scripts/owner-token.js",
+    "secret": "node -e \"console.log(require('crypto').randomBytes(48).toString('base64url'))\""
+  },
+  "dependencies": {}
+}

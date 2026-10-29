@@ -41,7 +41,13 @@ jobs:
           npm ls --depth=0 2>&1 | tee logs/01-npm-versions.log || true
 
       - name: Build web app (offline bundle)
+        env:
+          HGI_SYNC_URL: ${{ vars.HGI_SYNC_URL }}       # public URL of the Cloud Run sync service (repository variable)
+          HGI_ANDROID_TEST_SYNC: "1"                   # debug APK talks to the CI test service on 127.0.0.1:8787
         run: npm run build:web 2>&1 | tee logs/02-build-web.log
+
+      - name: Sync service tests (Google sign-in verification, per-user Sheets storage, deletion)
+        run: node backend/test/run-tests.js 2>&1 | tee logs/02-backend-tests.log
 
       - name: Web tests (Chromium — phone, tablet, desktop)
         timeout-minutes: 25
@@ -50,6 +56,7 @@ jobs:
           timeout 420 npx playwright install --with-deps chromium > logs/03-playwright-install.log 2>&1 \
             || { echo "deps install timed out/failed — installing browser only" | tee -a logs/03-playwright-install.log; npx playwright install chromium >> logs/03-playwright-install.log 2>&1; }
           npm run test:web 2>&1 | tee logs/03-web-tests.log
+          node tests/sync-e2e.mjs 2>&1 | tee logs/03-sync-e2e.log
 
       - uses: actions/setup-java@v4
         with:
@@ -67,6 +74,11 @@ jobs:
           ls "$ANDROID_HOME/platforms" "$ANDROID_HOME/build-tools" 2>&1 | tee -a logs/04-sdk.log
 
       - name: Generate & patch Android project
+        env:
+          HGI_SYNC_URL: ${{ vars.HGI_SYNC_URL }}
+          HGI_GOOGLE_WEB_CLIENT_ID: ${{ vars.HGI_GOOGLE_WEB_CLIENT_ID }}   # OAuth "Web application" client ID (public)
+          # store/release builds must have sign-in configured
+          HGI_REQUIRE_SIGNIN: ${{ (startsWith(github.ref, 'refs/tags/v') || inputs.release == true) && '1' || '0' }}
         run: |
           npx cap add android 2>&1 | tee logs/04-cap-add.log
           node tools/patch-android.mjs 2>&1 | tee logs/04-patch.log
@@ -81,6 +93,7 @@ jobs:
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           RELEASE_REQUESTED: ${{ startsWith(github.ref, 'refs/tags/v') || inputs.release == true }}
+          VERSION_CODE_OFFSET: ${{ vars.VERSION_CODE_OFFSET }}
         run: |
           KS="$RUNNER_TEMP/release.jks"
           if [ "$RELEASE_REQUESTED" = "true" ] && { [ -z "$KEYSTORE_B64" ] || [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; }; then
@@ -103,8 +116,13 @@ jobs:
             echo "HGI_KEY_PASSWORD=$PW" >> "$GITHUB_ENV"
             echo "mode=test-key" >> "$GITHUB_OUTPUT"
           fi
+          # a build signed with the owner's key can reach customers: it must require sign-in (cloud sync configured)
+          if [ -n "$KEYSTORE_B64" ] && ! grep -q '<string name="hgi_auth" translatable="false">google</string>' android/app/src/main/res/values/hgi_config.xml; then
+            echo "::error::Release-key build without sign-in: set repository variables HGI_SYNC_URL and HGI_GOOGLE_WEB_CLIENT_ID (see docs/PLAY-RELEASE.md)"; exit 1
+          fi
           echo "HGI_KEYSTORE_FILE=$KS" >> "$GITHUB_ENV"
-          echo "HGI_VERSION_CODE=$(( 100 + GITHUB_RUN_NUMBER ))" >> "$GITHUB_ENV"
+          # versionCode only ever goes up: 100 + run number (+ VERSION_CODE_OFFSET if this workflow is ever renamed/recreated)
+          echo "HGI_VERSION_CODE=$(( 100 + GITHUB_RUN_NUMBER + ${VERSION_CODE_OFFSET:-0} ))" >> "$GITHUB_ENV"
           echo "HGI_VERSION_NAME=$(node -p "require('./package.json').version")" >> "$GITHUB_ENV"
 
       - name: Gradle build (debug APK, release APK, release AAB)
@@ -142,11 +160,13 @@ jobs:
           TAG=$([ "${{ steps.signing.outputs.mode }}" = "release-key" ] && echo "" || echo "-INTERNAL-TESTKEY")
           cp android/app/build/outputs/apk/release/app-release.apk "dist/HGI-Billing-$V$TAG.apk"
           cp android/app/build/outputs/bundle/release/app-release.aab "dist/HGI-Billing-$V$TAG.aab"
-          cp android/app/build/outputs/apk/debug/app-debug.apk "dist/HGI-Billing-$V-debug.apk"
+          cp android/app/build/outputs/apk/debug/app-debug.apk "dist/HGI-Billing-$V-debug-TESTONLY.apk"
           {
             echo "HGI Billing $HGI_VERSION_NAME (versionCode $HGI_VERSION_CODE) — commit $GITHUB_SHA"
             echo "Signing mode: ${{ steps.signing.outputs.mode }}"
             echo "Certificate SHA-256: $HGI_CERT_SHA256"
+            echo "Sign-in: $(sed -n 's/.*name="hgi_auth"[^>]*>\([a-z]*\)<.*/\1/p' android/app/src/main/res/values/hgi_config.xml) · sync service: ${{ vars.HGI_SYNC_URL || 'not configured' }}"
+            echo "The *-debug-TESTONLY.apk is for automated tests only (test sign-in, CI debug key) — never give it to customers."
             [ "${{ steps.signing.outputs.mode }}" = "release-key" ] && echo "Signed with the owner's release key." || echo "INTERNAL TEST BUILD — throw-away key. NOT for Google Play, NOT for customers. Updates from this build cannot be installed over a Play/release install."
           } > dist/SIGNING.txt
           (cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt)
@@ -216,8 +236,8 @@ jobs:
           script: |
             mkdir -p tests/out-android
             adb uninstall in.hariguru.billing > /dev/null 2>&1 || true
-            adb install -r dist/*-debug.apk 2>&1 | tee tests/out-android/install.log
-            HGI_TEST_LABEL=api${{ matrix.api }}-${{ matrix.profile }} node tests/android-smoke.mjs > tests/out-android/smoke.log 2>&1; R=$?; cat tests/out-android/smoke.log; adb logcat -d > tests/out-android/logcat.txt 2>&1; exit $R
+            adb install -r dist/*-debug-TESTONLY.apk 2>&1 | tee tests/out-android/install.log
+            HGI_APK=$(ls dist/*-debug-TESTONLY.apk | head -1) HGI_TEST_LABEL=api${{ matrix.api }}-${{ matrix.profile }} node tests/android-smoke.mjs > tests/out-android/smoke.log 2>&1; R=$?; cat tests/out-android/smoke.log; adb logcat -d > tests/out-android/logcat.txt 2>&1; exit $R
       - name: Run smoke test on emulator (attempt 2 — emulator boot on hosted runners is sometimes flaky)
         id: emu2
         if: steps.emu1.outcome == 'failure'
@@ -234,8 +254,8 @@ jobs:
             [ -d tests/out-android ] && mv tests/out-android tests/out-android/../out-android-attempt1 || true
             mkdir -p tests/out-android
             adb uninstall in.hariguru.billing > /dev/null 2>&1 || true
-            adb install -r dist/*-debug.apk 2>&1 | tee tests/out-android/install.log
-            HGI_TEST_LABEL=api${{ matrix.api }}-${{ matrix.profile }} node tests/android-smoke.mjs > tests/out-android/smoke.log 2>&1; R=$?; cat tests/out-android/smoke.log; adb logcat -d > tests/out-android/logcat.txt 2>&1; exit $R
+            adb install -r dist/*-debug-TESTONLY.apk 2>&1 | tee tests/out-android/install.log
+            HGI_APK=$(ls dist/*-debug-TESTONLY.apk | head -1) HGI_TEST_LABEL=api${{ matrix.api }}-${{ matrix.profile }} node tests/android-smoke.mjs > tests/out-android/smoke.log 2>&1; R=$?; cat tests/out-android/smoke.log; adb logcat -d > tests/out-android/logcat.txt 2>&1; exit $R
       - name: Emulator result
         if: always()
         run: |

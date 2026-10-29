@@ -8,3 +8,4 @@ tests/out-android/
 *.keystore
 *.base64.txt
 .env
+backend/test/out/

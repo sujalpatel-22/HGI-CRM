@@ -118,6 +118,25 @@
       'The sample data will be deleted and your own data will open.': 'નમૂના ડેટા કાઢી નાખવામાં આવશે અને તમારો પોતાનો ડેટા ખુલશે.'
     }
   };
+  // v8.1 account + cloud sync
+  Object.assign(T.hi, {
+    'Continue with Google': 'Google से जारी रखें', 'Account & cloud sync': 'खाता व क्लाउड सिंक', 'Account & sync': 'खाता व सिंक', 'Sync now': 'अभी सिंक करें',
+    'Sign out': 'साइन आउट', 'Sign out?': 'साइन आउट करें?', 'Synced': 'सिंक हुआ', 'Syncing…': 'सिंक हो रहा है…', 'Last synced': 'आखिरी सिंक', 'Not synced yet': 'अभी सिंक नहीं हुआ',
+    'Delete account and cloud data': 'खाता व क्लाउड डेटा हटाएँ', 'Sign in again': 'फिर से साइन इन करें', 'Privacy policy': 'गोपनीयता नीति', 'Cancel': 'रद्द करें',
+    'Use cloud copy': 'क्लाउड कॉपी इस्तेमाल करें', 'Use data on this phone': 'इस फ़ोन का डेटा रखें', "Keep this phone's data": 'इस फ़ोन का डेटा रखें',
+    'Sign in to open your business data. It is saved on this phone and synced automatically to your HGI cloud account, so a reinstall or a new phone brings everything back.':
+      'अपना व्यापार डेटा खोलने के लिए साइन इन करें। डेटा इस फ़ोन पर सेव होता है और अपने-आप आपके HGI क्लाउड खाते में सिंक होता है — ऐप दोबारा इंस्टॉल करने या नया फ़ोन लेने पर सब वापस आ जाता है।',
+    'Waiting for internet — changes are saved on this phone and will sync automatically.': 'इंटरनेट का इंतज़ार — बदलाव इस फ़ोन पर सेव हैं और अपने-आप सिंक होंगे।'
+  });
+  Object.assign(T.gu, {
+    'Continue with Google': 'Google સાથે આગળ વધો', 'Account & cloud sync': 'એકાઉન્ટ અને ક્લાઉડ સિંક', 'Account & sync': 'એકાઉન્ટ અને સિંક', 'Sync now': 'હમણાં સિંક કરો',
+    'Sign out': 'સાઇન આઉટ', 'Sign out?': 'સાઇન આઉટ કરવું છે?', 'Synced': 'સિંક થયું', 'Syncing…': 'સિંક થાય છે…', 'Last synced': 'છેલ્લું સિંક', 'Not synced yet': 'હજી સિંક થયું નથી',
+    'Delete account and cloud data': 'એકાઉન્ટ અને ક્લાઉડ ડેટા કાઢી નાખો', 'Sign in again': 'ફરી સાઇન ઇન કરો', 'Privacy policy': 'ગોપનીયતા નીતિ', 'Cancel': 'રદ કરો',
+    'Use cloud copy': 'ક્લાઉડ કૉપી વાપરો', 'Use data on this phone': 'આ ફોનનો ડેટા રાખો', "Keep this phone's data": 'આ ફોનનો ડેટા રાખો',
+    'Sign in to open your business data. It is saved on this phone and synced automatically to your HGI cloud account, so a reinstall or a new phone brings everything back.':
+      'તમારો વ્યવસાય ડેટા ખોલવા સાઇન ઇન કરો. ડેટા આ ફોનમાં સાચવાય છે અને આપમેળે તમારા HGI ક્લાઉડ એકાઉન્ટમાં સિંક થાય છે — ફરી ઇન્સ્ટોલ કરો કે નવો ફોન લો, બધું પાછું આવી જાય છે.',
+    'Waiting for internet — changes are saved on this phone and will sync automatically.': 'ઇન્ટરનેટની રાહ — ફેરફાર આ ફોનમાં સાચવેલા છે અને આપમેળે સિંક થશે.'
+  });
   const LANGS = { en: 'English', hi: 'हिन्दी', gu: 'ગુજરાતી' };
   const ORIG = '__i18nOrig';
   let lang = 'en';

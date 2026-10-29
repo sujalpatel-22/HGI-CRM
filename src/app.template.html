@@ -7,7 +7,7 @@
   <meta name="color-scheme" content="light dark">
   <!-- Offline app: everything is bundled. Scripts/styles only from the app itself (inline handlers need 'unsafe-inline');
        no remote code, no plugins, no frames, no form posts. -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'{{SYNC_ORIGINS}}; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
   <meta name="referrer" content="no-referrer">
   <title>HGI Billing — GST Invoicing</title>
   <link rel="icon" type="image/png" href="{{FAVICON}}">
@@ -21,6 +21,7 @@
   <link rel="stylesheet" href="theme.css">
   <link rel="stylesheet" href="fonts/fonts.css">
   <link rel="stylesheet" href="studio.css">
+  <link rel="stylesheet" href="account.css">
 
   <style>
     body { font-family: 'Inter', sans-serif; }
@@ -799,6 +800,8 @@
     </div>
   </div>
 
+  <script src="config.js"></script>
+  <script src="account.js"></script>
   <script>
     /* =====================================================================
        CONSTANTS
@@ -806,7 +809,8 @@
     // Demo Mode keeps sample data in its own storage slot, so it can never mix with real business data.
     const HGI_MODE_KEY = 'hgi_mode';
     const DEMO_MODE = (() => { try { return localStorage.getItem(HGI_MODE_KEY) === 'demo'; } catch (e) { return false; } })();
-    const STORAGE_KEY = DEMO_MODE ? 'hgi_billing_demo' : 'hgi_billing_v7_prod';
+    // v8.1: each signed-in account has its own slot (account.js runs first); 'hgi_billing_v7_prod' = data from before accounts / web version
+    const STORAGE_KEY = DEMO_MODE ? 'hgi_billing_demo' : (window.HGI_ACCOUNT ? 'hgi_billing_u_' + window.HGI_ACCOUNT.key : 'hgi_billing_v7_prod');
     const DEFAULT_LOGO = '{{LOGO_ICON}}';
     const DEFAULT_LOGO_FULL = '{{LOGO_FULL}}';
     const GST2_DATE = '2025-09-22';          // GST 2.0 rate rationalisation (5% / 18% / 40%)
@@ -2561,7 +2565,9 @@
       if (lut && co.lutFy && co.lutFy !== fyOf(today)) add('error', `LUT on record is for FY ${co.lutFy}. File RFD-11 for FY ${fyOf(today)} before the next zero-rated supply.`, "switchTab('settings')");
       const cnLimit = liveDocs().filter(x => x.docType === 'INV' && balanceOf(x) > 0 && fyOf(x.date) !== fyOf(today) && today <= `${fyEndISO(x.date).slice(0, 4)}-11-30` && today >= `${fyEndISO(x.date).slice(0, 4)}-10-01`);
       if (cnLimit.length) add('info', `${cnLimit.length} last-FY invoice(s) with dues: any credit note against them must be issued by 30 November (Sec 34).`, null);
-      if (!state.ui.lastBackup && !DEMO_MODE) add('warn', `No backup taken yet — your data is only on this ${window.HGI_APP && window.HGI_APP.isNative ? 'phone' : 'browser'}.`, "switchTab('settings')");
+      const cloudSync = window.HGI_SYNC && HGI_SYNC.active();
+      if (cloudSync) { /* automatic cloud sync replaces manual backups */ }
+      else if (!state.ui.lastBackup && !DEMO_MODE) add('warn', `No backup taken yet — your data is only on this ${window.HGI_APP && window.HGI_APP.isNative ? 'phone' : 'browser'}.`, "switchTab('settings')");
       else if (state.ui.lastBackup && daysBetween(state.ui.lastBackup.slice(0, 10), today) > 7) add('warn', `Last backup was ${daysBetween(state.ui.lastBackup.slice(0, 10), today)} days ago.`, "exportJSONBackup()");
       const color = { error: 'border-rose-300 bg-rose-50', warn: 'border-amber-300 bg-amber-50', info: 'border-blue-200 bg-blue-50' };
       $('dash-alerts').innerHTML = a.length ? a.map(x => `<div class="border-l-4 ${color[x.lvl]} p-2 rounded text-xs text-slate-700 ${x.action ? 'cursor-pointer hover:brightness-95' : ''}" ${x.action ? `onclick="${x.action}"` : ''}>${x.html}</div>`).join('')
@@ -3063,6 +3069,7 @@
        BACKUP
        ===================================================================== */
     function updateBackupLabel() {
+      if (window.HGI_SYNC && HGI_SYNC.active()) { $('last-backup-label').innerHTML = 'Your data syncs automatically to your HGI cloud account (Settings → Account &amp; cloud sync). A backup file is optional.'; return; }
       $('last-backup-label').innerHTML = state.ui.lastBackup ? `Last backup: <strong>${new Date(state.ui.lastBackup).toLocaleString('en-IN')}</strong>`
         : '<span class="text-rose-600 font-semibold">No backup taken yet — all data lives only in this browser!</span>';
     }

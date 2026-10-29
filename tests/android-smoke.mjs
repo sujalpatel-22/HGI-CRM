@@ -4,7 +4,23 @@
 // invoice + GST maths, native PDF rendering to Downloads, data mirror, restart persistence, back button.
 import fs from 'node:fs';
 import path from 'node:path';
+import { createRequire } from 'node:module';
+import { execFileSync } from 'node:child_process';
 import { _android as android } from 'playwright';
+
+// v8.1: the debug APK signs in with TEST accounts against a local sync service (fake Google Drive/Sheets) on the
+// CI host, reached from the emulator at 127.0.0.1:8787 through `adb reverse`. Release builds use Sign in with Google.
+const require = createRequire(import.meta.url);
+const { FakeGoogle } = require('../backend/test/fake-google.js');
+const { createServer } = require('../backend/server.js');
+const config = require('../backend/lib/config.js');
+const g = await new FakeGoogle().start();
+const syncCfg = config.load({ GOOGLE_CLIENT_IDS: 'test-web-client.apps.googleusercontent.com', SESSION_SECRET: 'emulator-test-secret-0123456789abcdef', DRIVE_FOLDER_ID: 'hgi-folder',
+  DRIVE_AUTH: 'metadata', HGI_ALLOW_TEST_LOGIN: '1', ALLOWED_ORIGINS: 'https://localhost' });
+syncCfg.endpoints = g.endpoints();
+const syncServer = createServer(syncCfg);
+await new Promise((res, rej) => { syncServer.once('error', rej); syncServer.listen(8787, '127.0.0.1', res); });
+try { execFileSync('adb', ['reverse', 'tcp:8787', 'tcp:8787'], { stdio: 'pipe' }); } catch (e) { console.log('adb reverse failed:', String(e.stderr || e)); }
 
 const PKG = 'in.hariguru.billing';
 const label = process.env.HGI_TEST_LABEL || 'device';
@@ -46,7 +62,7 @@ async function launch() {
       await within(device.shell(`am start -W -n ${PKG}/.MainActivity`), 60000, 'am start');
       const webview = await device.webView({ pkg: PKG }, { timeout: 60000 });
       const page = await webview.page();
-      await page.waitForFunction(() => window.HGI_READY === true, null, { timeout: 60000 });
+      await page.waitForFunction(() => window.HGI_READY === true || window.HGI_SIGNIN_READY === true, null, { timeout: 60000 });
       lastLaunchAttempts = attempt;
       return page;
     } catch (e) {
@@ -55,6 +71,16 @@ async function launch() {
     }
   }
 }
+
+// test sign-in on the device; returns the page after the app reloaded into the account
+async function signIn(email, choose) {
+  await page.waitForSelector('#signin-screen #si-go', { timeout: 30000 });
+  await page.fill('#si-email', email);
+  await page.click('#si-go');
+  if (choose) { await page.waitForSelector('.acct-dlg', { timeout: 30000 }); await page.click(choose); }
+  return afterReload(() => window.HGI_READY === true && !!window.HGI_ACCOUNT && !document.getElementById('signin-screen'));
+}
+const mirrorKey = () => page.evaluate(() => 'state-u-' + HGI_ACCOUNT.key);
 
 let page = await launch();
 const errors = [];
@@ -71,6 +97,14 @@ check(await page.evaluate(async () => { await document.fonts.ready; return getCo
 check(await page.evaluate(() => getComputedStyle(document.body).fontFamily.includes('Inter') && document.fonts.check('12px Inter')), 'bundled Inter font');
 check(await page.evaluate(() => [...document.styleSheets].some(s => { try { return [...s.cssRules].some(r => r.selectorText === '.bg-white'); } catch (e) { return false; } })), 'compiled Tailwind CSS loaded');
 check(!(await page.isVisible('#login-overlay')), 'no username/password screen on Android');
+const ncfg = await page.evaluate(() => Capacitor.Plugins.HgiNative.getConfig());
+check(ncfg.auth === 'test' && ncfg.syncUrl === 'http://127.0.0.1:8787', `debug build: test sign-in against the local test service (${JSON.stringify(ncfg)})`);
+check(await page.isVisible('#signin-screen') && !(await page.isVisible('#app-container')), 'sign-in required before the app opens');
+await shot('00-signin');
+page = await signIn('emulator@example.com');
+page.on('pageerror', e => errors.push(String(e)));
+page.on('console', m => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
+check(await page.evaluate(() => /^hgi_billing_u_[a-f0-9]{24}$/.test(STORAGE_KEY)), 'signed in: data opens in the account\'s own slot');
 check(await page.isVisible('#onboarding'), 'onboarding shown on first launch');
 check(await page.evaluate(() => !state.products.length && !state.customers.length && !state.invoices.length && !state.company.gstin && !state.company.bankAcc && !state.company.name),
   'fresh install starts with no business data (no sample company, items, buyers or invoices)');
@@ -166,7 +200,7 @@ page = await launch();
 check(await page.evaluate(() => state.invoices.length === 1 && state.company.name === 'Emulator Test Traders'), 'data persists after app restart');
 // WebView storage behind the app-file mirror (e.g. storage full): the newer copy must win at start-up
 await page.evaluate(async () => { const s = JSON.parse(JSON.stringify(state)); s.company.tagline = 'from-newer-mirror'; s.ui.rev = (Number(state.ui.rev) || 0) + 100;
-  await Capacitor.Plugins.HgiNative.writeState({ key: 'state', data: JSON.stringify(s) }); });
+  await Capacitor.Plugins.HgiNative.writeState({ key: 'state-u-' + HGI_ACCOUNT.key, data: JSON.stringify(s) }); });
 page = await launch();
 check(await page.evaluate(retried => state.company.tagline === 'from-newer-mirror' && (window.__restoredFromMirror === true || retried) && state.invoices.length === 1, lastLaunchAttempts > 1), 'newer on-device copy wins over older WebView storage');
 // simulate the WebView's storage being wiped (e.g. WebView update/reset): delete its Local Storage on disk while
@@ -184,7 +218,7 @@ await page.evaluate(() => { HGI_M.enterDemo({ confirmed: true }); });
 page = await afterReload(() => window.HGI_READY === true && typeof DEMO_MODE !== 'undefined' && DEMO_MODE === true);
 check(await page.evaluate(() => state.invoices.length === 5 && state.invoices.every(d => d.demo) && !!document.getElementById('demo-banner')), 'Demo Mode shows sample data with a DEMO banner');
 await page.waitForTimeout(1500);
-check(await page.evaluate(async () => { const r = await Capacitor.Plugins.HgiNative.readState({ key: 'state' }); const s = JSON.parse(r.data); return s.invoices.length === 1 && s.company.name === 'Emulator Test Traders'; }),
+check(await page.evaluate(async () => { const r = await Capacitor.Plugins.HgiNative.readState({ key: 'state-u-' + HGI_ACCOUNT.key }); const s = JSON.parse(r.data); return s.invoices.length === 1 && s.company.name === 'Emulator Test Traders'; }),
   'real data in the native mirror untouched while Demo Mode is open');
 await shot('05a-demo');
 await page.evaluate(() => { HGI_M.exitDemo({ confirmed: true }); });
@@ -200,6 +234,51 @@ await page.evaluate(() => { HGI_M.setTheme('dark'); HGI_M.setLang('hi'); }); awa
 await shot('05-dark-hindi');
 check(await page.evaluate(() => document.querySelector('#bottom-nav button[data-tab="customers"] span').textContent === 'ग्राहक'), 'Hindi UI');
 
+/* ---------------------------------------------------------------- v8.1 cloud sync on the device */
+await page.evaluate(() => { HGI_M.setTheme('light'); HGI_M.setLang('en'); });
+const synced = await page.evaluate(() => HGI_SYNC._syncNow().then(() => HGI_SYNC.status()));
+const acctKey = synced.account && synced.account.key;
+const sheet = acctKey && g.spreadsheetOf(acctKey);
+check(synced.status === 'ok' && sheet && g.rows(sheet.id, 'Invoices').length === 2 && g.rows(sheet.id, 'Company')[1][1] === 'Emulator Test Traders',
+  `data synced from the phone to the account's spreadsheet (status ${synced.status}${synced.error ? ': ' + synced.error : ''})`);
+// real uninstall + reinstall of the same APK, then sign in again → everything back
+const apk = process.env.HGI_APK;
+if (apk && fs.existsSync(apk)) {
+  await device.shell(`am force-stop ${PKG}`);
+  await within(device.shell(`pm uninstall ${PKG}`), 60000, 'uninstall');
+  check(!(await device.shell(`pm list packages ${PKG}`)).toString().includes(PKG), 'app uninstalled (all on-device data gone)');
+  await within(device.installApk(fs.readFileSync(apk)), 180000, 'install');
+  try { execFileSync('adb', ['reverse', 'tcp:8787', 'tcp:8787'], { stdio: 'pipe' }); } catch (e) { /* kept from before */ }
+  page = await launch();
+  check(await page.isVisible('#signin-screen'), 'reinstalled app asks for sign-in');
+  page = await signIn('emulator@example.com');
+  check(await page.evaluate(() => state.invoices.length === 1 && state.company.name === 'Emulator Test Traders' && state.invoices[0].grandTotal === 11800 && !document.getElementById('onboarding')),
+    'after reinstall + sign-in all data is restored from the cloud (invoice, company, no setup wizard)');
+  await shot('06-restored-after-reinstall');
+  page = await launch();
+  check(await page.evaluate(() => !!window.HGI_ACCOUNT && state.invoices.length === 1), 'stays signed in and keeps the data after restart');
+} else console.log('    (HGI_APK not set — reinstall check skipped)');
+// second account on the same phone sees nothing of the first
+await page.evaluate(() => { HGI_SYNC.signOut(); }); await page.waitForSelector('.acct-dlg'); await page.click('.acct-dlg .acct-btn-primary');
+page = await afterReload(() => window.HGI_SIGNIN_READY === true && !!document.getElementById('signin-screen'));
+page = await signIn('second@example.com');
+check(await page.evaluate(() => state.invoices.length === 0 && !state.company.name), 'another account on the same phone starts empty (data separated)');
+// upgrade from v8.0 (no accounts): data in the old slot + old mirror file is adopted by the first account that signs in
+await page.evaluate(() => { HGI_SYNC.signOut(); }); await page.waitForSelector('.acct-dlg'); await page.click('.acct-dlg .acct-btn-primary');
+page = await afterReload(() => window.HGI_SIGNIN_READY === true && !!document.getElementById('signin-screen'));
+await page.evaluate(async () => {
+  localStorage.removeItem('hgi_legacy_owner');
+  const old = { credentials: {}, company: { name: 'Pre-8.1 Traders' }, products: [], customers: [], ui: { rev: 900, onboarded: true },
+    invoices: [{ id: 'OLD1', docType: 'INV', num: 'OLD/1', date: '2026-09-01', buyerName: 'Old Buyer', items: [{ desc: 'Valve', hsn: '8481', gst: 18, qty: 1, unit: 'NOS', rate: 100 }], payments: [], grandTotal: 118 }] };
+  await Capacitor.Plugins.HgiNative.writeState({ key: 'state', data: JSON.stringify(old) });
+});
+page = await signIn('upgrader@example.com');
+check(await page.evaluate(() => state.company.name === 'Pre-8.1 Traders' && state.invoices.length === 1), 'upgrade: data saved before sign-in existed is kept and opened in the account');
+const up = await page.evaluate(() => HGI_SYNC._syncNow().then(() => HGI_SYNC.status()));
+check(up.status === 'ok' && g.rows(g.spreadsheetOf(up.account.key).id, 'Invoices').some(r => r[1] === 'OLD/1'), 'upgrade: that data is uploaded to the account');
+await shot('07-upgraded');
+
 check(errors.length === 0, `no JavaScript errors${errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''}`);
 console.log(`\n${label}: ${pass} passed, ${fail} failed`);
+syncServer.close(); await g.stop();
 process.exit(fail ? 1 : 0);

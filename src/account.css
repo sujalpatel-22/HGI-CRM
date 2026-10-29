@@ -1,0 +1,56 @@
+/* HGI Billing v8.1 — sign-in screen, account dialogs, Settings → Account card */
+#signin-screen { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; padding: 20px;
+  padding-top: max(20px, env(safe-area-inset-top)); padding-bottom: max(20px, env(safe-area-inset-bottom)); overflow-y: auto;
+  background: var(--ink-grad, #0b1433); font-family: var(--f-ui, system-ui, sans-serif); }
+#signin-screen::before { content: ''; position: absolute; inset: -10%; background: var(--guilloche) center / contain no-repeat; opacity: .07; pointer-events: none; }
+#signin-screen .si-card { position: relative; width: 100%; max-width: 400px; background: var(--surface, #fff); color: var(--text, #0b1430);
+  border-radius: 30px; padding: 32px 26px 24px; text-align: center; box-shadow: 0 50px 100px -40px rgba(0, 0, 0, .7); }
+#signin-screen .si-logo { height: 72px; max-width: 220px; object-fit: contain; margin: 0 auto 10px; display: block; }
+#signin-screen h1 { font: 700 26px/1.15 var(--f-display, inherit); letter-spacing: -.02em; margin: 0 0 8px; }
+#signin-screen .si-sub { font-size: 14px; line-height: 1.5; color: var(--text-2, #39405a); margin: 0 0 22px; }
+#signin-screen .si-google { display: inline-flex; align-items: center; justify-content: center; gap: 12px; width: 100%; min-height: 52px;
+  padding: 0 18px; border-radius: 999px; border: 1px solid #747775; background: #fff; color: #1f1f1f;
+  font: 600 15px/1 'Roboto', var(--f-ui, system-ui), sans-serif; cursor: pointer; transition: transform .15s, box-shadow .2s; }
+#signin-screen .si-google:active { transform: scale(.98); }
+#signin-screen .si-google:focus-visible { outline: none; box-shadow: var(--ring, 0 0 0 4px rgba(245, 130, 32, .25)); }
+#signin-screen .si-google[disabled] { opacity: .6; cursor: progress; }
+#signin-screen .inp { width: 100%; margin-bottom: 10px; text-align: center; }
+#signin-screen .si-test { display: inline-block; font: 700 11px/1 var(--f-ui); letter-spacing: .08em; color: #9a3412; background: #ffedd5; padding: 6px 10px; border-radius: 999px; margin-bottom: 12px; }
+#signin-screen .si-msg { min-height: 20px; margin: 14px 0 0; font-size: 13px; color: var(--muted, #6c7084); }
+#signin-screen .si-msg.err, #signin-screen .si-err { color: var(--rose, #d6455d); font-weight: 600; }
+#signin-screen .si-err { font-size: 14px; line-height: 1.5; }
+#signin-screen .si-foot { margin: 18px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted, #6c7084); }
+#signin-screen .si-foot a { color: var(--saffron-ink, #c25d0b); font-weight: 600; }
+#signin-screen .si-close { margin-top: 14px; background: none; border: 0; color: var(--muted, #6c7084); font-weight: 600; font-size: 13px; cursor: pointer; }
+html.dark #signin-screen .si-google { background: #131314; color: #e3e3e3; border-color: #8e918f; }
+html.signed-out #app-container, html.signed-out #login-overlay { display: none !important; }
+
+.acct-dlg { position: fixed; inset: 0; z-index: 90; display: flex; align-items: flex-end; justify-content: center; background: rgba(5, 9, 20, .55); padding: 16px;
+  padding-bottom: max(16px, env(safe-area-inset-bottom)); font-family: var(--f-ui, system-ui, sans-serif); }
+@media (min-width: 640px) { .acct-dlg { align-items: center; } }
+.acct-dlg-card { width: 100%; max-width: 460px; max-height: 90vh; overflow-y: auto; background: var(--surface, #fff); color: var(--text, #0b1430);
+  border-radius: 24px; padding: 22px 20px 16px; box-shadow: var(--sh-float, 0 24px 48px -20px rgba(8, 14, 32, .45)); }
+.acct-dlg-card h3 { font: 700 18px/1.25 var(--f-display, inherit); margin: 0 0 10px; }
+.acct-dlg-body { font-size: 14px; line-height: 1.55; color: var(--text-2, #39405a); }
+.acct-dlg-body p { margin: 0 0 10px; } .acct-dlg-body ul { margin: 0 0 10px; padding-left: 18px; list-style: disc; } .acct-dlg-body li { margin: 4px 0; }
+.acct-dlg-body .inp { width: 100%; }
+.acct-note { font-size: 12px; color: var(--muted, #6c7084); }
+.acct-check { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; }
+.acct-check input { margin-top: 3px; width: 18px; height: 18px; }
+.acct-dlg-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.acct-dlg-actions button { min-height: 44px; padding: 0 16px; border-radius: 14px; font-weight: 700; font-size: 14px; cursor: pointer; border: 1px solid var(--line-2, #d6d1c4); background: transparent; color: var(--text, #0b1430); }
+.acct-dlg-actions .acct-btn-primary { background: var(--ink, #0b1430); color: #fff; border-color: var(--ink, #0b1430); }
+.acct-dlg-actions .acct-btn-danger { background: var(--rose, #d6455d); color: #fff; border-color: var(--rose, #d6455d); }
+html.dark .acct-dlg-actions .acct-btn-primary { background: var(--saffron, #f58220); border-color: var(--saffron, #f58220); color: #1a0e02; }
+
+#acct-card .acct-row { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
+#acct-card .acct-avatar { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; flex: none;
+  background: var(--saffron-soft, #ffedd5); color: var(--saffron-ink, #c25d0b); font: 700 18px var(--f-display, inherit); }
+#acct-card .acct-who { display: flex; flex-direction: column; min-width: 0; }
+#acct-card .acct-who strong { font-size: 15px; } #acct-card .acct-who span { font-size: 12px; color: var(--muted, #6c7084); overflow: hidden; text-overflow: ellipsis; }
+#acct-card .acct-status { margin-top: 12px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+#acct-card .acct-status::before { content: ''; width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--faint, #a29e93); }
+#acct-card .acct-ok { color: var(--mint, #12a77a); } #acct-card .acct-ok::before { background: var(--mint, #12a77a); }
+#acct-card .acct-warn { color: var(--amber, #c88512); } #acct-card .acct-warn::before { background: var(--amber, #c88512); }
+#acct-card .acct-muted { color: var(--muted, #6c7084); }
+#acct-card button[disabled] { opacity: .5; }
