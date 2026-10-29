@@ -55,6 +55,7 @@
       html body #invoice-preview-container#invoice-preview-container .page-scale-wrap + .page-scale-wrap,
       html body #invoice-preview-container#invoice-preview-container .a4-page + .a4-page { break-before: page !important; page-break-before: always !important; }
       /* a one-sheet copy never needs its item header repeated; WebView 83 otherwise added a phantom header row (blank sheet) */
+      html.no-flex-gap body #invoice-preview-container#invoice-preview-container .a4-page { min-height: 270mm !important; }
       html body #invoice-preview-container#invoice-preview-container .a4-page.one-sheet .inv-table thead { display: table-row-group !important; }
       html body #invoice-preview-container#invoice-preview-container > :first-child,
       html body #invoice-preview-container#invoice-preview-container > :first-child > .a4-page { break-before: auto !important; page-break-before: auto !important; }
@@ -2210,7 +2211,9 @@
     // Long invoices (more than one page) are left as they are.
     // The filler is sized against the PRINTED page height (280 mm; the printable area is 287 mm), not the on-screen box,
     // so a print engine that sets text a little taller than the screen (older Android WebViews: ~5 mm) still fits one sheet.
-    const PRINT_PAGE_H = '280mm';
+    // Engines older than Chrome 84 (no flexbox gap, e.g. Android 11's stock WebView 83) lay out a copy a few mm taller
+    // after a page break than they measure on screen: give them a 270 mm sheet so no copy spills onto a blank page.
+    const printPageH = () => (document.documentElement.classList.contains('no-flex-gap') ? '270mm' : '280mm');
     function fitInvoicePages() {
       const container = $('invoice-preview-container');
       if (!container) return;
@@ -2219,7 +2222,7 @@
         page.classList.remove('one-sheet');
         const tbody = page.querySelector('.inv-table tbody');
         if (!tbody || !tbody.rows.length || !page.offsetHeight) return;   // not visible yet
-        page.style.minHeight = PRINT_PAGE_H;
+        page.style.minHeight = printPageH();
         const target = page.offsetHeight;                 // one printed page
         page.style.minHeight = '0px';
         const natural = page.offsetHeight;                // height the content really needs

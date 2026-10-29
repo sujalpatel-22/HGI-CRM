@@ -67,3 +67,6 @@ The Android CI run for 8.0.1 passed, but the PDFs the emulators themselves produ
 
 ### v8.0.4 — WebView 83 (Android 11 stock) (29 Oct 2026)
 8.0.3 fixed Android 13 (3 sheets); Android 11's original WebView 83 still made 4: copy 2 sat ~14 pt (one table-header row) lower and pushed a blank sheet. A one-sheet copy now prints its item header as a normal row (only multi-sheet invoices repeat it). WebView 83 also lacks flexbox `gap` (Chrome 84+), so the company name ran into the logo: start-up detects this and compat.css spaces the invoice paper with margins. New Android check: company name clear of the logo.
+
+### v8.0.5 (29 Oct 2026)
+8.0.4 fixed the logo spacing on WebView 83 (verified: 9 px, margin fallback) but its PDF still had 4 sheets: copy 2 (the first copy after a page break) is laid out progressively taller than measured (+1.5 pt by the party boxes, +7 pt by the item table, +14 pt by the terms) and crosses that engine's sheet boundary. Engines without flexbox gap (Chrome < 84) now use a 270 mm page target; all others keep 280 mm.
