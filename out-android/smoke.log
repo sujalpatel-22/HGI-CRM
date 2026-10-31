@@ -1,0 +1,81 @@
+▶ api30-pixel_2: sdk_gphone_x86_64 · Android SDK 30 · WebView versionName=83.0.4103.106
+  ✓ runs as native Capacitor app
+  ✓ HgiNative plugin reachable from JavaScript
+  ✓ native writeState/readState round trip
+  ✓ bundled QR + Chart libraries loaded (offline)
+  ✓ bundled Font Awesome icons
+  ✓ bundled Inter font
+  ✓ compiled Tailwind CSS loaded
+  ✓ no username/password screen on Android
+  ✓ debug build: test sign-in against the local test service ({"auth":"test","syncUrl":"http://127.0.0.1:8787","webClientId":"","debug":true})
+  ✓ sign-in required before the app opens
+{"severity":"INFO","at":"2026-10-31T21:39:44.443Z","event":"spreadsheet_created","user":"318ced1af5eff38076e28985"}
+{"severity":"INFO","at":"2026-10-31T21:39:44.483Z","event":"saved","user":"318ced1af5eff38076e28985","version":1,"bytes":866,"unchanged":false}
+  ✓ signed in: data opens in the account's own slot
+  ✓ onboarding shown on first launch
+  ✓ fresh install starts with no business data (no sample company, items, buyers or invoices)
+  ✓ setup wizard covers the screen, buttons unstyled by default (660/660px, rgba(0, 0, 0, 0))
+{"severity":"INFO","at":"2026-10-31T21:40:44.137Z","event":"saved","user":"318ced1af5eff38076e28985","version":2,"bytes":974,"unchanged":false}
+  ✓ onboarding done, bottom tab bar shown
+  ✓ ₹ sign has its own width (21.7px at 46px, system-font fallback active, probe [0,0,9,0])
+  ✓ no native title bar over the app
+    status-bar pixel [ 243, 241, 236 ] header pixel [ 241, 232, 226 ] insets "0px"
+  ✓ status bar painted the page colour (rgb 243,241,236 vs page 243,241,236)
+  ✓ invoice saved
+  ✓ GST: inter-state IGST 18% on ₹10,000 = ₹1,800, total ₹11,800
+  ✓ UPI scan-to-pay QR rendered
+{"severity":"INFO","at":"2026-10-31T21:41:17.663Z","event":"saved","user":"318ced1af5eff38076e28985","version":3,"bytes":2324,"unchanged":false}
+  ✓ invoice header: company name clear of the logo (9px, flex gap margin fallback)
+    save toast: PDF saved: Downloads/HGI Billing/Invoice_01-26-27_Shree_Ram_Engineering.pdf
+  ✓ native A4 PDF written to Downloads/HGI Billing (116110 bytes)
+  ✓ file is a valid PDF
+  ✓ native PDF: 3 copies → 3 A4 sheets (one per copy, no spill-over pages; page target 270 mm)
+  ✓ Android back button closes dialog
+  ✓ back button returns to dashboard
+  ✓ product search opens when the item description is tapped
+  ✓ Android back closes the search and stays on the invoice
+  ✓ picked item filled the row: {"desc":"Industrial Machine Components","qty":"2","rate":"2500","hsn":"848390","taxable":5000,"rows":1}
+{"severity":"INFO","at":"2026-10-31T21:41:54.710Z","event":"saved","user":"318ced1af5eff38076e28985","version":4,"bytes":2363,"unchanged":false}
+  ✓ data persists after app restart
+{"severity":"INFO","at":"2026-10-31T21:42:09.090Z","event":"saved","user":"318ced1af5eff38076e28985","version":5,"bytes":2382,"unchanged":false}
+  ✓ newer on-device copy wins over older WebView storage
+    files dir: hgi-account.json   hgi-state-u-318ced1af5eff38076e28985.json
+hgi-selftest.json  hgi-sync-u-318ced1af5eff38076e28985.json
+  ✓ data restored from on-device mirror when WebView storage is wiped
+  ✓ Demo Mode shows sample data with a DEMO banner
+  ✓ real data in the native mirror untouched while Demo Mode is open
+  ✓ exit Demo Mode returns to real data and deletes the sample data
+  ✓ after restart the app opens real data, not demo
+  ✓ Hindi UI
+{"severity":"INFO","at":"2026-10-31T21:43:24.395Z","event":"saved","user":"318ced1af5eff38076e28985","version":6,"bytes":2410,"unchanged":false}
+  ✓ data synced from the phone to the account's spreadsheet (status ok)
+  ✓ app uninstalled (all on-device data gone)
+  ✓ reinstalled app asks for sign-in
+  ✓ after reinstall + sign-in all data is restored from the cloud (invoice, company, no setup wizard)
+  ✓ stays signed in and keeps the data after restart
+  ✓ signed-in restart opens the dashboard directly — no login / sign-in screen at any moment
+{"severity":"INFO","at":"2026-10-31T21:44:23.933Z","event":"spreadsheet_created","user":"d164ffaf7706ce96cf8664b6"}
+{"severity":"INFO","at":"2026-10-31T21:44:23.982Z","event":"saved","user":"d164ffaf7706ce96cf8664b6","version":1,"bytes":866,"unchanged":false}
+  ✓ another account on the same phone starts empty (data separated)
+  ✓ upgrade: data saved before sign-in existed is kept and opened in the account
+{"severity":"INFO","at":"2026-10-31T21:44:52.204Z","event":"spreadsheet_created","user":"9acc11175abb3b919074edc8"}
+{"severity":"INFO","at":"2026-10-31T21:44:52.238Z","event":"saved","user":"9acc11175abb3b919074edc8","version":1,"bytes":1215,"unchanged":false}
+  ✓ upgrade: that data is uploaded to the account
+  ✓ no-cloud mode: opens the phone's data without any sign-in ({"auth":"off","key":"hgi_billing_v7_prod","n":3,"co":"Local Mode Traders"})
+  ✓ restart 1: dashboard directly, login screen never shown (no flash)
+  ✓ restart 2: dashboard directly, login screen never shown (no flash)
+  ✓ bulk export dialog counts matching documents (3 documents will be exported → buyer filter: 2 documents will be exported)
+  ✓ 2 PDFs zipped and saved: Downloads/HGI Billing/HGI_Invoices_2026-10-01_to_2026-10-31_Buyer_Alpha.zip
+  ✓ ZIP holds 2 valid PDFs of Buyer Alpha (Invoice_LM-1_Buyer_Alpha.pdf 74587 B, Invoice_LM-3_Buyer_Alpha.pdf 74583 B)
+  ✓ ZIP includes index.csv listing exactly those documents
+  ✓ screen restored after the export (preview hidden again)
+  ✓ WhatsApp share: invoice PDF created () and handed to Android sharing since WhatsApp is missing
+  ✓ Android share sheet opened (mResumedActivity: ActivityRecord{a7b9a2a u0 android/com.android.internal.app.ChooserActivity t17})
+  ✓ logout: login screen shown, session ended, all 3 documents still stored, new password saved
+  ✓ after restart the app stays logged out (login required)
+  ✓ wrong password is refused
+  ✓ correct password: back in, data intact
+  ✓ after logging back in, restarts go straight to the dashboard again
+  ✓ no JavaScript errors
+
+api30-pixel_2: 63 passed, 0 failed
