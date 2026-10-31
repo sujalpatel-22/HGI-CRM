@@ -102,3 +102,16 @@ The Android CI run for 8.0.1 passed, but the PDFs the emulators themselves produ
   is known); Android share sheet when WhatsApp is not installed (what the emulators have). Web keeps the text link.
 - Android: removed the EmojiCompat start-up binding to Play services (Android killed the app when Play services restarted, API 33 CI).
 - CI run 41214823949: backend 36, web 266, sync e2e 44, v8.2 web 15, Android 60/60 on API 30/33/35/36, all first attempt.
+
+### v8.3.0 — smart product search & selection (1 Nov 2026)
+- `src/picker.js` + `picker.css`: tapping an item description (or "Search & add items", Ctrl+K) opens a search over name, size, SKU,
+  category, specifications and HSN; results grouped category → product → sizes (numeric order) with price, unit, live stock,
+  "on invoice" marks; favourites, recently used, frequently billed; keyboard ↑ ↓ Enter, Ctrl+Enter, Esc; multi-select with quantities;
+  an item already on the invoice gets its quantity raised (no duplicate rows); "use as typed" for free-text lines.
+- Rows are filled via the existing `onItemDescChange()` → HSN/GST/unit/rate and all GST maths unchanged (test: taxable, CGST/SGST, total).
+- Products gain optional category, product (without size), size, SKU, specs; "add several sizes at once"; sizes read from older names.
+- `stockMap()`: stock for all products in one pass (Items list and search).
+- Found + fixed on the way: Android WebView < 110 (AOSP 101) spilled a blank 4th PDF sheet → 270 mm page target there;
+  CI steps now use bash pipefail (a failing check piped into `tee` had not failed the job).
+- CI 41246442112: backend 36, web 266, sync 44, v8.2 15, picker 68 (5,000 products: open 61 ms, keystroke ≤ 15 ms),
+  Android 63/63 on API 30/33/35/36 (API 33 on the AOSP image now; emulator launcher ANR needed retries/rerun on 33 and 35).
