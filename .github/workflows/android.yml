@@ -16,6 +16,11 @@ on:
 permissions:
   contents: write
 
+# every `cmd | tee log` step must fail when cmd fails (GitHub's default shell has no pipefail)
+defaults:
+  run:
+    shell: bash
+
 concurrency:
   group: android-${{ github.ref }}
   cancel-in-progress: true

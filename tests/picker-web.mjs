@@ -77,6 +77,7 @@ async function run(vp) {
   // open from the description cell
   await page.evaluate(() => switchTab('create-invoice'));
   await page.click('#invoice-items-body tr:first-child .item-desc');
+  await page.waitForFunction(() => document.activeElement && document.activeElement.id === 'pk-q', null, { timeout: 3000 }).catch(() => null);
   check(await page.isVisible('#product-picker') && await page.evaluate(() => document.activeElement && document.activeElement.id === 'pk-q'), 'tapping the item description opens the product search with the cursor in the search box');
   const home = await page.$$eval('#pk-results .pk-sec-t', els => els.map(e => e.childNodes[0].textContent.trim()));
   check(home.includes('Recently used') && home.includes('Frequently billed') && home.includes('All products'), `start view: ${home.join(' · ')}`);
