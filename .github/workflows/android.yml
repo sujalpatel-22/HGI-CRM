@@ -57,6 +57,7 @@ jobs:
             || { echo "deps install timed out/failed — installing browser only" | tee -a logs/03-playwright-install.log; npx playwright install chromium >> logs/03-playwright-install.log 2>&1; }
           npm run test:web 2>&1 | tee logs/03-web-tests.log
           node tests/sync-e2e.mjs 2>&1 | tee logs/03-sync-e2e.log
+          node tests/v82-web.mjs 2>&1 | tee logs/03-v82-web.log
 
       - uses: actions/setup-java@v4
         with:
