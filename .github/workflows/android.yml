@@ -205,7 +205,7 @@ jobs:
       matrix:
         include:
           - { api: 30, profile: pixel_2, target: google_apis }   # Android 11, 5" phone
-          - { api: 33, profile: pixel_6, target: google_apis }   # Android 13, 6.4" phone
+          - { api: 33, profile: pixel_6, target: default }       # Android 13, 6.4" phone — AOSP image: on the Google APIs image Play services restarts mid-run and Android kills the app under test
           - { api: 35, profile: pixel_c, target: google_apis }   # Android 15, 10" tablet
           - { api: 36, profile: pixel_7, target: google_apis }   # Android 16 (target SDK)
     steps:
