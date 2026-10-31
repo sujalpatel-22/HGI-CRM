@@ -1,0 +1,65 @@
+Configuration
+  ✓ config refuses test sign-in and Google overrides on Cloud Run
+  ✓ config requires a strong session secret, client ID and folder
+Pages
+  ✓ privacy policy, deletion page and health check are served
+Sign in with Google
+{"severity":"INFO","at":"2026-10-31T21:32:41.716Z","event":"sign_in","user":"3ba69ecb17cde0b413946cab"}
+  ✓ valid Google ID token → app session (no Google token returned)
+  ✓ token for another app (audience) is refused
+  ✓ expired token is refused
+  ✓ token not issued by Google is refused
+  ✓ token signed by a different key is refused
+  ✓ token with unknown key id is refused
+  ✓ unverified e-mail is refused
+  ✓ garbage token is refused
+  ✓ test sign-in endpoint does not exist unless enabled
+Sessions
+  ✓ no session / tampered session / expired session → 401
+  ✓ session close to expiry is renewed (X-HGI-Session header)
+Sync
+  ✓ new account: empty cloud, nothing to restore
+{"severity":"INFO","at":"2026-10-31T21:32:41.817Z","event":"spreadsheet_created","user":"3ba69ecb17cde0b413946cab"}
+{"severity":"INFO","at":"2026-10-31T21:32:41.840Z","event":"saved","user":"3ba69ecb17cde0b413946cab","version":1,"bytes":1280,"unchanged":false}
+  ✓ first save creates the user's spreadsheet in the company folder
+  ✓ readable tabs show invoices, items, payments, customers, products
+  ✓ restore returns the exact same data
+{"severity":"INFO","at":"2026-10-31T21:32:41.846Z","event":"sign_in","user":"6c3fb43a9643de8f613791ad"}
+{"severity":"INFO","at":"2026-10-31T21:32:41.854Z","event":"spreadsheet_created","user":"6c3fb43a9643de8f613791ad"}
+{"severity":"INFO","at":"2026-10-31T21:32:41.871Z","event":"saved","user":"6c3fb43a9643de8f613791ad","version":1,"bytes":588,"unchanged":false}
+  ✓ second user gets a separate spreadsheet and never sees the first user's data
+  ✓ save based on an old version is refused (another phone saved first) — 409, cloud unchanged
+{"severity":"INFO","at":"2026-10-31T21:32:41.883Z","event":"saved","user":"3ba69ecb17cde0b413946cab","version":1,"bytes":1280,"unchanged":true}
+  ✓ repeating the last save (reply lost) is accepted without a new version
+{"severity":"INFO","at":"2026-10-31T21:32:42.031Z","event":"saved","user":"3ba69ecb17cde0b413946cab","version":2,"bytes":1738359,"unchanged":false}
+  ✓ large book (≈1.7 MB with a logo, 400 invoices) is split over cells and restored exactly; slots alternate
+{"severity":"ERROR","at":"2026-10-31T21:32:47.860Z","error":"Google API: injected failure","path":"/v1/sync","status":503}
+  ✓ Google failure in the middle of a save → 503, previous cloud copy intact
+{"severity":"ERROR","at":"2026-10-31T21:32:47.917Z","error":"Cloud write could not be verified — nothing was changed","path":"/v1/sync","status":500}
+  ✓ a write that cannot be verified is not made live
+{"severity":"INFO","at":"2026-10-31T21:32:48.875Z","event":"saved","user":"3ba69ecb17cde0b413946cab","version":3,"bytes":1569,"unchanged":false}
+  ✓ temporary Google error (429) is retried transparently
+  ✓ expired Google access token is refreshed and the call retried
+{"severity":"INFO","at":"2026-10-31T21:32:48.901Z","event":"saved","user":"6c3fb43a9643de8f613791ad","version":2,"bytes":652,"unchanged":false}
+  ✓ cell text is stored as text (formula injection is not evaluated)
+  ✓ junk data and oversized requests are refused
+CORS
+  ✓ the app origin (https://localhost) is allowed, other websites are not
+Account deletion
+{"severity":"INFO","at":"2026-10-31T21:32:49.237Z","event":"account_deleted","user":"3ba69ecb17cde0b413946cab","mode":"deleted"}
+  ✓ in-app deletion removes the spreadsheet and stops the old session
+{"severity":"INFO","at":"2026-10-31T21:32:49.244Z","event":"sign_in","user":"3ba69ecb17cde0b413946cab"}
+  ✓ signing in again after deletion starts a new, empty account
+{"severity":"INFO","at":"2026-10-31T21:32:49.249Z","event":"account_deleted","user":"6c3fb43a9643de8f613791ad","mode":"deleted"}
+  ✓ deletion from the web page (Google sign-in) works
+{"severity":"INFO","at":"2026-10-31T21:32:49.252Z","event":"sign_in","user":"c041d57afc13f5f5c6d0a53c"}
+{"severity":"INFO","at":"2026-10-31T21:32:49.257Z","event":"spreadsheet_created","user":"c041d57afc13f5f5c6d0a53c"}
+{"severity":"INFO","at":"2026-10-31T21:32:49.272Z","event":"saved","user":"c041d57afc13f5f5c6d0a53c","version":1,"bytes":624,"unchanged":false}
+{"severity":"INFO","at":"2026-10-31T21:32:49.275Z","event":"account_deleted","user":"c041d57afc13f5f5c6d0a53c","mode":"trashed"}
+  ✓ shared-drive role without delete rights: file is trashed instead
+Other Drive access modes
+  ✓ owner-oauth mode gets tokens with the refresh token; a revoked token is reported, not faked
+  ✓ sa-key mode signs a JWT grant with the key
+  ✓ test sign-in (when enabled locally) accepts only @example.com addresses
+
+36 passed, 0 failed

@@ -1,0 +1,80 @@
+
+▶ First start
+   ✓ sign-in screen shown before anything else
+   ✓ app and old login hidden until signed in
+   ✓ no business data reachable while signed out
+
+▶ Sign in and automatic sync
+   ✓ signed in as asha@example.com
+   ✓ data opened in the account's own slot (hgi_billing_u_8940f6e639eabd6dd8864c0f)
+   ✓ new account starts empty with the setup wizard
+{"severity":"INFO","at":"2026-10-31T21:34:15.209Z","event":"spreadsheet_created","user":"8940f6e639eabd6dd8864c0f"}
+{"severity":"INFO","at":"2026-10-31T21:34:15.241Z","event":"saved","user":"8940f6e639eabd6dd8864c0f","version":1,"bytes":1658,"unchanged":false}
+   ✓ synced automatically to the cloud (status ok, version 1)
+   ✓ account spreadsheet created in the company Drive folder
+   ✓ Invoices tab shows the two documents
+   ✓ no "take a backup" warning while cloud sync is on
+   ✓ Settings → Account card shows the account and "Synced"
+{"severity":"INFO","at":"2026-10-31T21:34:19.741Z","event":"saved","user":"8940f6e639eabd6dd8864c0f","version":2,"bytes":1975,"unchanged":false}
+   ✓ new document uploaded automatically after saving
+
+▶ Reinstall (empty phone storage) and sign in again
+   ✓ all data restored after reinstall (3 documents, 2 buyers, company "Test Co")
+   ✓ no setup wizard after a restore
+   ✓ same account → same data slot
+{"severity":"INFO","at":"2026-10-31T21:34:20.399Z","event":"saved","user":"8940f6e639eabd6dd8864c0f","version":3,"bytes":2278,"unchanged":false}
+   ✓ restored phone is in sync (no conflict)
+
+▶ Second account on the same phone
+   ✓ after sign-out the sign-in screen is back
+   ✓ second account sees none of the first account's data
+{"severity":"INFO","at":"2026-10-31T21:34:21.830Z","event":"spreadsheet_created","user":"9e59306599c3c32252c114e5"}
+{"severity":"INFO","at":"2026-10-31T21:34:21.855Z","event":"saved","user":"9e59306599c3c32252c114e5","version":1,"bytes":1295,"unchanged":false}
+   ✓ second account has its own spreadsheet
+   ✓ spreadsheets contain only their own account's documents
+   ✓ first account's data is back when it signs in again
+
+▶ Upgrade from a version without sign-in
+   ✓ upgraded app also asks for sign-in first
+   ✓ data from before sign-in is kept and moved into the account
+{"severity":"INFO","at":"2026-10-31T21:34:23.208Z","event":"spreadsheet_created","user":"93f0730a3f04fc43d66286bc"}
+{"severity":"INFO","at":"2026-10-31T21:34:23.229Z","event":"saved","user":"93f0730a3f04fc43d66286bc","version":1,"bytes":1300,"unchanged":false}
+   ✓ and uploaded to the account's cloud copy
+   ✓ old slot claimed by this account
+   ✓ another account on the upgraded phone does not get that data
+   ✓ phone data vs cloud copy: user is asked, with counts of both
+{"severity":"INFO","at":"2026-10-31T21:34:24.570Z","event":"spreadsheet_created","user":"0d4e0e6e83b7eebfc33df2d4"}
+{"severity":"INFO","at":"2026-10-31T21:34:24.589Z","event":"saved","user":"0d4e0e6e83b7eebfc33df2d4","version":1,"bytes":866,"unchanged":false}
+   ✓ cloud copy opened
+   ✓ phone data kept as safety copy (Undo restore)
+
+▶ Offline
+   ✓ no internet → change kept on the phone, status "offline"
+   ✓ document saved locally while offline
+{"severity":"INFO","at":"2026-10-31T21:34:25.047Z","event":"saved","user":"8940f6e639eabd6dd8864c0f","version":4,"bytes":2595,"unchanged":false}
+   ✓ back online → uploaded
+
+▶ Two phones with the same account
+   ✓ phone without local changes picks up the other phone's changes (3 → 4)
+{"severity":"INFO","at":"2026-10-31T21:34:25.291Z","event":"saved","user":"8940f6e639eabd6dd8864c0f","version":5,"bytes":3028,"unchanged":false}
+   ✓ edits on both phones → conflict dialog, nothing overwritten silently
+{"severity":"INFO","at":"2026-10-31T21:34:25.921Z","event":"saved","user":"8940f6e639eabd6dd8864c0f","version":6,"bytes":2967,"unchanged":false}
+   ✓ kept this phone's data and uploaded it
+   ✓ the other phone's version kept as safety copy
+
+▶ Demo Mode
+   ✓ sample data in Demo Mode is not uploaded
+   ✓ real data unchanged after leaving Demo Mode
+
+▶ Delete account
+   ✓ account to delete has a cloud spreadsheet
+{"severity":"INFO","at":"2026-10-31T21:34:32.242Z","event":"account_deleted","user":"0d4e0e6e83b7eebfc33df2d4","mode":"deleted"}
+{"severity":"INFO","at":"2026-10-31T21:34:32.366Z","event":"saved","user":"8940f6e639eabd6dd8864c0f","version":7,"bytes":3169,"unchanged":false}
+   ✓ after deletion the sign-in screen is shown
+   ✓ account's cloud spreadsheet deleted
+   ✓ account data removed from the phone and signed out
+{"severity":"INFO","at":"2026-10-31T21:34:33.034Z","event":"account_deleted","user":"8940f6e639eabd6dd8864c0f","mode":"deleted"}
+   ✓ a phone signed in to a deleted account removes its copy and asks for sign-in
+   ✓ no JavaScript errors
+
+44 passed, 0 failed

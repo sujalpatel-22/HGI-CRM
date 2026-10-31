@@ -1,0 +1,13 @@
+✔ Adding native android project in android in 39.90ms
+✔ add in 40.65ms
+✔ Copying web assets from www to android/app/src/main/assets/public in 36.34ms
+✔ Creating capacitor.config.json in android/app/src/main/assets in 408.81μs
+✔ copy android in 46.46ms
+✔ Updating Android plugins in 1.63ms
+[info] Found 1 Capacitor plugin for android:
+       @capacitor/app@8.1.2
+✔ update android in 17.80ms
+✔ Syncing Gradle in 171.32μs
+[success] android platform added!
+Follow the Developer Workflow guide to get building:
+https://capacitorjs.com/docs/basics/workflow

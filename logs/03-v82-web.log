@@ -1,0 +1,21 @@
+▶ First start (not logged in)
+   ✓ start-up cover shown from the first frame (83 frames sampled)
+   ✓ not logged in: login screen shown after start-up
+▶ Re-open while logged in
+   ✓ open #1: dashboard directly, login screen visible in 0 of 97 frames
+   ✓ open #2: dashboard directly, login screen visible in 0 of 97 frames
+   ✓ open #3: dashboard directly, login screen visible in 0 of 97 frames
+▶ WhatsApp message
+   ✓ message with attached PDF: greeting, document, amount, balance, bank details, sign-off
+   ✓ attached version does not say "shared separately"; the web (text-only) version does
+   ✓ buyer phone normalised to 91XXXXXXXXXX
+▶ Bulk export filters
+   ✓ tax invoices, oldest first, cancelled left out (5,1,2,3)
+   ✓ date range 01-05-2026 … 30-06-2026 (2,3)
+   ✓ buyer filter (case/space-insensitive) (1,3)
+   ✓ "include cancelled" adds the cancelled invoice (1,3,4)
+   ✓ document type filter (notes CN/1, quotations QT/1, all since June 3,CN/1,QT/1)
+   ✓ web build: no bulk PDF button (needs the Android PDF engine)
+   ✓ no JavaScript errors
+
+15 passed, 0 failed

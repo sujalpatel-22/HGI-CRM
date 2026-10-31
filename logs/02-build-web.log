@@ -1,0 +1,12 @@
+
+> hgi-billing-app@8.3.0 build:web
+> node tools/build-web.mjs
+
+Browserslist: caniuse-lite is outdated. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+
+Rebuilding...
+
+Done in 553ms.
+www built: index.html 537 KB, tailwind.css 25 KB, chart 200 KB

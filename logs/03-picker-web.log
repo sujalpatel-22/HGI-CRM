@@ -1,0 +1,74 @@
+
+▶ phone-412
+   ✓ catalogue: 117 products, 5 categories, sizes per product
+   ✗ tapping the item description opens the product search with the cursor in the search box
+   ✓ start view: Recently used · Frequently billed · All products
+   ✓ recently used from past invoices, newest first (PVC Pipe 63mm, Ball Valve 25mm, DWC Pipe 110mm)
+   ✓ frequently billed: most billed first (Ball Valve 25mm, billed 4×)
+   ✓ DWC Pipe grouped with its sizes in order: 40mm · 63mm · 90mm · 110mm · 160mm · 200mm
+   ✓ size shows price, unit and stock (40mm ₹120.00/ MTRDWC-40MM110 in stock)
+   ✓ "dwc 110" → DWC Pipe 110mm
+   ✓ SKU "PVC-75MM" → PVC Pipe 75mm
+   ✓ "63 mm" and "63mm" find the same 8 products
+   ✓ specification "PN10" → 8 HDPE sizes
+   ✓ category "valves" → 12 valves
+   ✓ older product without catalogue fields is still found
+   ✓ size read from an older name ("Pipe Clamp 110 mm" → Pipe Clamp | 110 mm)
+   ✓ no match: friendly empty state + "use as typed"
+   ✓ keyboard: ↓ highlights, Enter selects
+   ✓ Ctrl+Enter adds it: {"d":"Ball Valve 25mm","h":"84818030","g":"18","q":"1","u":"NOS","r":"310"}
+   ✓ tray: 3 items · ₹9,260.00 before GST (3×180 + 12×260 + 1×5,600)
+   ✓ double tap = select / unselect, never a duplicate (quantity via the tray)
+   ✓ 3 items added in one go: DWC Pipe 90mm ×12, Monoblock Pump 1 HP ×1, DWC Pipe 63mm ×3
+   ✓ items already on the invoice are marked "On invoice × 1"
+   ✓ same item again → quantity 2 on the existing row, no second row (4 rows)
+   ✓ GST unchanged: taxable ₹9780 (expected ₹9780), CGST 880.2 + SGST 880.2, total ₹11540
+   ✓ invoice with picked items saves
+   ✓ stock shown "93 in stock" = app stock 93
+   ✓ star → Favourites: DWC Pipe 110mm
+   ✓ recently used now: Ball Valve 25mm, DWC Pipe 90mm, Monoblock Pump 1 HP, DWC Pipe 63mm
+   ✓ Esc closes the search
+   ✓ Ctrl+K opens it from the invoice screen
+   ✓ free-text item still possible ("use as typed")
+   ✓ favourite kept after restart
+   ✓ Items: "several sizes at once" creates 2 products
+   ✓ no JavaScript errors
+
+▶ desktop-1366
+   ✓ catalogue: 117 products, 5 categories, sizes per product
+   ✓ tapping the item description opens the product search with the cursor in the search box
+   ✓ start view: Recently used · Frequently billed · All products
+   ✓ recently used from past invoices, newest first (PVC Pipe 63mm, Ball Valve 25mm, DWC Pipe 110mm)
+   ✓ frequently billed: most billed first (Ball Valve 25mm, billed 4×)
+   ✓ DWC Pipe grouped with its sizes in order: 40mm · 63mm · 90mm · 110mm · 160mm · 200mm
+   ✓ size shows price, unit and stock (40mm ₹120.00/ MTRDWC-40MM110 in stock)
+   ✓ "dwc 110" → DWC Pipe 110mm
+   ✓ SKU "PVC-75MM" → PVC Pipe 75mm
+   ✓ "63 mm" and "63mm" find the same 8 products
+   ✓ specification "PN10" → 8 HDPE sizes
+   ✓ category "valves" → 12 valves
+   ✓ older product without catalogue fields is still found
+   ✓ size read from an older name ("Pipe Clamp 110 mm" → Pipe Clamp | 110 mm)
+   ✓ no match: friendly empty state + "use as typed"
+   ✓ keyboard: ↓ highlights, Enter selects
+   ✓ Ctrl+Enter adds it: {"d":"Ball Valve 25mm","h":"84818030","g":"18","q":"1","u":"NOS","r":"310"}
+   ✓ tray: 3 items · ₹9,260.00 before GST (3×180 + 12×260 + 1×5,600)
+   ✓ double tap = select / unselect, never a duplicate (quantity via the tray)
+   ✓ 3 items added in one go: DWC Pipe 90mm ×12, Monoblock Pump 1 HP ×1, DWC Pipe 63mm ×3
+   ✓ items already on the invoice are marked "On invoice × 1"
+   ✓ same item again → quantity 2 on the existing row, no second row (4 rows)
+   ✓ GST unchanged: taxable ₹9780 (expected ₹9780), CGST 880.2 + SGST 880.2, total ₹11540
+   ✓ invoice with picked items saves
+   ✓ stock shown "93 in stock" = app stock 93
+   ✓ star → Favourites: DWC Pipe 110mm
+   ✓ recently used now: Ball Valve 25mm, DWC Pipe 90mm, Monoblock Pump 1 HP, DWC Pipe 63mm
+   ✓ Esc closes the search
+   ✓ Ctrl+K opens it from the invoice screen
+   ✓ free-text item still possible ("use as typed")
+   ✓ favourite kept after restart
+   ✓ Items: "several sizes at once" creates 2 products
+   ✓ 5,000 products: open 54 ms, each keystroke ≤ 16 ms (avg 9 ms, search + render)
+   ✓ SKU search among 5,000 → exact item first (X4321)
+   ✓ no JavaScript errors
+
+67 passed, 1 failed

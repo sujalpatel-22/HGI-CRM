@@ -1,0 +1,31 @@
+Verifies
+Verified using v1 scheme (JAR signing): false
+Verified using v2 scheme (APK Signature Scheme v2): true
+Verified using v3 scheme (APK Signature Scheme v3): false
+Verified using v3.1 scheme (APK Signature Scheme v3.1): false
+Verified using v3.2 scheme (APK Signature Scheme v3.2): false
+Verified using v4 scheme (APK Signature Scheme v4): false
+Verified for SourceStamp: false
+Number of signers: 1
+V2 Signer: certificate DN: CN=HGI Billing TEST, O=HARIGURU INDUSTRIES, C=IN
+V2 Signer: certificate SHA-256 digest: 05e741b9d3137a3c95a6a337b5d3c805b92555e85a6343a64d1047c5c6fc7b92
+V2 Signer: certificate SHA-1 digest: f1345ee9906d73db3226e09159e42ce872f60e71
+V2 Signer: certificate MD5 digest: 0e8e58814a59dd9fb51a0053e70df9b9
+V2 Signer: key algorithm: RSA
+V2 Signer: key size (bits): 2048
+V2 Signer: public key SHA-256 digest: 8044bf0833d9de70490e2379a8d7f9fdc9a919d36a0b139b201030aac063f2d2
+V2 Signer: public key SHA-1 digest: 23f7cc80ece7e8269d8d65d19000c220a123c518
+V2 Signer: public key MD5 digest: f26ed83ec69db7cf6aa1dae35f440d85
+Re-run with the -verbose and -certs options for more details.
+
+The signer certificate will expire on 2027-10-31.
+package: name='in.hariguru.billing' versionCode='150' versionName='8.3.0' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'
+targetSdkVersion:'36'
+uses-permission: name='android.permission.INTERNET'
+uses-permission: name='in.hariguru.billing.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'
+application-label:'HGI Billing'
+        A: http://schemas.android.com/apk/res/android:allowBackup(0x01010280)=true
+        A: http://schemas.android.com/apk/res/android:fullBackupContent(0x010104eb)=@0x7f100000
+        A: http://schemas.android.com/apk/res/android:usesCleartextTraffic(0x010104ec)=false
+        A: http://schemas.android.com/apk/res/android:dataExtractionRules(0x0101063e)=@0x7f100002
+Signing certificate: CN=HGI Billing TEST, O=HARIGURU INDUSTRIES, C=IN  SHA-256 05E741B9D3137A3C95A6A337B5D3C805B92555E85A6343A64D1047C5C6FC7B92  (mode: test-key)
