@@ -184,7 +184,7 @@ if (sdkNum >= 29) {
   const pdfText = pdfBuf ? Buffer.from(pdfBuf).toString('latin1') : '';
   const counts = [...pdfText.matchAll(/\/Type\s*\/Pages\b[^>]*?\/Count\s+(\d+)|\/Count\s+(\d+)[^>]*?\/Type\s*\/Pages\b/g)].map(m => Number(m[1] || m[2]));
   const sheets = counts.length ? Math.max(...counts) : (pdfText.match(/\/Type\s*\/Page[^s]/g) || []).length;
-  check(sheets === copies, `native PDF: ${copies} copies → ${sheets} A4 sheets (one per copy, no spill-over pages)`);
+  check(sheets === copies, `native PDF: ${copies} copies → ${sheets} A4 sheets (one per copy, no spill-over pages; page target ${await page.evaluate(() => window.HGI_APP.printTarget)} mm)`);
 }
 
 // back button closes the open modal instead of leaving the app

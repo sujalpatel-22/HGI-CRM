@@ -560,6 +560,11 @@
     const ok = d.scrollHeight === 1; d.remove();
     if (!ok) document.documentElement.classList.add('no-flex-gap');
     window.HGI_APP.flexGap = ok;
+    // older Android WebViews (seen: 83 and AOSP 101) lay the copy after a page break out a little taller than measured
+    // and spill a blank sheet: they get a 270 mm page target. Current WebViews keep 280 mm.
+    const chrome = Number((/Chrome\/(\d+)/.exec(navigator.userAgent) || [])[1]) || 0;
+    if (!ok || (isNative && chrome && chrome < 110)) document.documentElement.classList.add('print-270');
+    window.HGI_APP.printTarget = document.documentElement.classList.contains('print-270') ? 270 : 280;
   }
   function checkRupeeGlyph() {
     const run = () => {
