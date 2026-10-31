@@ -26,7 +26,7 @@ html = html.split('{{SYNC_ORIGINS}}').join([...origins].map(o => ' ' + o).join('
 if (/\{\{[A-Z_]+\}\}/.test(html)) throw new Error('unresolved template placeholder');
 if (/https:\/\/(cdn\.tailwindcss|cdnjs\.cloudflare|fonts\.googleapis)/.test(html)) throw new Error('CDN reference left in app — the APK must work offline');
 fs.writeFileSync(www('index.html'), html);
-for (const f of ['compat.css', 'mobile.css', 'theme.css', 'studio.css', 'mobile.js', 'studio.js', 'i18n.js', 'demo-data.js', 'account.js', 'account.css']) copy(src(f), www(f));
+for (const f of ['compat.css', 'mobile.css', 'theme.css', 'studio.css', 'mobile.js', 'studio.js', 'i18n.js', 'demo-data.js', 'account.js', 'account.css', 'picker.js', 'picker.css']) copy(src(f), www(f));
 copy(src('fonts'), www('fonts'));   // Inter Display + Lora Italic (OFL), app chrome only
 // Cloud sync settings for the WEB build (public values only — never a secret). The Android app takes them from
 // its own build config (tools/patch-android.mjs) instead. Default: off → web versions behave exactly as before.

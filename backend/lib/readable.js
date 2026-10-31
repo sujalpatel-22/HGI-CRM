@@ -37,8 +37,8 @@ function tabs(state) {
   const customers = [['Name', 'GSTIN', 'Phone', 'E-mail', 'Address', 'State', 'State code', 'PIN', 'Customer ID']];
   for (const c of Array.isArray(st.customers) ? st.customers : []) if (c) customers.push([...custCols.map(k => s(c[k])), s(c.id)]);
 
-  const products = [['Name', 'HSN/SAC', 'Unit', 'Rate', 'GST %', 'Stock', 'Product ID']];
-  for (const p of Array.isArray(st.products) ? st.products : []) if (p) products.push([s(p.name || p.desc), s(p.hsn), s(p.unit), n(p.rate), n(p.gst), n(p.stock), s(p.id)]);
+  const products = [['Name', 'Category', 'Product', 'Size / variant', 'SKU', 'Specifications', 'HSN/SAC', 'Unit', 'Rate', 'GST %', 'Product ID']];
+  for (const p of Array.isArray(st.products) ? st.products : []) if (p) products.push([s(p.name || p.desc), s(p.category), s(p.group), s(p.size), s(p.sku), s(p.specs), s(p.hsn), s(p.unit), n(p.rate), n(p.gst), s(p.id)]);
 
   const co = st.company || {};
   const company = [['Field', 'Value']];

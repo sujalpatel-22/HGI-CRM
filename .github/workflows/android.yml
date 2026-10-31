@@ -58,6 +58,7 @@ jobs:
           npm run test:web 2>&1 | tee logs/03-web-tests.log
           node tests/sync-e2e.mjs 2>&1 | tee logs/03-sync-e2e.log
           node tests/v82-web.mjs 2>&1 | tee logs/03-v82-web.log
+          node tests/picker-web.mjs 2>&1 | tee logs/03-picker-web.log
 
       - uses: actions/setup-java@v4
         with:

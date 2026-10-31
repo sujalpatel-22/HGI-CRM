@@ -22,6 +22,7 @@
   <link rel="stylesheet" href="fonts/fonts.css">
   <link rel="stylesheet" href="studio.css">
   <link rel="stylesheet" href="account.css">
+  <link rel="stylesheet" href="picker.css">
 
   <style>
     body { font-family: 'Inter', sans-serif; }
@@ -465,7 +466,10 @@
                   <tbody id="invoice-items-body"></tbody>
                 </table>
               </div>
-              <button type="button" onclick="addInvoiceRow(); refreshForm();" class="mt-2 bg-slate-800 text-white px-3 py-1.5 rounded text-xs font-medium hover:bg-slate-700"><i class="fa-solid fa-plus mr-1"></i> Add Item Row</button>
+              <div class="flex flex-wrap gap-2 mt-2">
+                <button type="button" id="btn-pick-items" onclick="HGI_PICKER.open()" class="pk-open-btn px-3 py-1.5 rounded text-xs font-bold text-white" style="background: var(--brand-orange)"><i class="fa-solid fa-magnifying-glass mr-1"></i> Search &amp; add items</button>
+                <button type="button" onclick="addInvoiceRow(); refreshForm();" class="bg-slate-800 text-white px-3 py-1.5 rounded text-xs font-medium hover:bg-slate-700"><i class="fa-solid fa-plus mr-1"></i> Add Item Row</button>
+              </div>
               <datalist id="dl-products"></datalist>
               <datalist id="dl-uqc"></datalist>
             </div>
@@ -559,7 +563,7 @@
           <div class="flex flex-wrap gap-2 justify-between items-center mb-6">
             <h2 class="text-xl font-bold text-slate-800">Product / Item Master</h2>
             <div class="flex gap-2">
-              <input type="text" id="item-search" oninput="renderItemList()" placeholder="Search item / HSN..." class="inp !w-56">
+              <input type="text" id="item-search" oninput="renderItemList()" placeholder="Search item / HSN / SKU / category..." class="inp !w-56">
               <button onclick="openItemModal()" class="text-white px-4 py-2 rounded text-sm font-semibold" style="background: var(--brand-orange)"><i class="fa-solid fa-plus mr-1"></i> Add Product</button>
             </div>
           </div>
@@ -728,7 +732,16 @@
     <div class="bg-white max-w-md w-full p-6 rounded-lg shadow-xl space-y-3">
       <h3 id="item-modal-title" class="font-bold text-lg text-slate-800 border-b pb-2">Add Product</h3>
       <input type="hidden" id="modal-item-id">
-      <div><label class="field-label">Product Description</label><input type="text" id="modal-item-name" class="inp" placeholder="e.g. MS Flange 2 Inch"></div>
+      <div class="grid grid-cols-2 gap-2">
+        <div><label class="field-label">Category</label><input type="text" id="modal-item-category" list="dl-categories" class="inp" placeholder="e.g. Pipes"></div>
+        <div><label class="field-label">Product (without size)</label><input type="text" id="modal-item-group" class="inp" placeholder="e.g. DWC Pipe" oninput="itemModalAutoName()"></div>
+        <div><label class="field-label">Size / Variant</label><input type="text" id="modal-item-size" class="inp" placeholder="e.g. 110mm" oninput="itemModalAutoName()"></div>
+        <div><label class="field-label">SKU / Code</label><input type="text" id="modal-item-sku" class="inp" placeholder="optional"></div>
+      </div>
+      <div id="modal-item-multi-wrap"><label class="field-label">Add several sizes at once <span class="font-normal normal-case text-slate-400">(new products only)</span></label><input type="text" id="modal-item-multi" class="inp" placeholder="40mm:120, 63mm:180, 90mm:260, 110mm:340"></div>
+      <div><label class="field-label">Product Description (printed on the invoice)</label><input type="text" id="modal-item-name" class="inp" placeholder="e.g. DWC Pipe 110mm" oninput="this.dataset.manual = this.value ? '1' : ''"></div>
+      <div><label class="field-label">Specifications <span class="font-normal normal-case text-slate-400">(searchable, optional)</span></label><input type="text" id="modal-item-specs" class="inp" placeholder="e.g. HDPE, 6 kg/cm², ISI"></div>
+      <datalist id="dl-categories"></datalist>
       <div class="grid grid-cols-3 gap-2">
         <div><label class="field-label">HSN / SAC</label><input type="text" id="modal-item-hsn" maxlength="8" class="inp" placeholder="730719"></div>
         <div><label class="field-label">GST %</label><select id="modal-item-gst" class="inp"></select></div>
@@ -1596,7 +1609,7 @@
       const gst = item ? item.gst : Number($('inv-gst-rate').value);
       tr.innerHTML = `
         <td class="p-2 border text-center row-index"></td>
-        <td class="p-2 border"><input type="text" list="dl-products" class="item-desc inp-sm w-full" placeholder="Type or pick item…" onchange="onItemDescChange(this)">
+        <td class="p-2 border"><input type="text" class="item-desc inp-sm w-full" placeholder="Tap to search items…" autocomplete="off" onchange="onItemDescChange(this)">
           <div class="item-hint text-[11px] mt-1"></div></td>
         <td class="p-2 border"><input type="text" maxlength="8" class="item-hsn inp-sm w-full text-center" placeholder="HSN"></td>
         <td class="p-2 border"><select class="item-gst inp-sm w-full">${rateOptions(gst, true)}</select></td>
@@ -2865,17 +2878,17 @@
        ===================================================================== */
     function renderItemList() {
       const q = ($('item-search').value || '').toLowerCase(), digits = state.company.aato === 'upto5' ? 4 : 6;
-      const usage = {};
+      const usage = {}, stocks = stockMap();
       state.invoices.forEach(d => d.items.forEach(it => { const k = (it.desc || '').trim().toLowerCase(); usage[k] = (usage[k] || 0) + 1; }));
-      $('items-list-tbody').innerHTML = state.products.filter(p => !q || `${p.name} ${p.hsn}`.toLowerCase().includes(q)).map(p => {
+      $('items-list-tbody').innerHTML = state.products.filter(p => !q || `${p.name} ${p.hsn} ${p.category || ''} ${p.sku || ''} ${p.specs || ''}`.toLowerCase().includes(q)).map(p => {
         const issues = [];
         if (!p.hsn) issues.push('No HSN'); else if (p.hsn.length < digits) issues.push(`HSN < ${digits} digits`);
         if (!normUQC(p.unit)) issues.push('Invalid UQC');
         if (LEGACY_RATES.includes(Number(p.gst))) issues.push('Old GST slab');
         return `<tr class="hover:bg-slate-50">
-          <td class="p-3 font-semibold">${esc(p.name)}</td><td class="p-3">${esc(p.hsn)}</td><td class="p-3">${p.gst}%</td><td class="p-3">${esc(p.unit)}</td>
+          <td class="p-3 font-semibold">${esc(p.name)}${p.fav ? ' <span class="text-amber-500" title="Favourite">★</span>' : ''}${p.category || p.sku || p.specs ? `<div class="text-[11px] font-normal text-slate-500">${[p.category, p.sku && 'SKU ' + p.sku, p.specs].filter(Boolean).map(esc).join(' · ')}</div>` : ''}</td><td class="p-3">${esc(p.hsn)}</td><td class="p-3">${p.gst}%</td><td class="p-3">${esc(p.unit)}</td>
           <td class="p-3 font-bold">${money(p.rate)}</td>
-          <td class="p-3 whitespace-nowrap">${p.trackStock ? (() => { const st = stockOf(p); const low = st <= (Number(p.minStock) || 0);
+          <td class="p-3 whitespace-nowrap">${p.trackStock ? (() => { const st = stocks.get(p.id); const low = st <= (Number(p.minStock) || 0);
             return `<span class="font-bold ${st < 0 ? 'text-rose-700' : low ? 'text-amber-600' : 'text-emerald-700'}">${st} ${esc(p.unit)}</span>${low ? ' <i class="fa-solid fa-triangle-exclamation text-amber-500" title="Low stock"></i>' : ''}
               <button onclick="stockIn('${esc(p.id)}')" class="ml-1 text-[11px] font-bold text-blue-600 hover:underline">+ Stock In</button>`; })() : '<span class="text-slate-400 text-xs">not tracked</span>'}</td>
           <td class="p-3 text-slate-500">${productNames(p).reduce((a, k) => a + (usage[k] || 0), 0)}</td>
@@ -2895,7 +2908,14 @@
       const p = id ? state.products.find(x => x.id === id) : null;
       $('item-modal-title').innerText = p ? 'Edit Product' : 'Add Product';
       $('modal-item-id').value = p ? p.id : '';
-      $('modal-item-name').value = p ? p.name : '';
+      $('modal-item-name').value = p ? p.name : ''; $('modal-item-name').dataset.manual = p ? '1' : '';
+      $('modal-item-category').value = p ? (p.category || '') : '';
+      $('modal-item-group').value = p ? (p.group || '') : '';
+      $('modal-item-size').value = p ? (p.size || '') : '';
+      $('modal-item-sku').value = p ? (p.sku || '') : '';
+      $('modal-item-specs').value = p ? (p.specs || '') : '';
+      $('modal-item-multi').value = ''; $('modal-item-multi-wrap').classList.toggle('hidden', !!p);
+      $('dl-categories').innerHTML = [...new Set(state.products.map(x => (x.category || '').trim()).filter(Boolean))].sort().map(c => `<option value="${esc(c)}">`).join('');
       $('modal-item-hsn').value = p ? p.hsn : '';
       $('modal-item-gst').innerHTML = rateOptions(p ? p.gst : 18, true);
       $('modal-item-unit').value = p ? p.unit : 'NOS';
@@ -2906,18 +2926,44 @@
       $('modal-item-hint').innerText = `Your turnover band needs ${state.company.aato === 'upto5' ? 4 : 6}-digit HSN. Check the rate for your HSN on the CBIC rate finder — GST 2.0 slabs are 5% / 18% / 40%.`;
       openModal('item-modal');
     }
+    // description = "<product> <size>" until the user types their own
+    function itemModalAutoName() {
+      const n = $('modal-item-name'); if (n.dataset.manual === '1') return;
+      n.value = [$('modal-item-group').value.trim(), $('modal-item-size').value.trim()].filter(Boolean).join(' ');
+    }
     function saveItemFromModal() {
-      const name = $('modal-item-name').value.trim();
-      if (!name) return toast('Item name is required', 'error');
+      let name = $('modal-item-name').value.trim();
+      const group = $('modal-item-group').value.trim(), size = $('modal-item-size').value.trim();
+      const multi = $('modal-item-id').value ? '' : $('modal-item-multi').value.trim();
+      if (!name && !multi) name = [group, size].filter(Boolean).join(' ');
+      if (!name && !multi) return toast('Item name is required', 'error');
       const hsn = $('modal-item-hsn').value.trim();
       if (hsn && !/^\d{4,8}$/.test(hsn)) return toast('HSN must be 4 to 8 digits', 'error');
       const unit = normUQC($('modal-item-unit').value);
       if (!unit) return toast('Pick a valid UQC (e.g. NOS, PCS, KGS, SET)', 'error');
+      const sku = $('modal-item-sku').value.trim();
       const data = { name, hsn, gst: Number($('modal-item-gst').value), unit, rate: parseFloat($('modal-item-rate').value) || 0,
-        trackStock: $('modal-item-track').checked, openingStock: parseFloat($('modal-item-opening').value) || 0, minStock: parseFloat($('modal-item-min').value) || 0 };
+        trackStock: $('modal-item-track').checked, openingStock: parseFloat($('modal-item-opening').value) || 0, minStock: parseFloat($('modal-item-min').value) || 0,
+        category: $('modal-item-category').value.trim(), group, size, sku, specs: $('modal-item-specs').value.trim() };
       const id = $('modal-item-id').value;
-      const clash = state.products.find(p => p.id !== id && productNames(p).includes(name.toLowerCase()));
+      const taken = (n, exceptId) => state.products.find(p => p.id !== exceptId && productNames(p).includes(n.toLowerCase()));
+      const skuTaken = (k, exceptId) => k && state.products.find(p => p.id !== exceptId && (p.sku || '').trim().toLowerCase() === k.toLowerCase());
+      if (multi) {
+        // "40mm:120, 63mm:180" → one product per size (same category, HSN, GST and unit)
+        const base = group || name;
+        if (!base) return toast('Enter the product name (without size) first', 'error');
+        const parts = multi.split(/[,;\n]+/).map(x => x.trim()).filter(Boolean).map(x => { const m = /^(.+?)\s*[:=@]\s*(\d+(?:\.\d+)?)$/.exec(x); return m ? { size: m[1].trim(), rate: parseFloat(m[2]) } : { size: x, rate: data.rate }; });
+        if (!parts.length) return toast('List the sizes, e.g. 40mm:120, 63mm:180', 'error');
+        const dup = parts.find(x => taken(`${base} ${x.size}`));
+        if (dup) return toast(`"${base} ${dup.size}" already exists`, 'error');
+        parts.forEach((x, i) => state.products.push({ id: uid('PROD'), ...data, name: `${base} ${x.size}`, group: base, size: x.size, rate: x.rate, sku: sku ? `${sku}-${i + 1}` : '' }));
+        saveState(); renderItemList(); refreshProductDatalist(); closeModal('item-modal');
+        return toast(`${parts.length} sizes of ${base} added`);
+      }
+      const clash = taken(name, id);
       if (clash) return toast(`"${clash.name}" already exists${clash.name.toLowerCase() !== name.toLowerCase() ? ' (this was its earlier name)' : ''} — use a different name.`, 'error');
+      const sc = skuTaken(sku, id);
+      if (sc) return toast(`SKU ${sku} is already used by "${sc.name}"`, 'error');
       if (id) {
         const p = state.products.find(x => x.id === id);
         // renamed: remember the old name so stock and history from earlier invoices still count
@@ -2941,6 +2987,17 @@
         d.items.forEach(it => { if (keys.includes((it.desc || '').trim().toLowerCase())) qty += (d.docType === 'INV' ? -1 : 1) * (Number(it.qty) || 0); });
       });
       return Math.round(qty * 1000) / 1000;
+    }
+    // stock of every tracked product in one pass over the documents (same rules as stockOf)
+    function stockMap(excludeDocId) {
+      const byKey = new Map(), out = new Map();
+      state.products.forEach(p => { if (!p.trackStock) return; out.set(p.id, (Number(p.openingStock) || 0) + (p.stockIns || []).reduce((a, x) => a + (Number(x.qty) || 0), 0)); productNames(p).forEach(k => { if (!byKey.has(k)) byKey.set(k, []); byKey.get(k).push(p.id); }); });
+      state.invoices.forEach(d => {
+        if (d.cancelled || d.id === excludeDocId || !['INV', 'CRN'].includes(d.docType)) return;
+        (d.items || []).forEach(it => { const ids = byKey.get((it.desc || '').trim().toLowerCase()); if (ids) ids.forEach(id => out.set(id, out.get(id) + (d.docType === 'INV' ? -1 : 1) * (Number(it.qty) || 0))); });
+      });
+      out.forEach((v, k) => out.set(k, Math.round(v * 1000) / 1000));
+      return out;
     }
     function stockIn(id) {
       const p = state.products.find(x => x.id === id); if (!p) return;
@@ -3169,5 +3226,6 @@
   <script src="demo-data.js"></script>
   <script src="mobile.js"></script>
   <script src="studio.js"></script>
+  <script src="picker.js"></script>
 </body>
 </html>

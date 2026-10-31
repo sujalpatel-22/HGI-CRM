@@ -6,7 +6,7 @@
    ===================================================================== */
 (function () {
   'use strict';
-  const APP_VERSION = '8.2.0';
+  const APP_VERSION = '8.3.0';
   const cap = window.Capacitor;
   const isNative = !!(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform());
   // Without a bundler the native bridge exposes registered plugins on Capacitor.Plugins
@@ -1070,6 +1070,7 @@
     if (!AppPlugin) return;
     AppPlugin.addListener('backButton', () => {
       if (document.getElementById('lock-screen') && !document.getElementById('lock-screen').classList.contains('hidden')) return AppPlugin.minimizeApp && AppPlugin.minimizeApp();
+      if (window.HGI_PICKER && HGI_PICKER.back()) return;
       if (!document.getElementById('login-overlay').classList.contains('hidden') && !document.querySelector('#reset-password-modal:not(.hidden)')) return AppPlugin.minimizeApp && AppPlugin.minimizeApp();
       if (document.querySelector('.acct-dlg') || document.getElementById('bulk-progress')) return;
       const open = Array.from(document.querySelectorAll('.fixed.inset-0.z-50.flex')).filter(m => !m.classList.contains('hidden') && m.id !== 'login-overlay');

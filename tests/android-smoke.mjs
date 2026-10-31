@@ -196,6 +196,23 @@ check(await page.evaluate(() => document.getElementById('item-modal').classList.
 await device.shell('input keyevent 4'); await page.waitForTimeout(500);
 check(await page.evaluate(() => !document.getElementById('tab-dashboard').classList.contains('hidden')), 'back button returns to dashboard');
 
+// v8.3 smart product search on the device: tap the description, search, pick, add; back button closes it
+await page.evaluate(() => { switchTab('create-invoice'); newDocument('INV'); });
+await page.waitForTimeout(400);
+await page.click('#invoice-items-body tr:first-child .item-desc');
+await page.waitForTimeout(500);
+check(await page.isVisible('#product-picker'), 'product search opens when the item description is tapped');
+await shot('04b-picker');
+for (let i = 0; i < 3 && await page.isVisible('#product-picker'); i++) { await device.shell('input keyevent 4'); await page.waitForTimeout(700); }
+check(!(await page.isVisible('#product-picker')) && await page.evaluate(() => !document.getElementById('tab-create-invoice').classList.contains('hidden')), 'Android back closes the search and stays on the invoice');
+await page.click('#invoice-items-body tr:first-child .item-desc'); await page.waitForTimeout(400);
+await page.fill('#pk-q', 'industrial machine'); await page.dispatchEvent('#pk-q', 'input'); await page.waitForTimeout(200);
+await page.click('#pk-results .pk-v'); await page.waitForTimeout(150);
+await page.click('#pk-tray [data-inc]'); await page.click('#pk-add'); await page.waitForTimeout(500);
+const pk = await page.evaluate(() => { const tr = document.querySelector('#invoice-items-body tr'); const d = collectDocFromForm(); return { desc: tr.querySelector('.item-desc').value, qty: tr.querySelector('.item-qty').value, rate: tr.querySelector('.item-rate').value, hsn: tr.querySelector('.item-hsn').value, taxable: d.taxable, rows: document.querySelectorAll('#invoice-items-body tr').length }; });
+check(pk.desc === 'Industrial Machine Components' && pk.qty === '2' && Number(pk.rate) === 2500 && pk.hsn === '848390' && pk.taxable === 5000 && pk.rows === 1, `picked item filled the row: ${JSON.stringify(pk)}`);
+await page.evaluate(() => { newDocument('INV'); switchTab('dashboard'); });
+
 // data mirror → survives restart
 await page.evaluate(() => saveState()); await page.waitForTimeout(1500);
 page = await launch();
