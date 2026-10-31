@@ -89,3 +89,16 @@ The Android CI run for 8.0.1 passed, but the PDFs the emulators themselves produ
   syncs, really uninstalls + reinstalls the APK and checks the restore, separates two accounts, adopts pre-8.1 data.
 - CI found that a slow first bridge reply made the app fall back to "no sign-in" — fixed (retries, never the web default on native).
 - Setup for the owner: `docs/PLAY-RELEASE.md`.
+
+### v8.2.0 — logout, bulk PDF export, WhatsApp with PDF, no login flash (31 Oct 2026)
+- **No login flash:** a start-up cover (logo) stays until the app knows the auth state; the login form is hidden by default.
+  On 8.1 the login form was visible in ~75 of ~97 frames (~1.2 s) of a logged-in start (web test, scripts slowed like a phone); 0 now.
+  Android: every restart in the emulator test asserts the login screen was never shown.
+- **Log out** (More, tablet rail, header): no-cloud mode → login screen with the app's own username/password (replacing admin/123 is
+  required first); persists across restarts; data untouched. Cloud accounts → Google sign-out (data kept).
+- **Export PDFs (ZIP)** (Documents tab + More, Android): type, date range, buyer, cancelled, extra copies; progress + cancel;
+  index.csv; Downloads/HGI Billing or share. Verified on emulators: 2 valid PDFs + index in the ZIP for a buyer filter.
+- **WhatsApp:** original-copy PDF + professional message to WhatsApp / WhatsApp Business (chat opened when the buyer number
+  is known); Android share sheet when WhatsApp is not installed (what the emulators have). Web keeps the text link.
+- Android: removed the EmojiCompat start-up binding to Play services (Android killed the app when Play services restarted, API 33 CI).
+- CI run 41214823949: backend 36, web 266, sync e2e 44, v8.2 web 15, Android 60/60 on API 30/33/35/36, all first attempt.
