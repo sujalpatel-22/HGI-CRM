@@ -72,6 +72,13 @@ manifest = manifest.replace(/<application\b([^>]*)>/, (m, attrs) => {
   if (!/android:usesCleartextTraffic=/.test(a)) a += ' android:usesCleartextTraffic="false"';
   return `<application${a}>`;
 });
+// WhatsApp share (Android 11+ package visibility): only these two apps are queried, nothing else
+if (!manifest.includes('<queries>')) manifest = manifest.replace(/<application\b/, `<queries>
+        <package android:name="com.whatsapp" />
+        <package android:name="com.whatsapp.w4b" />
+    </queries>
+
+    <application`);
 fs.writeFileSync(manifestPath, manifest);
 
 // 5. Release signing + version from environment (CI secrets) — nothing secret is committed

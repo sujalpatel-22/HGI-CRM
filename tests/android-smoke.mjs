@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
+import zlib from 'node:zlib';
 import { _android as android } from 'playwright';
 
 // v8.1: the debug APK signs in with TEST accounts against a local sync service (fake Google Drive/Sheets) on the
@@ -151,6 +152,7 @@ await row.locator('.item-qty').fill('4');
 await page.waitForTimeout(600);
 await shot('03-invoice-form');
 check(await page.evaluate(() => saveCurrentInvoice()) === true, 'invoice saved');
+const fullDoc = await page.evaluate(() => JSON.stringify(state.invoices[0]));   // template for the v8.2 bulk-export documents
 check(await page.evaluate(() => { const d = state.invoices[0]; return d.igst === 1800 && d.grandTotal === 11800; }), 'GST: inter-state IGST 18% on ₹10,000 = ₹1,800, total ₹11,800');
 
 // preview + UPI QR + native PDF
@@ -257,6 +259,8 @@ if (apk && fs.existsSync(apk)) {
   await shot('06-restored-after-reinstall');
   page = await launch();
   check(await page.evaluate(() => !!window.HGI_ACCOUNT && state.invoices.length === 1), 'stays signed in and keeps the data after restart');
+  check(await page.evaluate(() => window.__hgiLoginShown === false && document.documentElement.classList.contains('booted') && !document.getElementById('signin-screen') && !document.getElementById('app-container').classList.contains('hidden')),
+    'signed-in restart opens the dashboard directly — no login / sign-in screen at any moment');
 } else console.log('    (HGI_APK not set — reinstall check skipped)');
 // second account on the same phone sees nothing of the first
 await page.evaluate(() => { HGI_SYNC.signOut(); }); await page.waitForSelector('.acct-dlg'); await page.click('.acct-dlg .acct-btn-primary');
@@ -277,6 +281,102 @@ check(await page.evaluate(() => state.company.name === 'Pre-8.1 Traders' && stat
 const up = await page.evaluate(() => HGI_SYNC._syncNow().then(() => HGI_SYNC.status()));
 check(up.status === 'ok' && g.rows(g.spreadsheetOf(up.account.key).id, 'Invoices').some(r => r[1] === 'OLD/1'), 'upgrade: that data is uploaded to the account');
 await shot('07-upgraded');
+
+/* ---------------------------------------------------------------- v8.2 in the no-cloud mode (what builds without a sync service run) */
+await page.evaluate(() => { HGI_SYNC.signOut(); }); await page.waitForSelector('.acct-dlg'); await page.click('.acct-dlg .acct-btn-primary');
+page = await afterReload(() => window.HGI_SIGNIN_READY === true && !!document.getElementById('signin-screen'));
+await page.evaluate(async tpl => {
+  const base = JSON.parse(tpl);
+  const mk = (n, date, buyer, phone) => Object.assign(JSON.parse(tpl), { id: 'LM' + n, num: 'LM/' + n, date, buyerName: buyer, shipName: buyer, buyerPhone: phone, payments: [] });
+  const book = { credentials: { username: 'admin', password: '123' }, company: { name: 'Local Mode Traders', gstin: '24AAPFU0939F1Z1', stateCode: '24', state: 'Gujarat', address: 'GIDC Naroda', phone: '9876543210', bankName: 'PNB', bankAcc: '21380021000086', bankIfsc: 'PUNB0213800' },
+    products: [], customers: [{ id: 'CA', name: 'Buyer Alpha' }, { id: 'CB', name: 'Buyer Beta' }], ui: { onboarded: true, rev: 5000 },
+    invoices: [mk(3, '2026-10-20', 'Buyer Alpha', '9811111111'), mk(2, '2026-10-12', 'Buyer Beta', ''), mk(1, '2026-10-05', 'Buyer Alpha', '9811111111')] };
+  void base;
+  localStorage.setItem('hgi_test_auth', 'off'); localStorage.removeItem('hgi_logged_out');
+  localStorage.setItem('hgi_billing_v7_prod', JSON.stringify(book));
+  await Capacitor.Plugins.HgiNative.writeState({ key: 'state', data: JSON.stringify(book) });
+}, fullDoc);
+page = await launch();
+check(await page.evaluate(() => HGI_SYNC.status().config.auth === 'off' && STORAGE_KEY === 'hgi_billing_v7_prod' && state.invoices.length === 3 && state.company.name === 'Local Mode Traders'),
+  'no-cloud mode: opens the phone\'s data without any sign-in');
+for (let i = 1; i <= 2; i++) {
+  page = await launch();
+  check(await page.evaluate(() => window.__hgiLoginShown === false && document.documentElement.classList.contains('booted') && !document.getElementById('app-container').classList.contains('hidden') && !!document.querySelector('#tab-dashboard:not(.hidden)')),
+    `restart ${i}: dashboard directly, login screen never shown (no flash)`);
+}
+
+// bulk export → ZIP in Downloads
+await device.shell(`rm -f "/sdcard/Download/HGI Billing/"*.zip`);
+await page.evaluate(() => { HGI_M.bulkExport(); });
+await page.waitForSelector('.acct-dlg #bx-type');
+await page.fill('#bx-from', '2026-10-01');
+await page.waitForTimeout(300);
+const cnt1 = await page.textContent('#bx-count');
+await page.selectOption('#bx-buyer', 'Buyer Alpha'); await page.waitForTimeout(300);
+const cnt2 = await page.textContent('#bx-count');
+check(/^3 /.test(cnt1.trim()) && /^2 /.test(cnt2.trim()), `bulk export dialog counts matching documents (${cnt1.trim()} → buyer filter: ${cnt2.trim()})`);
+await shot('08-bulk-dialog');
+await page.click('.acct-dlg .acct-btn-primary');                 // Save ZIP
+await page.waitForFunction(() => !!window.__lastBulk || /Export failed|No PDFs/.test(document.getElementById('toast-container').innerText), null, { timeout: 180000 });
+await page.waitForTimeout(500);
+const bulk = await page.evaluate(() => window.__lastBulk || null);
+check(bulk && bulk.count === 2 && bulk.failed === 0 && /^Downloads\/HGI Billing\/HGI_Invoices_2026-10-01_to_.*Buyer_Alpha\.zip$/.test(bulk.location || ''), `2 PDFs zipped and saved: ${bulk && bulk.location}`);
+if (Number(sdk) >= 29 && bulk) {
+  const zip = Buffer.from(await device.shell(`cat "/sdcard/Download/HGI Billing/${bulk.name}"`));
+  fs.writeFileSync(path.join(OUT, `${label}-bulk.zip`), zip);
+  const entries = [];
+  const eocd = zip.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+  if (eocd >= 0) {
+    let off = zip.readUInt32LE(eocd + 16); const n = zip.readUInt16LE(eocd + 10);
+    for (let i = 0; i < n; i++) {
+      const method = zip.readUInt16LE(off + 10), csize = zip.readUInt32LE(off + 20), nl = zip.readUInt16LE(off + 28), xl = zip.readUInt16LE(off + 30), cl = zip.readUInt16LE(off + 32), lho = zip.readUInt32LE(off + 42);
+      const name = zip.slice(off + 46, off + 46 + nl).toString('utf8');
+      const start = lho + 30 + zip.readUInt16LE(lho + 26) + zip.readUInt16LE(lho + 28);
+      const raw = zip.slice(start, start + csize);
+      let data = null; try { data = method === 8 ? zlib.inflateRawSync(raw) : raw; } catch (e) { data = null; }
+      entries.push({ name, data });
+      off += 46 + nl + xl + cl;
+    }
+  }
+  const pdfs = entries.filter(e => /\.pdf$/.test(e.name));
+  const csv = entries.find(e => e.name === 'index.csv');
+  check(pdfs.length === 2 && pdfs.every(e => e.data && e.data.slice(0, 5).toString() === '%PDF-' && e.data.length > 20000) && pdfs.every(e => /Buyer_Alpha/.test(e.name)),
+    `ZIP holds 2 valid PDFs of Buyer Alpha (${pdfs.map(e => e.name + ' ' + (e.data ? e.data.length : 0) + ' B').join(', ')})`);
+  check(!!csv && csv.data.toString('utf8').trim().split(/\r?\n/).length === 3 && /LM\/1/.test(csv.data.toString()) && !/LM\/2/.test(csv.data.toString()), 'ZIP includes index.csv listing exactly those documents');
+}
+check(await page.evaluate(() => !document.getElementById('bulk-progress') && document.getElementById('preview-section').classList.contains('hidden') && !document.getElementById('app-container').classList.contains('hidden')),
+  'screen restored after the export (preview hidden again)');
+
+// WhatsApp: PDF + message (the emulator has no WhatsApp → Android share sheet with the same PDF + text)
+await device.shell(`run-as ${PKG} sh -c 'rm -f cache/pdf/*'`).catch(() => null);
+const waRes = await page.evaluate(() => HGI_M.whatsAppPdf('LM3').then(() => document.getElementById('toast-container').innerText));
+await page.waitForTimeout(2500);
+const pdfLs = (await device.shell(`run-as ${PKG} sh -c 'ls -l cache/pdf'`)).toString();
+const acts = (await device.shell('dumpsys activity activities | grep -E "mResumedActivity|topResumedActivity|ResumedActivity" | head -3')).toString();
+check(/LM-3_Buyer_Alpha\.pdf/.test(pdfLs) && /not installed/i.test(waRes), `WhatsApp share: invoice PDF created (${(pdfLs.match(/\d{5,}\s+\S+\s+\S+\s+\S+\s+Invoice[^\n]*/) || [''])[0].trim()}) and handed to Android sharing since WhatsApp is missing`);
+check(/Chooser|Resolver|intentresolver/i.test(acts), `Android share sheet opened (${acts.trim().split('\n')[0].trim().slice(0, 120)})`);
+await shot('09-share-sheet');
+await device.shell('input keyevent 4'); await page.waitForTimeout(1000);
+
+// logout keeps the data; login needed again, also after a restart
+await page.evaluate(() => { HGI_M.logout(); });
+await page.waitForSelector('.acct-dlg #lo-pass');
+await shot('10-logout-dialog');
+await page.fill('#lo-user', 'owner'); await page.fill('#lo-pass', 'Hgi@2026'); await page.fill('#lo-pass2', 'Hgi@2026');
+await page.click('.acct-dlg .acct-btn-primary'); await page.waitForTimeout(800);
+check(await page.evaluate(() => !document.getElementById('login-overlay').classList.contains('hidden') && document.getElementById('app-container').classList.contains('hidden')
+  && localStorage.getItem('hgi_logged_out') === '1' && JSON.parse(localStorage.getItem(STORAGE_KEY)).invoices.length === 3 && state.credentials.username === 'owner'),
+  'logout: login screen shown, session ended, all 3 documents still stored, new password saved');
+await page.waitForTimeout(1000);
+page = await launch();
+check(await page.evaluate(() => !document.getElementById('login-overlay').classList.contains('hidden') && document.getElementById('app-container').classList.contains('hidden')), 'after restart the app stays logged out (login required)');
+await shot('11-login');
+await page.fill('#login-username', 'owner'); await page.fill('#login-password', 'wrong'); await page.click('#login-overlay button[type=submit]'); await page.waitForTimeout(300);
+check(await page.evaluate(() => !document.getElementById('login-error').classList.contains('hidden') && document.getElementById('app-container').classList.contains('hidden')), 'wrong password is refused');
+await page.fill('#login-password', 'Hgi@2026'); await page.click('#login-overlay button[type=submit]'); await page.waitForTimeout(600);
+check(await page.evaluate(() => !document.getElementById('app-container').classList.contains('hidden') && state.invoices.length === 3 && localStorage.getItem('hgi_logged_out') === null), 'correct password: back in, data intact');
+page = await launch();
+check(await page.evaluate(() => window.__hgiLoginShown === false && !document.getElementById('app-container').classList.contains('hidden')), 'after logging back in, restarts go straight to the dashboard again');
 
 check(errors.length === 0, `no JavaScript errors${errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''}`);
 console.log(`\n${label}: ${pass} passed, ${fail} failed`);

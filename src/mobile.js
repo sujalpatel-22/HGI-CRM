@@ -6,7 +6,7 @@
    ===================================================================== */
 (function () {
   'use strict';
-  const APP_VERSION = '8.1.0';
+  const APP_VERSION = '8.2.0';
   const cap = window.Capacitor;
   const isNative = !!(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform());
   // Without a bundler the native bridge exposes registered plugins on Capacitor.Plugins
@@ -170,10 +170,12 @@
       ${tile('fa-landmark', t('GST Returns'), "HGI_M.go('returns')")}
       ${tile('fa-file-signature', t('Quotations'), "HGI_M.quotes()")}
       ${tile('fa-gear', t('Settings'), "HGI_M.go('settings')")}
+      ${isNative ? tile('fa-file-pdf', t('Export PDFs (ZIP)'), 'HGI_M.bulkExport()') : ''}
       ${tile('fa-database', t('Share Backup'), 'HGI_M.shareBackup()')}
       ${tile(document.documentElement.classList.contains('dark') ? 'fa-sun' : 'fa-moon', t('Theme'), 'HGI_M.toggleTheme()')}
       ${tile('fa-language', t('Language'), 'HGI_M.languageSheet()')}
       ${ui().pinHash ? tile('fa-lock', t('Lock now'), 'HGI_M.lock()') : tile('fa-shield-halved', t('App Lock (PIN)'), "HGI_M.go('settings'); setTimeout(()=>document.getElementById('app-prefs').scrollIntoView({behavior:'smooth'}),150)")}
+      ${tile('fa-right-from-bracket', t('Log out'), 'HGI_M.logout()')}
       ${tile('fa-circle-info', 'v' + APP_VERSION, 'HGI_M.about()')}
     </div>`);
   }
@@ -795,6 +797,175 @@
   }
 
   /* ------------------------------------------------------------------ public helpers for inline handlers */
+  /* ------------------------------------------------------------------ logout (keeps all billing data) */
+  const LOGGED_OUT_KEY = 'hgi_logged_out';
+  const loggedOut = () => !window.HGI_ACCOUNT && (() => { try { return localStorage.getItem(LOGGED_OUT_KEY) === '1'; } catch (e) { return false; } })();
+  const defaultCreds = () => String(state.credentials.username).toLowerCase() === 'admin' && String(state.credentials.password) === '123';
+  function showLoginScreen() {
+    storeDel('session', 'hgi_auth_session');
+    const app = document.getElementById('app-container'); app.classList.add('hidden'); app.classList.remove('flex');
+    const lk = document.getElementById('lock-screen'); if (lk) lk.classList.add('hidden');
+    const ob = document.getElementById('onboarding'); if (ob) ob.remove();
+    document.getElementById('login-overlay').classList.remove('hidden');
+    if (typeof updateLoginHint === 'function') updateLoginHint();
+    if (typeof refreshCompanyNames === 'function') refreshCompanyNames();
+  }
+  async function logout() {
+    closeMore();
+    if (window.HGI_ACCOUNT && window.HGI_SYNC) return HGI_SYNC.signOut();      // cloud account: sign out (data stays)
+    const dlg = window.HGI_DIALOG;
+    const needPw = defaultCreds();
+    const body = `<p>${t('Your invoices, buyers, items and settings stay safely on this phone. You will need your login password to open the app again.')}</p>`
+      + (needPw ? `<p><strong>${t('First set your own login password')}</strong> ${t('(the default admin / 123 is not safe):')}</p>
+        <input type="text" id="lo-user" class="inp" placeholder="${t('Username')}" value="admin" autocomplete="username" style="margin-bottom:8px">
+        <input type="password" id="lo-pass" class="inp" placeholder="${t('New password (min 4 characters)')}" autocomplete="new-password" style="margin-bottom:8px">
+        <input type="password" id="lo-pass2" class="inp" placeholder="${t('Repeat password')}" autocomplete="new-password">` : '');
+    // read the fields when the button is pressed (the dialog removes itself afterwards)
+    let creds = null;
+    const grab = e => { if (!e.target.closest('.acct-dlg button')) return; const u = document.getElementById('lo-user'); if (u) creds = { u: u.value.trim(), p: document.getElementById('lo-pass').value, p2: document.getElementById('lo-pass2').value }; };
+    document.addEventListener('click', grab, true);
+    const ok = await dlg({ title: t('Log out?'), body, buttons: [{ label: t('Cancel'), value: false }, { label: t('Log out'), value: true, primary: true }] });
+    document.removeEventListener('click', grab, true);
+    if (!ok) return;
+    if (needPw) {
+      if (!creds || !creds.u) return toast(t('Enter a username'), 'error');
+      if (creds.p.length < 4) return toast(t('Password must be at least 4 characters'), 'error');
+      if (creds.p !== creds.p2) return toast(t('Passwords do not match'), 'error');
+      if (creds.u.toLowerCase() === 'admin' && creds.p === '123') return toast(t('Choose a password other than 123'), 'error');
+      state.credentials = { username: creds.u, password: creds.p };
+    }
+    saveState(); await flushMirror();
+    try { localStorage.setItem(LOGGED_OUT_KEY, '1'); } catch (e) { return toast('Logout needs app storage, which is blocked here.', 'error'); }
+    unlocked = false;
+    if (typeof setEditMode === 'function') { try { newDocument('INV', true); } catch (e) { /* form reset is cosmetic */ } }
+    showLoginScreen();
+    toast(t('Logged out. Your data is safe on this phone.'));
+  }
+
+  /* ------------------------------------------------------------------ render any document for PDF output, then put the screen back */
+  const nextPaint = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 60)));
+  const quoteLabel = 'THIS IS A QUOTATION — NOT A TAX INVOICE';
+  async function withRendered(doc, labels, fn) {
+    const prev = previewDoc, sec = document.getElementById('preview-section'), wasHidden = sec.classList.contains('hidden');
+    previewDoc = doc; sec.classList.remove('hidden');
+    try {
+      renderPreviewPages(labels);
+      if (document.fonts && document.fonts.ready) await document.fonts.ready;
+      await nextPaint();
+      return await fn();
+    } finally {
+      previewDoc = prev;
+      if (prev) renderPreviewPages([selectedCopies()[0] || 'ORIGINAL FOR RECIPIENT']);
+      else document.getElementById('invoice-preview-container').innerHTML = '';
+      if (wasHidden) sec.classList.add('hidden');
+    }
+  }
+  function busy(text, onCancel) {
+    let el = document.getElementById('bulk-progress');
+    if (!text) { if (el) el.remove(); return; }
+    if (!el) {
+      el = document.createElement('div'); el.id = 'bulk-progress'; el.className = 'acct-dlg no-print';
+      el.innerHTML = `<div class="acct-dlg-card" style="text-align:center"><div class="bp-spin" aria-hidden="true"></div><p id="bp-text" role="status" style="margin:14px 0 4px;font-weight:600"></p><div class="bp-bar"><span id="bp-fill"></span></div>${onCancel ? `<div class="acct-dlg-actions" style="justify-content:center"><button type="button" class="acct-btn" id="bp-cancel">${t('Cancel')}</button></div>` : ''}</div>`;
+      document.body.appendChild(el);
+      const c = el.querySelector('#bp-cancel'); if (c) c.onclick = () => { c.disabled = true; c.textContent = t('Stopping…'); onCancel(); };
+    }
+    el.querySelector('#bp-text').textContent = text;
+    return el;
+  }
+  const progress = f => { const b = document.getElementById('bp-fill'); if (b) b.style.width = Math.round(f * 100) + '%'; };
+
+  /* ------------------------------------------------------------------ WhatsApp: PDF attached + message */
+  async function whatsAppPdf(id) {
+    const d = id ? state.invoices.find(x => x.id === id) : (previewDoc || collectDocFromForm());
+    if (!d || !d.num) return toast(t('Save the document first'), 'error');
+    if (!isNative || !Native || typeof Native.shareToWhatsApp !== 'function') return coreShareWhatsApp(id);
+    if (!(d.items || []).length) return toast('Add at least one item before sharing', 'error');
+    busy(t('Preparing PDF for WhatsApp…'));
+    try {
+      const label = d.docType === 'QUO' ? quoteLabel : 'ORIGINAL FOR RECIPIENT';
+      const r = await withRendered(d, [label], () => Native.shareToWhatsApp({ fileName: docFileName(d) + '.pdf', text: whatsAppText(d, true), phone: whatsAppPhone(d), title: `${DOC_TYPES[d.docType].short} ${d.num}` }));
+      if (r && r.target === 'share-sheet') toast(t('WhatsApp is not installed — choose an app to send the PDF.'), 'info');
+    } catch (e) { toast(t('Could not share on WhatsApp') + ': ' + (e.message || e), 'error'); }
+    finally { busy(''); }
+  }
+  let coreShareWhatsApp = () => {};
+
+  /* ------------------------------------------------------------------ bulk export: all matching documents as PDFs in one ZIP */
+  const BULK_TYPES = { INV: ['INV'], NOTES: ['CRN', 'DBN'], QUO: ['QUO'], ALL: ['INV', 'CRN', 'DBN', 'QUO'] };
+  function bulkMatches(f) {
+    const types = BULK_TYPES[f.type] || BULK_TYPES.INV;
+    const buyer = String(f.buyer || '').trim().toLowerCase();
+    return state.invoices.filter(d => types.includes(d.docType || 'INV') && !d.demo === !DEMO_MODE
+      && (f.cancelled || !d.cancelled)
+      && (!f.from || d.date >= f.from) && (!f.to || d.date <= f.to)
+      && (!buyer || String(d.buyerName || '').trim().toLowerCase() === buyer)
+      && (d.items || []).length)
+      .sort((a, b) => (a.date === b.date ? String(a.num).localeCompare(String(b.num), undefined, { numeric: true }) : a.date < b.date ? -1 : 1));
+  }
+  const csvCell = v => { const s = String(v == null ? '' : v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  async function bulkExport() {
+    closeMore();
+    if (!isNative || !Native || typeof Native.zipAndDeliver !== 'function') return toast(t('Bulk PDF export is available in the Android app.'), 'info');
+    if (!state.invoices.length) return toast(t('No documents yet'), 'info');
+    const today = todayISO(), fy = fyStartISO(today);
+    const buyers = [...new Set(state.invoices.map(d => String(d.buyerName || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    const body = `<div class="bx-grid">
+        <label>${t('Documents')}<select id="bx-type" class="inp"><option value="INV">${t('Tax invoices')}</option><option value="NOTES">${t('Credit & debit notes')}</option><option value="QUO">${t('Quotations')}</option><option value="ALL">${t('All documents')}</option></select></label>
+        <div class="bx-row"><label>${t('From')}<input id="bx-from" type="date" class="inp" value="${fy}"></label><label>${t('To')}<input id="bx-to" type="date" class="inp" value="${today}"></label></div>
+        <label>${t('Buyer')}<select id="bx-buyer" class="inp"><option value="">${t('All buyers')}</option>${buyers.map(b => `<option value="${b.replace(/"/g, '&quot;').replace(/</g, '&lt;')}">${b.replace(/</g, '&lt;')}</option>`).join('')}</select></label>
+        <label class="acct-check"><input type="checkbox" id="bx-copies"> ${t('Include duplicate & triplicate copies')}</label>
+        <label class="acct-check"><input type="checkbox" id="bx-cancelled"> ${t('Include cancelled documents')}</label>
+        <p id="bx-count" class="bx-count" role="status"></p></div>`;
+    let f = null;
+    const read = () => ({ type: val('bx-type'), from: val('bx-from'), to: val('bx-to'), buyer: val('bx-buyer'), copies: chk('bx-copies'), cancelled: chk('bx-cancelled') });
+    const val = id => (document.getElementById(id) || {}).value || '';
+    const chk = id => !!(document.getElementById(id) || {}).checked;
+    const update = () => { const n = bulkMatches(read()).length; const c = document.getElementById('bx-count'); if (c) c.textContent = n === 1 ? t('1 document will be exported') : `${n} ${t('documents will be exported')}`; };
+    const onInput = e => { if (e.target.closest('.acct-dlg')) update(); };
+    const grab = e => { if (e.target.closest('.acct-dlg button')) f = read(); };
+    document.addEventListener('input', onInput, true); document.addEventListener('change', onInput, true); document.addEventListener('click', grab, true);
+    const p = window.HGI_DIALOG({ title: t('Export PDFs as ZIP'), body, buttons: [{ label: t('Cancel'), value: false }, { label: t('Share ZIP'), value: 'share' }, { label: t('Save ZIP'), value: 'save', primary: true }] });
+    setTimeout(update, 0);
+    const action = await p;
+    document.removeEventListener('input', onInput, true); document.removeEventListener('change', onInput, true); document.removeEventListener('click', grab, true);
+    if (!action || !f) return;
+    if (f.from && f.to && f.from > f.to) return toast(t('"From" date is after "To" date'), 'error');
+    const docs = bulkMatches(f);
+    if (!docs.length) return toast(t('No documents match these filters'), 'info');
+    await runBulk(docs, f, action);
+  }
+  async function runBulk(docs, f, action) {
+    let cancelled = false;
+    busy(t('Preparing…'), () => { cancelled = true; });
+    const allCopies = ['ORIGINAL FOR RECIPIENT', 'DUPLICATE FOR TRANSPORTER', 'TRIPLICATE FOR SUPPLIER'];
+    const names = [], used = new Set(), rows = [['Number', 'Type', 'Date', 'Buyer', 'Buyer GSTIN', 'Taxable value', 'Total', 'Status', 'PDF file']];
+    let failed = 0;
+    try {
+      await Native.clearCacheDir({ dir: 'bulk' });
+      for (let i = 0; i < docs.length && !cancelled; i++) {
+        const d = docs[i];
+        busy(`${t('Creating PDF')} ${i + 1} ${t('of')} ${docs.length} — ${d.num}`); progress(i / docs.length);
+        let name = docFileName(d), k = 2; while (used.has(name.toLowerCase())) name = docFileName(d) + '_' + k++;
+        used.add(name.toLowerCase()); name += '.pdf';
+        const labels = d.docType === 'QUO' ? [quoteLabel] : f.copies ? allCopies : ['ORIGINAL FOR RECIPIENT'];
+        try {
+          await withRendered(d, labels, () => Native.pdfToCache({ fileName: name, dir: 'bulk' }));
+          names.push(name);
+          rows.push([d.num, DOC_TYPES[d.docType].short, d.date, d.buyerName, d.buyerGstin, d.taxable, d.grandTotal, d.cancelled ? 'Cancelled' : '', name]);
+        } catch (e) { failed++; console.warn('[HGI] PDF failed for', d.num, e); }
+      }
+      if (cancelled) { toast(t('Export cancelled'), 'info'); return; }
+      if (!names.length) { toast(t('No PDFs could be created'), 'error'); return; }
+      busy(t('Packing ZIP…')); progress(1);
+      const tag = `${f.from || 'start'}_to_${f.to || todayISO()}${f.buyer ? '_' + String(f.buyer).replace(/[^\w]+/g, '_').slice(0, 30) : ''}`;
+      const zipName = `${DEMO_MODE ? 'DEMO_' : ''}HGI_${{ INV: 'Invoices', NOTES: 'Notes', QUO: 'Quotations', ALL: 'Documents' }[f.type] || 'Invoices'}_${tag}.zip`;
+      const r = await Native.zipAndDeliver({ dir: 'bulk', zipName, names, action, extra: [{ name: 'index.csv', text: '﻿' + rows.map(r => r.map(csvCell).join(',')).join('\r\n') + '\r\n' }] });
+      window.__lastBulk = { count: r.count, name: r.name, location: r.location, failed };
+      toast(`${r.count} PDF${r.count === 1 ? '' : 's'} ${t('exported')}${r.location && r.location !== 'share sheet' ? ': ' + r.location : ''}${failed ? ` — ${failed} ${t('failed')}` : ''}`, failed ? 'warn' : 'success');
+    } catch (e) { toast(t('Export failed') + ': ' + (e.message || e), 'error'); }
+    finally { busy(''); Native.clearCacheDir({ dir: 'bulk' }).catch(() => {}); }
+  }
+
   window.HGI_M = {
     go(tab) { closeMore(); switchTab(tab); },
     close: closeMore,
@@ -809,7 +980,7 @@
     about() { closeMore(); toast(`HGI Billing ${APP_VERSION} ${isNative ? '(Android)' : '(Web)'}`, 'info'); },
     enterDemo, exitDemo, undoRestore, runRowAction,
     restoreAndClose(ev) { const el = document.getElementById('onboarding'); ui().onboarded = true; if (el) el.remove(); importJSONBackup(ev); },
-    sharePdf, savePdf, flushMirror, renderPrefs
+    sharePdf, savePdf, flushMirror, renderPrefs, logout, bulkExport, bulkMatches, whatsAppPdf
   };
 
   /* ------------------------------------------------------------------ hook into the core app */
@@ -865,13 +1036,31 @@
       }
     }
 
-    // auth: on Android (and in any build signed in with a Google account) — PIN lock instead of admin/123
+    // auth: on Android (and in any build signed in with a Google account) the phone / Google account is the login,
+    // with the optional PIN lock — unless the user logged out, then the app's own username + password are needed again
     if (isNative || window.HGI_ACCOUNT) {
       window.checkAuth = function () {
+        if (loggedOut()) { showLoginScreen(); return; }
         if (ui().pinHash && !unlocked) { document.getElementById('login-overlay').classList.add('hidden'); showLock(); }
         else { storeSet('session', 'hgi_auth_session', 'true'); showMainApp(); }
       };
-      window.handleLogout = function () { if (ui().pinHash) { unlocked = false; showLock(); } else toast('Set an app PIN in Settings to lock the app', 'info'); };
+      window.handleLogout = logout;
+      if (isNative) { coreShareWhatsApp = window.shareWhatsApp; window.shareWhatsApp = whatsAppPdf; }
+      if (isNative) {
+        const bar = document.querySelector('#tab-invoices .flex.flex-wrap.gap-2.items-center');
+        if (bar && !document.getElementById('btn-bulk-export')) {
+          const b = document.createElement('button'); b.type = 'button'; b.id = 'btn-bulk-export';
+          b.className = 'px-3 py-2 bg-slate-800 text-white rounded text-xs font-bold whitespace-nowrap';
+          b.innerHTML = '<i class="fa-solid fa-file-pdf mr-1"></i> <span>Export PDFs (ZIP)</span>'; b.onclick = bulkExport;
+          bar.appendChild(b);
+        }
+      }
+      wrap('handleLogin', () => {
+        if (storeGet('session', 'hgi_auth_session') === 'true' && document.getElementById('login-overlay').classList.contains('hidden')) {
+          try { localStorage.removeItem(LOGGED_OUT_KEY); } catch (e) { /* ignore */ }
+          unlocked = true;                       // just proved who they are: no PIN on top
+        }
+      });
     }
     wrap('showMainApp', () => { if (needsOnboarding() && !document.getElementById('onboarding')) showOnboarding(); });
   }
@@ -881,6 +1070,8 @@
     if (!AppPlugin) return;
     AppPlugin.addListener('backButton', () => {
       if (document.getElementById('lock-screen') && !document.getElementById('lock-screen').classList.contains('hidden')) return AppPlugin.minimizeApp && AppPlugin.minimizeApp();
+      if (!document.getElementById('login-overlay').classList.contains('hidden') && !document.querySelector('#reset-password-modal:not(.hidden)')) return AppPlugin.minimizeApp && AppPlugin.minimizeApp();
+      if (document.querySelector('.acct-dlg') || document.getElementById('bulk-progress')) return;
       const open = Array.from(document.querySelectorAll('.fixed.inset-0.z-50.flex')).filter(m => !m.classList.contains('hidden') && m.id !== 'login-overlay');
       if (open.length) return closeModal(open[open.length - 1].id);
       const ms = document.getElementById('more-sheet'); if (ms && ms.classList.contains('open')) return closeMore();
@@ -929,10 +1120,11 @@
     if (window.HGI_SYNC) HGI_SYNC.start();       // automatic cloud sync + Settings → Account card
     applyTheme();                                // system bar colours from the final page colour
     document.documentElement.classList.toggle('is-native', isNative);
-    if (isNative || window.HGI_ACCOUNT) {
+    if ((isNative || window.HGI_ACCOUNT) && !loggedOut()) {
       const ro = document.getElementById('login-overlay');
       if (ro && !ro.classList.contains('hidden') && !ui().pinHash) { storeSet('session', 'hgi_auth_session', 'true'); showMainApp(); }
     }
     window.HGI_READY = true;
+    document.documentElement.classList.add('booted');   // the start-up cover goes away only now: no login flash
   };
 })();

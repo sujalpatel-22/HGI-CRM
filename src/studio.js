@@ -137,7 +137,7 @@
       </nav>
       <div class="rail-foot">${railBtn('settings')}
         <button type="button" class="rail-btn" id="rail-theme" title="Theme">${ic('moon', 'only-light')}${ic('sun', 'only-dark')}<span data-i18n>Theme</span></button>
-        <button type="button" class="rail-btn" id="rail-out" title="Lock / sign out">${ic('logout')}<span data-i18n>Sign out</span></button>
+        <button type="button" class="rail-btn" id="rail-out" title="Log out">${ic('logout')}<span data-i18n>Log out</span></button>
       </div>`;
     r.addEventListener('click', e => {
       const b = e.target.closest('button'); if (!b) return;

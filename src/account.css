@@ -54,3 +54,16 @@ html.dark .acct-dlg-actions .acct-btn-primary { background: var(--saffron, #f582
 #acct-card .acct-warn { color: var(--amber, #c88512); } #acct-card .acct-warn::before { background: var(--amber, #c88512); }
 #acct-card .acct-muted { color: var(--muted, #6c7084); }
 #acct-card button[disabled] { opacity: .5; }
+
+/* v8.2 — bulk export dialog + progress */
+.bx-grid { display: flex; flex-direction: column; gap: 12px; }
+.bx-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: var(--text-2, #39405a); }
+.bx-grid label.acct-check { flex-direction: row; font-weight: 600; font-size: 13px; }
+.bx-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.bx-grid .inp { width: 100%; }
+.bx-count { margin: 2px 0 0 !important; font-weight: 700; color: var(--saffron-ink, #c25d0b); }
+#bulk-progress .bp-spin { width: 34px; height: 34px; margin: 4px auto 0; border-radius: 50%; border: 3px solid var(--line, #e6e2d8); border-top-color: var(--saffron, #f58220); animation: bpspin .8s linear infinite; }
+@keyframes bpspin { to { transform: rotate(360deg); } }
+#bulk-progress .bp-bar { height: 6px; border-radius: 6px; background: var(--line, #e6e2d8); overflow: hidden; margin: 10px 0 4px; }
+#bulk-progress .bp-bar span { display: block; height: 100%; width: 0; background: var(--saffron, #f58220); transition: width .25s; }
+#bulk-progress { align-items: center; z-index: 95; }

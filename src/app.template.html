@@ -117,13 +117,33 @@
     .inp:focus { outline: none; box-shadow: 0 0 0 2px rgba(245,130,32,.35); border-color: var(--brand-orange); }
     .inp-sm { border: 1px solid #e2e8f0; padding: 4px 6px; border-radius: 5px; font-size: 13px; }
   </style>
+  <style>
+    /* start-up cover: shown until the app knows whether the user is signed in, so the login screen never flashes */
+    #boot-splash { position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; background: #ffffff; }
+    #boot-splash img { width: min(56vw, 260px); height: auto; }
+    #boot-splash .boot-bar { width: 72px; height: 4px; border-radius: 4px; background: #e8e4dc; overflow: hidden; position: relative; }
+    #boot-splash .boot-bar::after { content: ''; position: absolute; inset: 0; width: 40%; border-radius: 4px; background: #f58220; animation: bootbar 1s ease-in-out infinite alternate; }
+    @keyframes bootbar { from { transform: translateX(-10%); } to { transform: translateX(160%); } }
+    html.booted #boot-splash { display: none; }
+    @media print { #boot-splash { display: none !important; } }
+  </style>
 </head>
 <body class="bg-slate-100 min-h-screen flex flex-col">
+  <div id="boot-splash" aria-label="Loading HGI Billing" role="status"><img src="{{LOGO_FULL}}" alt=""><div class="boot-bar"></div></div>
+  <script>
+    setTimeout(function () { document.documentElement.classList.add('booted'); }, 20000);   /* never stay stuck on the cover */
+    // records whether the login screen was ever actually visible (used by the start-up tests)
+    window.__hgiLoginShown = false;
+    new MutationObserver(function () {
+      var lo = document.getElementById('login-overlay');
+      if (lo && !lo.classList.contains('hidden') && document.documentElement.classList.contains('booted')) window.__hgiLoginShown = true;
+    }).observe(document.documentElement, { attributes: true, subtree: true, attributeFilter: ['class'] });
+  </script>
 
   <div id="toast-container" class="fixed bottom-4 right-4 z-[60] space-y-2 no-print"></div>
 
   <!-- ====================== LOGIN ====================== -->
-  <div id="login-overlay" class="fixed inset-0 z-50 brand-bg flex items-center justify-center p-4">
+  <div id="login-overlay" class="hidden fixed inset-0 z-50 brand-bg flex items-center justify-center p-4">
     <div class="bg-white w-full max-w-md rounded-xl shadow-2xl overflow-hidden">
       <div class="bg-white px-6 pt-6 pb-4 text-center border-b-4" style="border-color: var(--brand-orange)">
         <img id="login-logo" src="{{LOGO_FULL}}" alt="Company logo" class="mx-auto h-40 object-contain">
@@ -2454,25 +2474,35 @@
     /* =====================================================================
        WHATSAPP
        ===================================================================== */
-    function shareWhatsApp(id) {
-      const d = id ? state.invoices.find(x => x.id === id) : (previewDoc || collectDocFromForm());
-      if (!d || !d.num) return;
+    // Professional WhatsApp message. attached = the PDF goes with the message (Android app); otherwise it follows separately.
+    function whatsAppText(d, attached) {
       const saved = state.invoices.find(x => x.id === d.id);
       const bal = d.docType === 'INV' ? (saved ? balanceOf(saved) : d.grandTotal) : 0;
-      const co = state.company;
-      let msg = `Namaste ${d.buyerName},\n\nGreetings from *${co.name}*.\n\n*${DOC_TYPES[d.docType].short} No:* ${d.num}\n*Date:* ${fmtDate(d.date)}\n*Amount:* ${money(d.grandTotal)}\n`;
+      const co = state.company, kind = { INV: 'Tax Invoice', CRN: 'Credit Note', DBN: 'Debit Note', QUO: 'Quotation' }[d.docType] || DOC_TYPES[d.docType].short;
+      let msg = `Dear ${d.buyerName || 'Sir/Madam'},\n\nGreetings from *${co.name}*.\n\n`;
+      msg += attached ? `Please find attached our *${kind} No. ${d.num}* dated ${fmtDate(d.date)}.\n\n` : `Here are the details of our *${kind} No. ${d.num}* dated ${fmtDate(d.date)}.\n\n`;
+      msg += `*Amount:* ${money(d.grandTotal)}\n`;
       if (d.docType === 'CRN' || d.docType === 'DBN') msg += `*Against Invoice:* ${d.refNum}${d.noteReason ? ` (${d.noteReason})` : ''}\n`;
       else if (d.docType === 'QUO') msg += `*Valid till:* ${fmtDate(getDueDate(d))}\n`;
       else if (bal > 0) {
-        msg += `*Balance Due:* ${money(bal)}\n*Due Date:* ${fmtDate(getDueDate(d))}\n`;
-        if (saved && isOverdue(saved)) msg += `⚠️ Overdue by ${daysBetween(getDueDate(saved), todayISO())} days.\n`;
-        msg += `\n*Bank:* ${co.bankName}\n*A/c:* ${co.bankAcc}\n*IFSC:* ${co.bankIfsc}\n${co.upiId ? `*UPI:* ${co.upiId}\n` : ''}`;
-      } else msg += `\n✅ Fully paid — thank you!\n`;
-      msg += `\nThe PDF copy is shared separately. Thank you for your business!\n— ${co.name}${co.phone ? '\n' + co.phone : ''}`;
+        msg += `*Balance due:* ${money(bal)}\n*Due date:* ${fmtDate(getDueDate(d))}\n`;
+        if (saved && isOverdue(saved)) msg += `_Payment is overdue by ${daysBetween(getDueDate(saved), todayISO())} days._\n`;
+        if (co.bankAcc || co.upiId) msg += `\n*Payment details*\n${co.bankName ? `Bank: ${co.bankName}\n` : ''}${co.bankAcc ? `A/c No.: ${co.bankAcc}\n` : ''}${co.bankIfsc ? `IFSC: ${co.bankIfsc}\n` : ''}${co.upiId ? `UPI: ${co.upiId}\n` : ''}`;
+      } else if (d.docType === 'INV') msg += `Status: *Paid in full* — thank you.\n`;
+      if (!attached) msg += `\nThe PDF copy will be shared separately.\n`;
+      msg += `\nFor any questions, please reply to this message${co.phone ? ` or call ${co.phone}` : ''}.\n\nThank you for your business.\n\nRegards,\n*${co.name}*${co.gstin ? `\nGSTIN: ${co.gstin}` : ''}`;
+      return msg;
+    }
+    function whatsAppPhone(d) {
       let phone = (d.buyerPhone || '').replace(/\D/g, '');
       if (phone.length === 10) phone = '91' + phone;
       if (phone.length === 11 && phone.startsWith('0')) phone = '91' + phone.slice(1);
-      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+      return phone;
+    }
+    function shareWhatsApp(id) {
+      const d = id ? state.invoices.find(x => x.id === id) : (previewDoc || collectDocFromForm());
+      if (!d || !d.num) return;
+      window.open(`https://wa.me/${whatsAppPhone(d)}?text=${encodeURIComponent(whatsAppText(d, false))}`, '_blank');
     }
 
     /* =====================================================================

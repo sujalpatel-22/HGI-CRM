@@ -60,6 +60,8 @@
       // the Android build's own settings decide — never fall back to the web default ("off") when the answer is missing
       const r = N && typeof N.getConfig === 'function' ? await bridge(() => N.getConfig(), 4, 5000) : LOST;
       c = r && r !== LOST && !r.error && r.auth ? r : { auth: 'unavailable' };
+      // automated tests of the debug APK may switch to the no-sign-in mode; ignored by release builds (debug === false)
+      if (c.debug === true) { try { const o = localStorage.getItem('hgi_test_auth'); if (o === 'off') c = Object.assign({}, c, { auth: 'off' }); } catch (e) { /* ignore */ } }
     }
     config = { auth: c.auth || 'off', syncUrl: String(c.syncUrl || '').replace(/\/$/, ''), webClientId: c.webClientId || '' };
     if (config.auth !== 'off' && config.auth !== 'unavailable' && !config.syncUrl) config.auth = 'misconfigured';
@@ -125,6 +127,8 @@
       const first = el.querySelector('input, .acct-btn-primary'); if (first) first.focus();
     });
   }
+
+  window.HGI_DIALOG = dialog;   // shared with the Android shell (logout, bulk export)
 
   /* ------------------------------------------------------------------ sign-in screen */
   const G_LOGO = '<svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59A14.5 14.5 0 0 1 9.5 24c0-1.59.28-3.14.76-4.59l-7.98-6.19A23.99 23.99 0 0 0 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>';
@@ -256,7 +260,7 @@
       if (n < 2) { location.reload(); return false; }
       document.documentElement.classList.add('signed-out');
       signInScreen(t('The app could not start properly. Please try again.'));
-      window.HGI_READY = true; window.HGI_SIGNIN_READY = true;
+      window.HGI_READY = true; window.HGI_SIGNIN_READY = true; document.documentElement.classList.add('booted');
       return false;
     }
     try { sessionStorage.removeItem('hgi_cfg_retry'); } catch (e) { /* ignore */ }
@@ -270,7 +274,7 @@
     }
     document.documentElement.classList.add('signed-out');
     signInScreen();
-    window.HGI_READY = true; window.HGI_SIGNIN_READY = true;
+    window.HGI_READY = true; window.HGI_SIGNIN_READY = true; document.documentElement.classList.add('booted');
     return false;
   }
 

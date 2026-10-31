@@ -10,6 +10,8 @@ import android.view.View;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.CancellationSignal;
@@ -51,6 +53,14 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
+
+import com.getcapacitor.JSArray;
 
 /**
  * Native helpers for the HGI Billing web app:
@@ -60,6 +70,8 @@ import java.nio.charset.StandardCharsets;
  *  - saveFile() / shareFile(): CSV / JSON backups
  *  - openUrl():    wa.me, mailto:, upi: links in the right app
  *  - writeState() / readState(): durable copy of the app data in private app storage
+ *  - pdfToCache() / clearCacheDir() / zipAndDeliver(): bulk export — each document rendered to a PDF, all zipped into one file
+ *  - shareToWhatsApp(): renders the current document to PDF and hands PDF + message to WhatsApp (share sheet if WhatsApp is missing)
  *  - getConfig():  public cloud-sync settings of this build (sync service URL, OAuth web client ID) — no secrets
  *  - googleSignIn() / googleSignOut(): "Sign in with Google" (Android Credential Manager) → Google ID token,
  *                  which the app exchanges for its own session at the HGI sync service
@@ -128,10 +140,12 @@ public class HgiNativePlugin extends Plugin {
 
     private interface PdfDone { void ok(File f); }
 
-    private void renderPdf(PluginCall call, String fileName, PdfDone done) {
+    private void renderPdf(PluginCall call, String fileName, PdfDone done) { renderPdf(call, "pdf", fileName, done); }
+
+    private void renderPdf(PluginCall call, String subdir, String fileName, PdfDone done) {
         getActivity().runOnUiThread(() -> {
             try {
-                File dir = new File(getContext().getCacheDir(), "pdf");
+                File dir = new File(getContext().getCacheDir(), subdir);
                 if (!dir.exists() && !dir.mkdirs()) throw new Exception("cannot create cache dir");
                 File out = new File(dir, safeName(fileName, "Invoice.pdf"));
                 WebView wv = getBridge().getWebView();
@@ -299,6 +313,8 @@ public class HgiNativePlugin extends Plugin {
         r.put("auth", res("hgi_auth").isEmpty() ? "off" : res("hgi_auth"));
         r.put("syncUrl", res("hgi_sync_url"));
         r.put("webClientId", res("hgi_web_client_id"));
+        // debuggable builds only (CI test APK): lets automated tests switch sign-in modes. Release builds are never debuggable.
+        r.put("debug", (getContext().getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0);
         call.resolve(r);
     }
 
@@ -342,5 +358,129 @@ public class HgiNativePlugin extends Plugin {
                 @Override public void onResult(Void v) { call.resolve(); }
                 @Override public void onError(ClearCredentialException e) { call.resolve(); }   // nothing stored is fine
             });
+    }
+
+    /* ------------------------------------------------------------------ bulk export: PDFs → one ZIP */
+    private File cacheSub(String name) throws Exception {
+        String clean = name == null ? "" : name.replaceAll("[^a-zA-Z0-9_-]", "");
+        if (clean.isEmpty()) throw new Exception("bad folder name");
+        File dir = new File(getContext().getCacheDir(), clean);
+        if (!dir.exists() && !dir.mkdirs()) throw new Exception("cannot create cache dir");
+        return dir;
+    }
+
+    @PluginMethod
+    public void clearCacheDir(PluginCall call) {
+        try {
+            File dir = cacheSub(call.getString("dir", "bulk"));
+            File[] fs = dir.listFiles();
+            if (fs != null) for (File f : fs) //noinspection ResultOfMethodCallIgnored
+                f.delete();
+            call.resolve();
+        } catch (Exception e) { call.reject("Could not clear: " + e.getMessage(), e); }
+    }
+
+    @PluginMethod
+    public void pdfToCache(PluginCall call) {
+        final String fileName = call.getString("fileName", "Invoice.pdf");
+        final String dir = call.getString("dir", "bulk");
+        try { cacheSub(dir); } catch (Exception e) { call.reject(e.getMessage()); return; }
+        renderPdf(call, dir.replaceAll("[^a-zA-Z0-9_-]", ""), fileName, f -> {
+            JSObject r = new JSObject(); r.put("name", f.getName()); r.put("bytes", f.length()); call.resolve(r);
+        });
+    }
+
+    @PluginMethod
+    public void zipAndDeliver(PluginCall call) {
+        try {
+            File dir = cacheSub(call.getString("dir", "bulk"));
+            String zipName = safeName(call.getString("zipName", "HGI_Invoices.zip"), "HGI_Invoices.zip");
+            if (!zipName.toLowerCase().endsWith(".zip")) zipName += ".zip";
+            String action = call.getString("action", "save");
+            JSArray names = call.getArray("names", new JSArray());
+            JSArray extra = call.getArray("extra", new JSArray());
+            File outDir = cacheSub("export");
+            File zip = new File(outDir, zipName);
+            int count = 0;
+            Set<String> used = new HashSet<>();
+            try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(zip))) {
+                List<String> order = new ArrayList<>();
+                for (int i = 0; i < names.length(); i++) order.add(names.getString(i));
+                for (String n : order) {
+                    File f = new File(dir, safeName(n, "x.pdf"));
+                    if (!f.exists() || !f.getCanonicalPath().startsWith(dir.getCanonicalPath())) continue;
+                    if (!used.add(f.getName())) continue;
+                    zos.putNextEntry(new ZipEntry(f.getName()));
+                    try (InputStream in = new FileInputStream(f)) { byte[] buf = new byte[16384]; int k; while ((k = in.read(buf)) > 0) zos.write(buf, 0, k); }
+                    zos.closeEntry();
+                    count++;
+                }
+                for (int i = 0; i < extra.length(); i++) {
+                    org.json.JSONObject x = extra.getJSONObject(i);
+                    String en = safeName(x.optString("name", "info.txt"), "info.txt");
+                    if (!used.add(en)) continue;
+                    zos.putNextEntry(new ZipEntry(en));
+                    zos.write(x.optString("text", "").getBytes(StandardCharsets.UTF_8));
+                    zos.closeEntry();
+                }
+            }
+            if (count == 0) { call.reject("No PDFs were created"); return; }
+            JSObject r = new JSObject(); r.put("count", count); r.put("bytes", zip.length()); r.put("name", zipName);
+            if ("share".equals(action)) {
+                shareUri(providerUri(zip), "application/zip", "", zipName);
+                r.put("location", "share sheet");
+            } else {
+                try { r.put("location", copyToDownloads(zip, zipName, "application/zip")); }
+                catch (Exception e) { shareUri(providerUri(zip), "application/zip", "", zipName); r.put("location", "share sheet"); }
+            }
+            call.resolve(r);
+        } catch (Exception e) { call.reject("ZIP failed: " + e.getMessage(), e); }
+    }
+
+    /* ------------------------------------------------------------------ WhatsApp: PDF + message */
+    private boolean installed(String pkg) {
+        try { getContext().getPackageManager().getPackageInfo(pkg, 0); return true; }
+        catch (PackageManager.NameNotFoundException e) { return false; }
+    }
+
+    @PluginMethod
+    public void shareToWhatsApp(PluginCall call) {
+        final String fileName = call.getString("fileName", "Invoice.pdf");
+        final String text = call.getString("text", "");
+        final String phone = call.getString("phone", "").replaceAll("[^0-9]", "");
+        final String title = call.getString("title", "Invoice");
+        renderPdf(call, fileName, f -> {
+            try {
+                Uri uri = providerUri(f);
+                boolean wa = installed("com.whatsapp"), wab = installed("com.whatsapp.w4b");
+                JSObject r = new JSObject();
+                if (!wa && !wab) {
+                    shareUri(uri, "application/pdf", text, title);
+                    r.put("target", "share-sheet"); call.resolve(r); return;
+                }
+                Intent main = waIntent(wa ? "com.whatsapp" : "com.whatsapp.w4b", uri, text, phone);
+                Intent launch = main;
+                if (wa && wab) {   // both WhatsApp and WhatsApp Business: let the user pick between the two only
+                    launch = Intent.createChooser(main, "Share on WhatsApp");
+                    launch.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[] { waIntent("com.whatsapp.w4b", uri, text, phone) });
+                    launch.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                }
+                getActivity().startActivity(launch);
+                r.put("target", wa && wab ? "whatsapp-choice" : wa ? "whatsapp" : "whatsapp-business");
+                call.resolve(r);
+            } catch (Exception e) { call.reject("WhatsApp share failed: " + e.getMessage(), e); }
+        });
+    }
+
+    private Intent waIntent(String pkg, Uri uri, String text, String phone) {
+        Intent send = new Intent(Intent.ACTION_SEND);
+        send.setType("application/pdf");
+        send.setPackage(pkg);
+        send.putExtra(Intent.EXTRA_STREAM, uri);
+        if (text != null && !text.isEmpty()) send.putExtra(Intent.EXTRA_TEXT, text);
+        // WhatsApp opens this chat directly when the number is on WhatsApp (otherwise it shows its contact picker)
+        if (phone != null && phone.length() >= 10) send.putExtra("jid", phone + "@s.whatsapp.net");
+        send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        return send;
     }
 }
