@@ -296,9 +296,12 @@ await page.evaluate(async tpl => {
   localStorage.setItem('hgi_billing_v7_prod', JSON.stringify(book));
   await Capacitor.Plugins.HgiNative.writeState({ key: 'state', data: JSON.stringify(book) });
 }, fullDoc);
-page = await launch();
-check(await page.evaluate(() => HGI_SYNC.status().config.auth === 'off' && STORAGE_KEY === 'hgi_billing_v7_prod' && state.invoices.length === 3 && state.company.name === 'Local Mode Traders'),
-  'no-cloud mode: opens the phone\'s data without any sign-in');
+// WebView storage is written to disk lazily: reload in place (no force-stop) so nothing is lost
+await page.evaluate(() => setTimeout(() => location.reload(), 50));
+page = await afterReload(() => window.HGI_READY === true && typeof STORAGE_KEY !== 'undefined' && !document.getElementById('signin-screen'));
+const lm = await page.evaluate(() => ({ auth: HGI_SYNC.status().config.auth, key: STORAGE_KEY, n: state.invoices.length, co: state.company.name }));
+check(lm.auth === 'off' && lm.key === 'hgi_billing_v7_prod' && lm.n === 3 && lm.co === 'Local Mode Traders', `no-cloud mode: opens the phone's data without any sign-in (${JSON.stringify(lm)})`);
+await page.waitForTimeout(3000);
 for (let i = 1; i <= 2; i++) {
   page = await launch();
   check(await page.evaluate(() => window.__hgiLoginShown === false && document.documentElement.classList.contains('booted') && !document.getElementById('app-container').classList.contains('hidden') && !!document.querySelector('#tab-dashboard:not(.hidden)')),
@@ -364,6 +367,7 @@ await page.waitForSelector('.acct-dlg #lo-pass');
 await shot('10-logout-dialog');
 await page.fill('#lo-user', 'owner'); await page.fill('#lo-pass', 'Hgi@2026'); await page.fill('#lo-pass2', 'Hgi@2026');
 await page.click('.acct-dlg .acct-btn-primary'); await page.waitForTimeout(800);
+await page.waitForTimeout(2500);
 check(await page.evaluate(() => !document.getElementById('login-overlay').classList.contains('hidden') && document.getElementById('app-container').classList.contains('hidden')
   && localStorage.getItem('hgi_logged_out') === '1' && JSON.parse(localStorage.getItem(STORAGE_KEY)).invoices.length === 3 && state.credentials.username === 'owner'),
   'logout: login screen shown, session ended, all 3 documents still stored, new password saved');
@@ -375,6 +379,7 @@ await page.fill('#login-username', 'owner'); await page.fill('#login-password', 
 check(await page.evaluate(() => !document.getElementById('login-error').classList.contains('hidden') && document.getElementById('app-container').classList.contains('hidden')), 'wrong password is refused');
 await page.fill('#login-password', 'Hgi@2026'); await page.click('#login-overlay button[type=submit]'); await page.waitForTimeout(600);
 check(await page.evaluate(() => !document.getElementById('app-container').classList.contains('hidden') && state.invoices.length === 3 && localStorage.getItem('hgi_logged_out') === null), 'correct password: back in, data intact');
+await page.waitForTimeout(3000);
 page = await launch();
 check(await page.evaluate(() => window.__hgiLoginShown === false && !document.getElementById('app-container').classList.contains('hidden')), 'after logging back in, restarts go straight to the dashboard again');
 

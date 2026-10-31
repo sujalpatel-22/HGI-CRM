@@ -72,6 +72,13 @@ manifest = manifest.replace(/<application\b([^>]*)>/, (m, attrs) => {
   if (!/android:usesCleartextTraffic=/.test(a)) a += ' android:usesCleartextTraffic="false"';
   return `<application${a}>`;
 });
+// No emoji-font download from Google Play services at start-up (androidx EmojiCompat): the WebView draws its own emoji,
+// and that binding makes Android kill the app whenever Play services restarts (seen on the API 33 emulator).
+if (!manifest.includes('xmlns:tools=')) manifest = manifest.replace('<manifest ', '<manifest xmlns:tools="http://schemas.android.com/tools" ');
+if (!manifest.includes('EmojiCompatInitializer')) manifest = manifest.replace(/<\/application>/, `    <provider android:name="androidx.startup.InitializationProvider" android:authorities="\${applicationId}.androidx-startup" android:exported="false" tools:node="merge">
+            <meta-data android:name="androidx.emoji2.text.EmojiCompatInitializer" tools:node="remove" />
+        </provider>
+    </application>`);
 // WhatsApp share (Android 11+ package visibility): only these two apps are queried, nothing else
 if (!manifest.includes('<queries>')) manifest = manifest.replace(/<application\b/, `<queries>
         <package android:name="com.whatsapp" />
