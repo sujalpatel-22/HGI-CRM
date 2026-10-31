@@ -1,0 +1,52 @@
+▶ api35-pixel_c: sdk_gphone64_x86_64 · Android SDK 35 · WebView versionName=124.0.6367.219
+  ✓ runs as native Capacitor app
+  ✓ HgiNative plugin reachable from JavaScript
+  ✓ native writeState/readState round trip
+  ✓ bundled QR + Chart libraries loaded (offline)
+  ✓ bundled Font Awesome icons
+  ✓ bundled Inter font
+  ✓ compiled Tailwind CSS loaded
+  ✓ no username/password screen on Android
+  ✓ debug build: test sign-in against the local test service ({"auth":"test","syncUrl":"http://127.0.0.1:8787","webClientId":"","debug":true})
+  ✓ sign-in required before the app opens
+  ✓ signed in: data opens in the account's own slot
+{"severity":"INFO","at":"2026-10-31T21:18:01.006Z","event":"spreadsheet_created","user":"318ced1af5eff38076e28985"}
+{"severity":"INFO","at":"2026-10-31T21:18:01.037Z","event":"saved","user":"318ced1af5eff38076e28985","version":1,"bytes":866,"unchanged":false}
+  ✓ onboarding shown on first launch
+  ✓ fresh install starts with no business data (no sample company, items, buyers or invoices)
+  ✓ setup wizard covers the screen, buttons unstyled by default (844/844px, rgba(0, 0, 0, 0))
+  ✓ onboarding done, tablet top navigation shown
+  ✓ ₹ sign has its own width (33.2px at 64px, probe [11.4,11.4,8.4,8.7])
+{"severity":"INFO","at":"2026-10-31T21:18:35.773Z","event":"saved","user":"318ced1af5eff38076e28985","version":2,"bytes":974,"unchanged":false}
+  ✓ no native title bar over the app
+    status-bar pixel [ 243, 241, 236 ] header pixel [ 238, 236, 232 ] insets "0px"
+  ✓ status bar painted the page colour (rgb 243,241,236 vs page 243,241,236)
+{"severity":"INFO","at":"2026-10-31T21:18:51.028Z","event":"saved","user":"318ced1af5eff38076e28985","version":3,"bytes":1088,"unchanged":false}
+  ✓ invoice saved
+  ✓ GST: inter-state IGST 18% on ₹10,000 = ₹1,800, total ₹11,800
+  ✓ UPI scan-to-pay QR rendered
+  ✓ invoice header: company name clear of the logo (18px, flex gap native)
+{"severity":"INFO","at":"2026-10-31T21:18:57.779Z","event":"saved","user":"318ced1af5eff38076e28985","version":4,"bytes":2324,"unchanged":false}
+    save toast: PDF saved: Downloads/HGI Billing/Invoice_01-26-27_Shree_Ram_Engineering.pdf
+  ✓ native A4 PDF written to Downloads/HGI Billing (115512 bytes)
+  ✓ file is a valid PDF
+  ✓ native PDF: 3 copies → 3 A4 sheets (one per copy, no spill-over pages)
+  ✓ Android back button closes dialog
+  ✓ back button returns to dashboard
+  ✓ product search opens when the item description is tapped
+  ✓ Android back closes the search and stays on the invoice
+  ✓ picked item filled the row: {"desc":"Industrial Machine Components","qty":"2","rate":"2500","hsn":"848390","taxable":5000,"rows":1}
+  ✓ data persists after app restart
+{"severity":"INFO","at":"2026-10-31T21:19:32.967Z","event":"saved","user":"318ced1af5eff38076e28985","version":5,"bytes":2363,"unchanged":false}
+  ✓ newer on-device copy wins over older WebView storage
+    files dir: hgi-account.json
+hgi-selftest.json
+hgi-state-u-318ced1af5eff38076e28985.json
+hgi-sync-u-318ced1af5eff38076e28985.json
+profileInstalled
+  ✓ data restored from on-device mirror when WebView storage is wiped
+  ✓ Demo Mode shows sample data with a DEMO banner
+  ✓ real data in the native mirror untouched while Demo Mode is open
+  ✓ exit Demo Mode returns to real data and deletes the sample data
+  ✓ after restart the app opens real data, not demo
+  ✓ Hindi UI
