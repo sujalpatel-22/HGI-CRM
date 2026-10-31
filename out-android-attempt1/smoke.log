@@ -1,0 +1,86 @@
+▶ api36-pixel_7: sdk_gphone64_x86_64 · Android SDK 36 · WebView versionName=133.0.6943.137
+Failed to write while dumping service package: Broken pipe
+  ✓ runs as native Capacitor app
+  ✓ HgiNative plugin reachable from JavaScript
+  ✓ native writeState/readState round trip
+  ✓ bundled QR + Chart libraries loaded (offline)
+  ✓ bundled Font Awesome icons
+  ✓ bundled Inter font
+  ✓ compiled Tailwind CSS loaded
+  ✓ no username/password screen on Android
+  ✓ debug build: test sign-in against the local test service ({"auth":"test","syncUrl":"http://127.0.0.1:8787","webClientId":"","debug":true})
+  ✓ sign-in required before the app opens
+  ✓ signed in: data opens in the account's own slot
+{"severity":"INFO","at":"2026-10-31T21:18:15.017Z","event":"spreadsheet_created","user":"318ced1af5eff38076e28985"}
+{"severity":"INFO","at":"2026-10-31T21:18:15.075Z","event":"saved","user":"318ced1af5eff38076e28985","version":1,"bytes":866,"unchanged":false}
+  ✓ onboarding shown on first launch
+  ✓ fresh install starts with no business data (no sample company, items, buyers or invoices)
+  ✓ setup wizard covers the screen, buttons unstyled by default (839/839px, rgba(0, 0, 0, 0))
+{"severity":"INFO","at":"2026-10-31T21:18:51.704Z","event":"saved","user":"318ced1af5eff38076e28985","version":2,"bytes":974,"unchanged":false}
+  ✓ onboarding done, bottom tab bar shown
+  ✓ ₹ sign has its own width (23.9px at 46px, probe [11.4,11.4,9,8.7])
+  ✗ no native title bar over the app
+    status-bar pixel [ 243, 241, 236 ] header pixel [ 243, 239, 234 ] insets "0px"
+  ✓ status bar painted the page colour (rgb 243,241,236 vs page 243,241,236)
+  ✓ invoice saved
+{"severity":"INFO","at":"2026-10-31T21:19:12.678Z","event":"saved","user":"318ced1af5eff38076e28985","version":3,"bytes":1088,"unchanged":false}
+  ✓ GST: inter-state IGST 18% on ₹10,000 = ₹1,800, total ₹11,800
+{"severity":"INFO","at":"2026-10-31T21:19:13.854Z","event":"saved","user":"318ced1af5eff38076e28985","version":4,"bytes":2324,"unchanged":false}
+  ✓ UPI scan-to-pay QR rendered
+  ✓ invoice header: company name clear of the logo (9px, flex gap native)
+    save toast: PDF saved: Downloads/HGI Billing/Invoice_01-26-27_Shree_Ram_Engineering.pdf
+  ✓ native A4 PDF written to Downloads/HGI Billing (338499 bytes)
+  ✓ file is a valid PDF
+  ✓ native PDF: 3 copies → 3 A4 sheets (one per copy, no spill-over pages)
+  ✓ Android back button closes dialog
+  ✓ back button returns to dashboard
+  ✓ product search opens when the item description is tapped
+  ✓ Android back closes the search and stays on the invoice
+  ✓ picked item filled the row: {"desc":"Industrial Machine Components","qty":"2","rate":"2500","hsn":"848390","taxable":5000,"rows":1}
+  ✓ data persists after app restart
+{"severity":"INFO","at":"2026-10-31T21:20:07.032Z","event":"saved","user":"318ced1af5eff38076e28985","version":5,"bytes":2363,"unchanged":false}
+  ✓ newer on-device copy wins over older WebView storage
+{"severity":"INFO","at":"2026-10-31T21:20:30.448Z","event":"saved","user":"318ced1af5eff38076e28985","version":6,"bytes":2382,"unchanged":false}
+    files dir: hgi-account.json
+hgi-selftest.json
+hgi-state-u-318ced1af5eff38076e28985.json
+hgi-sync-u-318ced1af5eff38076e28985.json
+profileInstalled
+  ✓ data restored from on-device mirror when WebView storage is wiped
+  ✓ Demo Mode shows sample data with a DEMO banner
+  ✓ real data in the native mirror untouched while Demo Mode is open
+  ✓ exit Demo Mode returns to real data and deletes the sample data
+  ✓ after restart the app opens real data, not demo
+  ✓ Hindi UI
+{"severity":"INFO","at":"2026-10-31T21:21:23.671Z","event":"saved","user":"318ced1af5eff38076e28985","version":7,"bytes":2410,"unchanged":false}
+  ✓ data synced from the phone to the account's spreadsheet (status ok)
+  ✓ app uninstalled (all on-device data gone)
+  ✓ reinstalled app asks for sign-in
+  ✓ after reinstall + sign-in all data is restored from the cloud (invoice, company, no setup wizard)
+  ✓ stays signed in and keeps the data after restart
+  ✓ signed-in restart opens the dashboard directly — no login / sign-in screen at any moment
+  ✓ another account on the same phone starts empty (data separated)
+{"severity":"INFO","at":"2026-10-31T21:22:09.157Z","event":"spreadsheet_created","user":"d164ffaf7706ce96cf8664b6"}
+{"severity":"INFO","at":"2026-10-31T21:22:09.188Z","event":"saved","user":"d164ffaf7706ce96cf8664b6","version":1,"bytes":866,"unchanged":false}
+  ✓ upgrade: data saved before sign-in existed is kept and opened in the account
+{"severity":"INFO","at":"2026-10-31T21:22:22.752Z","event":"spreadsheet_created","user":"9acc11175abb3b919074edc8"}
+{"severity":"INFO","at":"2026-10-31T21:22:22.781Z","event":"saved","user":"9acc11175abb3b919074edc8","version":1,"bytes":1215,"unchanged":false}
+  ✓ upgrade: that data is uploaded to the account
+  ✓ no-cloud mode: opens the phone's data without any sign-in ({"auth":"off","key":"hgi_billing_v7_prod","n":3,"co":"Local Mode Traders"})
+  ✓ restart 1: dashboard directly, login screen never shown (no flash)
+  ✓ restart 2: dashboard directly, login screen never shown (no flash)
+  ✓ bulk export dialog counts matching documents (3 documents will be exported → buyer filter: 2 documents will be exported)
+  ✓ 2 PDFs zipped and saved: Downloads/HGI Billing/HGI_Invoices_2026-10-01_to_2026-10-31_Buyer_Alpha.zip
+  ✓ ZIP holds 2 valid PDFs of Buyer Alpha (Invoice_LM-1_Buyer_Alpha.pdf 284954 B, Invoice_LM-3_Buyer_Alpha.pdf 285561 B)
+  ✓ ZIP includes index.csv listing exactly those documents
+  ✓ screen restored after the export (preview hidden again)
+  ✓ WhatsApp share: invoice PDF created () and handed to Android sharing since WhatsApp is missing
+  ✓ Android share sheet opened (topResumedActivity=ActivityRecord{50503361 u0 com.android.intentresolver/.ChooserActivityLauncher t15})
+  ✓ logout: login screen shown, session ended, all 3 documents still stored, new password saved
+  ✓ after restart the app stays logged out (login required)
+  ✓ wrong password is refused
+  ✓ correct password: back in, data intact
+  ✓ after logging back in, restarts go straight to the dashboard again
+  ✓ no JavaScript errors
+
+api36-pixel_7: 62 passed, 1 failed
