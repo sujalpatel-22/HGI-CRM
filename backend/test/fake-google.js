@@ -1,9 +1,13 @@
 'use strict';
 /**
- * TEST ONLY — an in-memory stand-in for the Google endpoints the sync service uses:
- * ID-token signing keys (JWKS), OAuth token endpoint, Cloud Run metadata server, Drive v3 files and Sheets v4 values.
- * It enforces the real limits that matter (50,000 characters per cell, grid size, bearer token) and can inject failures.
- * It is never used by the production server.
+ * TEST ONLY — in-memory stand-ins for the Google / GST endpoints the service uses:
+ *   - Google ID-token signing keys (JWKS), OAuth token endpoint, Cloud Run metadata server
+ *   - Firestore REST (batchGet, beginTransaction, commit, rollback, runQuery, list) with optimistic transactions
+ *     (a transaction whose read documents changed before commit is ABORTED, like Firestore)
+ *   - Cloud Storage JSON API (upload, download, delete)
+ *   - a GST provider answering in the GST Network "Search Taxpayer" format (wrapped as {data: "<json>"})
+ * The same backend tests also run against the official Firestore emulator in CI (FIRESTORE_EMULATOR_HOST).
+ * Never used by the production server.
  */
 const http = require('http');
 const crypto = require('crypto');
@@ -14,14 +18,17 @@ class FakeGoogle {
   constructor() {
     this.kid = 'kid-1';
     this.keys = rsa();
-    this.files = new Map();        // id -> { id, name, mimeType, parents, appProperties, trashed, createdTime, permissions }
-    this.sheets = new Map();       // id -> [{ sheetId, title, hidden, rows, cols, cells: Map }]
     this.tokens = new Set();
-    this.failures = [];            // { match: RegExp, method, status, times, body }
+    this.docs = new Map();          // full doc name → { fields, ver }
+    this.txs = new Map();           // tx id → Map(name → ver at read)
+    this.objects = new Map();       // bucket/name → Buffer
+    this.failures = [];
     this.calls = [];
-    this.valueInputOptions = [];
-    this.corruptReadOnce = false;
-    this.seq = 1;
+    this.ver = 1;
+    this.gstRecords = new Map();    // GSTIN → GSTN taxpayer object
+    this.gstKey = 'gst-test-key';
+    this.gstCalls = 0;
+    this.gstDown = false;
   }
   idToken(claims, opts = {}) {
     const now = Math.floor(Date.now() / 1000);
@@ -29,8 +36,7 @@ class FakeGoogle {
     const payload = { iss: 'https://accounts.google.com', aud: 'test-web-client.apps.googleusercontent.com', iat: now, exp: now + 3600, email_verified: true, ...claims };
     const enc = o => Buffer.from(JSON.stringify(o)).toString('base64url');
     const unsigned = enc(header) + '.' + enc(payload);
-    const sig = crypto.sign('RSA-SHA256', Buffer.from(unsigned), (opts.privateKey || this.keys.privateKey)).toString('base64url');
-    return unsigned + '.' + sig;
+    return unsigned + '.' + crypto.sign('RSA-SHA256', Buffer.from(unsigned), opts.privateKey || this.keys.privateKey).toString('base64url');
   }
   fail(match, status, times = 1, method) { this.failures.push({ match, status, times, method }); }
   start() {
@@ -41,135 +47,95 @@ class FakeGoogle {
   }
   stop() { return new Promise(r => this.server.close(r)); }
   endpoints() {
-    return { certs: this.base + '/certs', token: this.base + '/token', drive: this.base + '/drive/v3', sheets: this.base + '/sheets/v4', metadata: this.base + '/metadata/token' };
+    return { certs: this.base + '/certs', token: this.base + '/token', metadata: this.base + '/metadata/token', firestore: this.base, storage: this.base };
   }
+  gstUrl() { return this.base + '/gst/search?gstin={gstin}&action=TP'; }
 
   async handle(req, res) {
     const url = new URL(req.url, 'http://x');
-    const body = await new Promise(r => { const b = []; req.on('data', c => b.push(c)); req.on('end', () => r(Buffer.concat(b).toString('utf8'))); });
+    const raw = await new Promise(r => { const b = []; req.on('data', c => b.push(c)); req.on('end', () => r(Buffer.concat(b))); });
     const json = (s, o, h = {}) => { res.writeHead(s, { 'Content-Type': 'application/json', ...h }); res.end(JSON.stringify(o)); };
-    const err = (s, m) => json(s, { error: { code: s, message: m } });
-    this.calls.push(`${req.method} ${url.pathname}`);
-    for (const f of this.failures) {
-      if (f.times > 0 && f.match.test(`${req.method} ${url.pathname}${url.search}`) && (!f.method || f.method === req.method)) { f.times--; return err(f.status, 'injected failure'); }
-    }
-    const p = url.pathname;
+    const err = (s, m, status) => json(s, { error: { code: s, message: m, status: status || '' } });
+    const p = decodeURIComponent(url.pathname);
+    this.calls.push(`${req.method} ${p}`);
+    for (const f of this.failures) if (f.times > 0 && f.match.test(`${req.method} ${p}${url.search}`) && (!f.method || f.method === req.method)) { f.times--; return err(f.status, 'injected failure'); }
     if (p === '/certs') {
       const jwk = this.keys.publicKey.export({ format: 'jwk' });
       return json(200, { keys: [{ ...jwk, kid: this.kid, alg: 'RS256', use: 'sig' }] }, { 'Cache-Control': 'public, max-age=3600' });
     }
     if (p === '/token' || p === '/metadata/token') {
       if (p === '/metadata/token' && req.headers['metadata-flavor'] !== 'Google') return err(403, 'missing Metadata-Flavor');
-      if (p === '/token') {
-        const f = new URLSearchParams(body);
-        if (f.get('grant_type') === 'refresh_token' && f.get('refresh_token') !== 'good-refresh') return json(400, { error: 'invalid_grant', error_description: 'Token has been expired or revoked.' });
-        if (f.get('grant_type') === 'urn:ietf:params:oauth:grant-type:jwt-bearer' && (f.get('assertion') || '').split('.').length !== 3) return json(400, { error: 'invalid_grant' });
-      }
       const t = 'at-' + crypto.randomBytes(8).toString('hex'); this.tokens.add(t);
       return json(200, { access_token: t, expires_in: 3599, token_type: 'Bearer' });
     }
+    if (p === '/gst/auth' && req.method === 'POST') {
+      if (req.headers['x-api-key'] !== this.gstKey) return err(401, 'bad key');
+      return json(200, { data: { token: 'tok-123' } });
+    }
+    if (p.startsWith('/gst/')) {
+      this.gstCalls++;
+      if (this.gstDown) return err(503, 'provider down');
+      if (req.headers['x-api-key'] !== this.gstKey && req.headers.authorization !== 'tok-123') return err(401, 'bad key');
+      const g = url.searchParams.get('gstin');
+      const rec = this.gstRecords.get(g);
+      if (!rec) return json(404, { message: 'err-invalid-gstin' });
+      return json(200, { data: JSON.stringify(rec) });
+    }
     const auth = /^Bearer (.+)$/.exec(req.headers.authorization || '');
-    if (!auth || !this.tokens.has(auth[1])) return err(401, 'Request had invalid authentication credentials.');
-    const data = body ? JSON.parse(body) : {};
+    if (!auth || !this.tokens.has(auth[1])) return err(401, 'Request had invalid authentication credentials.', 'UNAUTHENTICATED');
+    const body = raw.length && /json/.test(req.headers['content-type'] || '') ? JSON.parse(raw.toString('utf8')) : null;
 
-    /* ------------------------------------------------ Drive v3 */
-    if (p === '/drive/v3/files' && req.method === 'GET') {
-      if (url.searchParams.get('supportsAllDrives') !== 'true') return err(400, 'supportsAllDrives expected');
-      const q = url.searchParams.get('q');
-      const list = [...this.files.values()].filter(f => this.matches(f, q));
-      return json(200, { files: list.map(f => ({ id: f.id, name: f.name, appProperties: f.appProperties, createdTime: f.createdTime })) });
-    }
-    if (p === '/drive/v3/files' && req.method === 'POST') {
-      const id = 'f' + (this.seq++) + crypto.randomBytes(3).toString('hex');
-      this.files.set(id, { id, name: data.name, mimeType: data.mimeType, parents: data.parents || [], appProperties: data.appProperties || {}, trashed: false, createdTime: new Date(Date.now() + this.seq).toISOString(), permissions: [] });
-      if (data.mimeType === 'application/vnd.google-apps.spreadsheet') this.sheets.set(id, [this.newSheet(0, 'Sheet1')]);
-      return json(200, { id });
-    }
+    /* ------------------------------------------------ Cloud Storage */
     let m;
-    if ((m = /^\/drive\/v3\/files\/([^/]+)\/permissions$/.exec(p)) && req.method === 'POST') { const f = this.files.get(m[1]); if (!f) return err(404, 'File not found'); f.permissions.push(data); return json(200, { id: 'perm' }); }
-    if ((m = /^\/drive\/v3\/files\/([^/]+)$/.exec(p))) {
-      const f = this.files.get(decodeURIComponent(m[1])); if (!f) return err(404, 'File not found');
-      if (req.method === 'DELETE') { this.files.delete(f.id); this.sheets.delete(f.id); res.writeHead(204); return res.end(); }
-      if (req.method === 'PATCH') { Object.assign(f, data); return json(200, { id: f.id }); }
+    if ((m = /^\/upload\/storage\/v1\/b\/([^/]+)\/o$/.exec(p)) && req.method === 'POST') {
+      const name = url.searchParams.get('name'); this.objects.set(m[1] + '/' + name, raw);
+      return json(200, { name, bucket: m[1], size: String(raw.length) });
+    }
+    if ((m = /^\/storage\/v1\/b\/([^/]+)\/o\/(.+)$/.exec(p))) {
+      const key = m[1] + '/' + m[2];
+      if (req.method === 'GET') { if (!this.objects.has(key)) return err(404, 'No such object'); res.writeHead(200, { 'Content-Type': 'application/pdf' }); return res.end(this.objects.get(key)); }
+      if (req.method === 'DELETE') { if (!this.objects.delete(key)) return err(404, 'No such object'); res.writeHead(204); return res.end(); }
     }
 
-    /* ------------------------------------------------ Sheets v4 */
-    if ((m = /^\/sheets\/v4\/spreadsheets\/([^/:]+)(.*)$/.exec(p))) {
-      const id = decodeURIComponent(m[1]), rest = m[2];
-      const tabs = this.sheets.get(id); if (!tabs || (this.files.get(id) || {}).trashed) return err(404, 'Requested entity was not found.');
-      if (rest === '' && req.method === 'GET') return json(200, { sheets: tabs.map(t => ({ properties: { sheetId: t.sheetId, title: t.title, hidden: !!t.hidden, gridProperties: { rowCount: t.rows, columnCount: t.cols } } })) });
-      if (rest === ':batchUpdate') {
-        for (const r of data.requests) {
-          if (r.addSheet) { const pr = r.addSheet.properties; if (tabs.some(t => t.title === pr.title)) return err(400, 'sheet exists'); const t = this.newSheet(tabs.length * 7 + 11, pr.title); t.hidden = pr.hidden; if (pr.gridProperties) { t.rows = pr.gridProperties.rowCount; t.cols = pr.gridProperties.columnCount; } tabs.push(t); }
-          else if (r.updateSheetProperties) { const pr = r.updateSheetProperties.properties; const t = tabs.find(x => x.sheetId === pr.sheetId); if (!t) return err(400, 'no sheet'); if (pr.title) t.title = pr.title; if (pr.gridProperties) { t.rows = pr.gridProperties.rowCount || t.rows; t.cols = pr.gridProperties.columnCount || t.cols; } }
-          else return err(400, 'unsupported request');
-        }
-        return json(200, {});
+    /* ------------------------------------------------ Firestore REST */
+    if ((m = /^\/v1\/(projects\/[^/]+\/databases\/\(default\)\/documents)(.*)$/.exec(p))) {
+      const root = m[1], rest = m[2];
+      if (rest === ':beginTransaction') { const id = crypto.randomBytes(8).toString('base64'); this.txs.set(id, new Map()); return json(200, { transaction: id }); }
+      if (rest === ':rollback') { this.txs.delete(body.transaction); return json(200, {}); }
+      if (rest === ':batchGet') {
+        const tx = body.transaction && this.txs.get(body.transaction);
+        return json(200, body.documents.map(n => { const d = this.docs.get(n); if (tx) tx.set(n, d ? d.ver : 0); return d ? { found: { name: n, fields: d.fields }, readTime: new Date().toISOString() } : { missing: n, readTime: new Date().toISOString() }; }));
       }
-      if (rest === '/values:batchClear') { for (const r of data.ranges) { const g = this.range(tabs, r); if (g.error) return err(400, g.error); this.each(g, (row, col) => g.tab.cells.delete(row + ',' + col)); } return json(200, {}); }
-      if (rest === '/values:batchUpdate') {
-        this.valueInputOptions.push(data.valueInputOption);
-        if (!['RAW', 'USER_ENTERED'].includes(data.valueInputOption)) return err(400, 'valueInputOption required');
-        for (const d of data.data) {
-          const g = this.range(tabs, d.range); if (g.error) return err(400, g.error);
-          for (let i = 0; i < d.values.length; i++) for (let j = 0; j < d.values[i].length; j++) {
-            const row = g.r0 + i, col = g.c0 + j;
-            if (row >= g.tab.rows || col >= g.tab.cols) return err(400, `Range (${d.range}) exceeds grid limits. Max rows: ${g.tab.rows}, max columns: ${g.tab.cols}`);
-            const v = d.values[i][j];
-            if (typeof v === 'string' && v.length > 50000) return err(400, 'Your input contains more than the maximum of 50000 characters in a single cell.');
-            if (v === '' || v === null) g.tab.cells.delete(row + ',' + col); else g.tab.cells.set(row + ',' + col, v);
-          }
+      if (rest === ':commit') {
+        if (body.transaction) {
+          const tx = this.txs.get(body.transaction); if (!tx) return err(400, 'transaction expired', 'INVALID_ARGUMENT');
+          for (const [n, v] of tx) { const d = this.docs.get(n); if ((d ? d.ver : 0) !== v) { this.txs.delete(body.transaction); return err(409, 'Transaction aborted: contention', 'ABORTED'); } }
+          this.txs.delete(body.transaction);
         }
-        return json(200, {});
+        for (const w of body.writes) {
+          if (w.delete) this.docs.delete(w.delete);
+          else { if (JSON.stringify(w.update.fields).length > 1048487) return err(400, 'Document too large', 'INVALID_ARGUMENT'); this.docs.set(w.update.name, { fields: w.update.fields, ver: ++this.ver }); }
+        }
+        return json(200, { commitTime: new Date().toISOString(), writeResults: body.writes.map(() => ({})) });
       }
-      if ((m = /^\/values\/(.+)$/.exec(rest)) && req.method === 'GET') {
-        const g = this.range(tabs, decodeURIComponent(m[1])); if (g.error) return err(400, g.error);
-        const cols = url.searchParams.get('majorDimension') === 'COLUMNS';
-        const out = [];
-        this.each(g, (row, col) => { if (g.tab.cells.has(row + ',' + col)) { const a = cols ? col - g.c0 : row - g.r0, b = cols ? row - g.r0 : col - g.c0; (out[a] = out[a] || [])[b] = String(g.tab.cells.get(row + ',' + col)); } });
-        for (let i = 0; i < out.length; i++) { out[i] = out[i] || []; for (let k = 0; k < out[i].length; k++) if (out[i][k] === undefined) out[i][k] = ''; }
-        if (this.corruptReadOnce && cols && out[0] && out[0][0]) { this.corruptReadOnce = false; out[0][0] = 'AAAA' + out[0][0].slice(4); }
-        return json(200, { range: m[1], values: out.length ? out : undefined });
+      if ((m = /^\/(.+):runQuery$/.exec(rest)) && req.method === 'POST') {
+        const parent = `${root}/${m[1]}`, q = body.structuredQuery, col = q.from[0].collectionId;
+        const f = q.where.fieldFilter, field = f.field.fieldPath, after = Number(f.value.integerValue);
+        const prefix = `${parent}/${col}/`;
+        const rows = [...this.docs.entries()].filter(([n]) => n.startsWith(prefix) && !n.slice(prefix.length).includes('/'))
+          .map(([n, d]) => ({ n, d, v: d.fields[field] ? Number(d.fields[field].integerValue) : null }))
+          .filter(x => x.v !== null && x.v > after).sort((a, b) => a.v - b.v).slice(0, q.limit || 1e9);
+        return json(200, rows.length ? rows.map(x => ({ document: { name: x.n, fields: x.d.fields }, readTime: new Date().toISOString() })) : [{ readTime: new Date().toISOString() }]);
+      }
+      if (req.method === 'GET' && rest) {
+        const col = `${root}${rest}`, prefix = col + '/';
+        const names = [...this.docs.keys()].filter(n => n.startsWith(prefix) && !n.slice(prefix.length).includes('/')).sort();
+        const size = Number(url.searchParams.get('pageSize')) || 100, start = Number(url.searchParams.get('pageToken') || 0);
+        const page = names.slice(start, start + size);
+        return json(200, { documents: page.map(n => ({ name: n, fields: {} })), ...(start + size < names.length ? { nextPageToken: String(start + size) } : {}) });
       }
     }
     return err(404, 'fake: no route ' + req.method + ' ' + p);
-  }
-
-  newSheet(sheetId, title) { return { sheetId, title, hidden: false, rows: 1000, cols: 26, cells: new Map() }; }
-  // 'Tab'!A1:B9 | 'Tab'!A:A | 'Tab'!A1 | 'Tab'
-  range(tabs, a1) {
-    const m = /^'((?:[^']|'')+)'(?:!([A-Z]+)(\d+)?(?::([A-Z]+)(\d+)?)?)?$/.exec(a1);
-    if (!m) return { error: 'Unable to parse range: ' + a1 };
-    const tab = tabs.find(t => t.title === m[1].replace(/''/g, "'"));
-    if (!tab) return { error: 'Unable to parse range: ' + a1 };
-    const col = s => [...s].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0) - 1;
-    const c0 = m[2] ? col(m[2]) : 0, r0 = m[3] ? Number(m[3]) - 1 : 0;
-    const c1 = m[4] ? col(m[4]) : (m[2] && !m[4] && m[3] ? c0 : (m[2] ? c0 : tab.cols - 1));
-    const r1 = m[5] ? Number(m[5]) - 1 : (m[3] && !m[4] ? r0 : tab.rows - 1);
-    if (r0 >= tab.rows && m[3]) return { error: `Range (${a1}) exceeds grid limits.` };
-    return { tab, r0, c0, r1: Math.min(r1, tab.rows - 1), c1: Math.min(c1, tab.cols - 1) };
-  }
-  each(g, fn) { for (let r = g.r0; r <= g.r1; r++) for (let c = g.c0; c <= g.c1; c++) fn(r, c); }
-
-  // the subset of the Drive query language the service uses
-  matches(f, q) {
-    for (const clause of q.split(/\s+and\s+(?![^{]*})/)) {
-      let m;
-      if ((m = /^'(.+)' in parents$/.exec(clause))) { if (!f.parents.includes(m[1])) return false; }
-      else if ((m = /^appProperties has \{ key='(.+)' and value='(.+)' \}$/.exec(clause))) { if ((f.appProperties || {})[m[1]] !== m[2].replace(/\\'/g, "'")) return false; }
-      else if ((m = /^mimeType='(.+)'$/.exec(clause))) { if (f.mimeType !== m[1]) return false; }
-      else if (clause === 'trashed=false') { if (f.trashed) return false; }
-      else throw new Error('fake Drive: unsupported query clause ' + clause);
-    }
-    return true;
-  }
-  spreadsheetOf(key) { return [...this.files.values()].find(f => f.appProperties.hgiUser === key && f.mimeType === 'application/vnd.google-apps.spreadsheet'); }
-  tab(id, title) { return (this.sheets.get(id) || []).find(t => t.title === title); }
-  rows(id, title) {
-    const t = this.tab(id, title); if (!t) return null;
-    const out = [];
-    for (const [k, v] of t.cells) { const [r, c] = k.split(',').map(Number); (out[r] = out[r] || [])[c] = v; }
-    return out;
   }
 }
 

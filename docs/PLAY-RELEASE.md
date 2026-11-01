@@ -2,9 +2,10 @@
 
 What changed in 8.1:
 - **Sign in with Google is required.** Each Google account has its own data on the phone and its own cloud copy.
-- **Automatic cloud sync.** Every change uploads in the background (and when the app goes to the background) to the
-  HGI sync service on Google Cloud Run. The service keeps each account's data in **its own Google Sheets spreadsheet in the
-  HGI company Drive**. Manual JSON backups are no longer needed. "Share Backup" still exists as an optional file export.
+- **Automatic cloud sync (9.0).** Every buyer, product, invoice, payment and the business profile is a record in the account's
+  cloud database (Firestore, through the HGI server on Cloud Run). Changes upload in the background. Several phones can work at
+  once, also offline; a document number can be used only once. Manual JSON backups are no longer needed. "Share Backup"
+  remains as an optional file export.
 - **Reinstall = sign in.** After uninstalling and reinstalling (or on a new phone), signing in with the same Google account
   restores everything.
 - **One permanent release key** created on your PC, consistent package ID `in.hariguru.billing`, versionCode that only goes up.
@@ -29,49 +30,11 @@ Nothing secret is inside the app: it only knows the public sync-service URL and 
 
 Never use the CI test key for customers. CI already refuses: a build signed with your key fails unless sign-in is configured.
 
-## Part B — one-time: Google Cloud (sign-in + sync service)
+## Part B — one-time: Google Cloud (sign-in, database, PDF storage, GST look-up)
 
-Use the HGI company Google account.
-
-1. **Project.** In console.cloud.google.com create a project, for example `hgi-billing`, and attach billing.
-   Cloud Run's free tier normally covers a small business.
-2. **APIs.** Enable Cloud Run Admin, Cloud Build, Artifact Registry, Secret Manager, Google Drive API and Google Sheets API.
-3. **OAuth consent screen** (Google Auth Platform → Branding / Audience):
-   - Type: External. App name: HGI Billing. Support e-mail: info@hariguru.com.
-   - Privacy policy: `https://<sync-url>/privacy`. Fill this in after the first deploy (step 8).
-   - Scopes: only the defaults (openid, email, profile).
-   - Publishing status: **In production**.
-4. **OAuth clients** (Credentials → Create credentials → OAuth client ID):
-   - **Web application** "HGI Billing sync". Its client ID is used by both the app and the server.
-     After deploying, add `https://<sync-url>` under *Authorized JavaScript origins*; the account-deletion web page needs it.
-   - **Android** "HGI Billing (upload key)": package `in.hariguru.billing`, SHA-1 from Part A.
-   - **Android** "HGI Billing (Play signing)": the same package with the SHA-1 of Google Play's **app signing key**
-     (Play Console → Test and release → App integrity → App signing). Add this after the first upload; without it,
-     sign-in fails in copies installed from Google Play.
-5. **Runtime service account.** IAM → Service accounts → create `hgi-sync`. Give it *Secret Manager Secret Accessor*.
-6. **Where the spreadsheets live.** Choose one:
-   - **A. Google Workspace (recommended if you have it).** Create a Shared drive "HGI Billing customers". Add
-     `hgi-sync@<project>.iam.gserviceaccount.com` as **Manager** (Manager rights are needed for permanent deletion).
-     Make a folder inside it and copy the folder ID from its URL. Use `DRIVE_AUTH=metadata`. No key file is needed.
-   - **B. Normal Gmail account.** Create a folder "HGI Billing customers" in My Drive and copy its ID.
-     Service accounts cannot own files in a personal Drive, so the server writes as the HGI account:
-     1. Create an OAuth client of type **Desktop app**.
-     2. On your PC run `node backend/scripts/owner-token.js <client-id> <client-secret>` and approve access with the HGI account.
-     3. Store the client ID, the client secret and the printed refresh token as secrets (step 7).
-     4. Use `DRIVE_AUTH=owner-oauth`. Do not add the Drive scope to the consent screen. Google shows an "unverified app" warning only to you, once.
-7. **Secret Manager.** Create:
-   - `hgi-session-secret`: a random 48+ character value, for example from `openssl rand -base64 48`.
-   - For option B only: `hgi-owner-client-id`, `hgi-owner-client-secret`, `hgi-owner-refresh-token`.
-8. **Deploy (only with your go-ahead).** In Cloud Shell or on your PC, with `gcloud` signed in to the project:
-   ```
-   cd backend
-   PROJECT_ID=hgi-billing REGION=asia-south1 GOOGLE_CLIENT_IDS=<web-client-id> \
-   DRIVE_FOLDER_ID=<folder-id> DRIVE_AUTH=metadata SUPPORT_EMAIL=info@hariguru.com \
-   bash deploy/cloudrun.sh
-   ```
-   The script runs the tests first, asks you to type `DEPLOY`, and prints the service URL. Open `<url>/healthz`,
-   `<url>/privacy` and `<url>/delete-account` to check.
-9. **GitHub variables:** `HGI_SYNC_URL` = the service URL, and `HGI_GOOGLE_WEB_CLIENT_ID` = the Web client ID.
+This part is in **`docs/CLOUD-SETUP.md`** (version 9.0 replaced the spreadsheet storage of 8.1 with a Firestore database).
+The sign-in clients described there are needed for Part C: a Web application client, plus Android clients for the upload-key
+SHA-1 and the Play signing-key SHA-1.
 
 ## Part C — build and upload
 

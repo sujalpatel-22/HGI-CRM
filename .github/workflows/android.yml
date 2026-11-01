@@ -200,6 +200,31 @@ jobs:
           git -c user.name="hgi-ci" -c user.email="hgi-ci@users.noreply.github.com" commit -qm "build output run $GITHUB_RUN_ID (${{ job.status }})"
           git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" ci-output-build
 
+  cloud-firestore-emulator:
+    name: Cloud service on the official Firestore emulator
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Backend tests against the Firestore emulator (transactions, queries, deletes as in production)
+        working-directory: backend
+        run: |
+          mkdir -p test/out
+          npx -y firebase-tools@13 emulators:exec --only firestore --project demo-hgi "node test/run-tests.js" 2>&1 | tee test/out/firestore-emulator.log
+          grep -q "Firestore: official emulator" test/out/firestore-emulator.log || { echo "::error::tests did not run against the emulator"; exit 1; }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: firestore-emulator-tests
+          path: backend/test/out/
+
   emulator-test:
     name: Emulator API ${{ matrix.api }} (${{ matrix.profile }})
     needs: build

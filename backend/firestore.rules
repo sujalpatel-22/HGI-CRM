@@ -1,0 +1,10 @@
+rules_version = '2';
+// HGI Billing: the app never talks to Firestore directly. Only the Cloud Run service (its own service account,
+// via IAM — rules do not apply to it) reads and writes. Every client SDK / REST request with end-user credentials is refused.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,9 +1,10 @@
 'use strict';
-/** Access tokens for the Drive + Sheets APIs (company Drive). Cached until shortly before expiry. */
+/** Access tokens for Firestore + Cloud Storage (Cloud Run service account). Cached until shortly before expiry. */
 const crypto = require('crypto');
 const { request } = require('./http');
 
-const SCOPE = 'https://www.googleapis.com/auth/drive';
+// Firestore + Cloud Storage
+const SCOPE = 'https://www.googleapis.com/auth/cloud-platform';
 
 class GoogleAccess {
   constructor(cfg) { this.cfg = cfg; this.token = null; this.until = 0; this.pending = null; }
@@ -16,17 +17,15 @@ class GoogleAccess {
   async fetch() {
     const { cfg } = this;
     let r;
-    if (cfg.driveAuth === 'metadata') {
+    if (cfg.gcpAuth === 'metadata') {
       r = await request('GET', `${cfg.endpoints.metadata}?scopes=${encodeURIComponent(SCOPE)}`, { headers: { 'Metadata-Flavor': 'Google' }, timeoutMs: 10000 });
-    } else if (cfg.driveAuth === 'sa-key') {
+    } else {
       const key = JSON.parse(cfg.saKeyJson);
       const now = Math.floor(Date.now() / 1000);
       const enc = o => Buffer.from(JSON.stringify(o)).toString('base64url');
       const unsigned = enc({ alg: 'RS256', typ: 'JWT' }) + '.' + enc({ iss: key.client_email, scope: SCOPE, aud: cfg.endpoints.token, iat: now, exp: now + 3600 });
       const sig = crypto.sign('RSA-SHA256', Buffer.from(unsigned), key.private_key).toString('base64url');
       r = await request('POST', cfg.endpoints.token, { form: { grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: unsigned + '.' + sig } });
-    } else {
-      r = await request('POST', cfg.endpoints.token, { form: { grant_type: 'refresh_token', client_id: cfg.owner.clientId, client_secret: cfg.owner.clientSecret, refresh_token: cfg.owner.refreshToken } });
     }
     if (!r.access_token) throw new Error('Google did not return an access token');
     this.token = r.access_token;

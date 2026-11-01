@@ -10,6 +10,7 @@ const list = v => String(v || '').split(',').map(s => s.trim()).filter(Boolean);
 function load(env = process.env) {
   const onCloudRun = !!env.K_SERVICE;
   const problems = [];
+  const json = (name, v) => { if (!v) return undefined; try { return JSON.parse(v); } catch (e) { problems.push(`${name} must be JSON`); return undefined; } };
   const cfg = {
     port: Number(env.PORT) || 8080,
     onCloudRun,
@@ -18,16 +19,16 @@ function load(env = process.env) {
     googleClientIds: list(env.GOOGLE_CLIENT_IDS),
     sessionSecret: env.SESSION_SECRET || '',
     sessionDays: Number(env.SESSION_DAYS) || 180,
-    driveFolderId: env.DRIVE_FOLDER_ID || '',
-    // how the backend gets Google API access to the company Drive:
-    //   metadata      — Cloud Run's own service account (no key file). Needs a Shared Drive (Google Workspace).
-    //   sa-key        — a service-account JSON key in SA_KEY_JSON (Secret Manager). Also needs a Shared Drive.
-    //   owner-oauth   — the HGI Google account's refresh token (OWNER_CLIENT_ID / OWNER_CLIENT_SECRET / OWNER_REFRESH_TOKEN),
-    //                   for a normal Gmail account where files must be owned by a person.
-    driveAuth: env.DRIVE_AUTH || 'metadata',
+    projectId: env.PROJECT_ID || env.GOOGLE_CLOUD_PROJECT || '',
+    firestoreEmulator: env.FIRESTORE_EMULATOR_HOST || '',
+    // Google API access for Firestore + Cloud Storage: 'metadata' = Cloud Run's own service account (no key file, recommended),
+    // 'sa-key' = a service-account JSON key in SA_KEY_JSON (Secret Manager) for running elsewhere
+    gcpAuth: env.GCP_AUTH || 'metadata',
     saKeyJson: env.SA_KEY_JSON || '',
-    owner: { clientId: env.OWNER_CLIENT_ID || '', clientSecret: env.OWNER_CLIENT_SECRET || '', refreshToken: env.OWNER_REFRESH_TOKEN || '' },
-    shareWith: list(env.SHARE_WITH),               // optional: extra Google accounts given edit access to every new sheet
+    filesBucket: env.FILES_BUCKET || '',
+    gst: { url: env.GST_API_URL || '', headers: json('GST_API_HEADERS', env.GST_API_HEADERS) || {}, authUrl: env.GST_API_AUTH_URL || '',
+      authHeaders: json('GST_API_AUTH_HEADERS', env.GST_API_AUTH_HEADERS) || {}, authBody: json('GST_API_AUTH_BODY', env.GST_API_AUTH_BODY) || {},
+      tokenPath: env.GST_API_TOKEN_PATH || '', tokenHeader: env.GST_API_TOKEN_HEADER || '', name: env.GST_API_NAME || '' },
     allowedOrigins: list(env.ALLOWED_ORIGINS || 'https://localhost,capacitor://localhost,http://localhost'),
     publicUrl: (env.PUBLIC_URL || '').replace(/\/$/, ''),
     supportEmail: env.SUPPORT_EMAIL || '',
@@ -38,19 +39,19 @@ function load(env = process.env) {
     endpoints: {
       certs: env.GOOGLE_CERTS_URL || 'https://www.googleapis.com/oauth2/v3/certs',
       token: env.GOOGLE_TOKEN_URL || 'https://oauth2.googleapis.com/token',
-      drive: env.GOOGLE_DRIVE_API || 'https://www.googleapis.com/drive/v3',
-      sheets: env.GOOGLE_SHEETS_API || 'https://sheets.googleapis.com/v4',
-      metadata: env.GOOGLE_METADATA_URL || 'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token'
+      metadata: env.GOOGLE_METADATA_URL || 'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
+      firestore: env.FIRESTORE_API || 'https://firestore.googleapis.com',
+      storage: env.STORAGE_API || 'https://storage.googleapis.com'
     }
   };
-  const overridden = ['GOOGLE_CERTS_URL', 'GOOGLE_TOKEN_URL', 'GOOGLE_DRIVE_API', 'GOOGLE_SHEETS_API', 'GOOGLE_METADATA_URL'].filter(k => env[k]);
+  const overridden = ['GOOGLE_CERTS_URL', 'GOOGLE_TOKEN_URL', 'GOOGLE_METADATA_URL', 'FIRESTORE_API', 'STORAGE_API', 'FIRESTORE_EMULATOR_HOST'].filter(k => env[k]);
   if (onCloudRun && (cfg.allowTestLogin || overridden.length)) problems.push(`Test settings are not allowed on Cloud Run: ${['HGI_ALLOW_TEST_LOGIN', ...overridden].filter(k => env[k]).join(', ')}`);
   if (!cfg.googleClientIds.length && !cfg.allowTestLogin) problems.push('GOOGLE_CLIENT_IDS is required (the OAuth "Web application" client ID)');
   if (Buffer.byteLength(cfg.sessionSecret) < 32) problems.push('SESSION_SECRET must be at least 32 characters (keep it in Secret Manager)');
-  if (!cfg.driveFolderId) problems.push('DRIVE_FOLDER_ID is required (the company Drive folder that holds the customer spreadsheets)');
-  if (!['metadata', 'sa-key', 'owner-oauth'].includes(cfg.driveAuth)) problems.push('DRIVE_AUTH must be metadata, sa-key or owner-oauth');
-  if (cfg.driveAuth === 'sa-key' && !cfg.saKeyJson) problems.push('DRIVE_AUTH=sa-key needs SA_KEY_JSON');
-  if (cfg.driveAuth === 'owner-oauth' && !(cfg.owner.clientId && cfg.owner.clientSecret && cfg.owner.refreshToken)) problems.push('DRIVE_AUTH=owner-oauth needs OWNER_CLIENT_ID, OWNER_CLIENT_SECRET and OWNER_REFRESH_TOKEN');
+  if (!cfg.projectId) problems.push('PROJECT_ID is required (the Google Cloud project that holds the Firestore database)');
+  if (!['metadata', 'sa-key'].includes(cfg.gcpAuth)) problems.push('GCP_AUTH must be metadata or sa-key');
+  if (cfg.gcpAuth === 'sa-key' && !cfg.saKeyJson) problems.push('GCP_AUTH=sa-key needs SA_KEY_JSON');
+  if (cfg.gst.url && !/^https:\/\//.test(cfg.gst.url) && !cfg.allowTestLogin) problems.push('GST_API_URL must be https');
   if (problems.length) throw new Error('Configuration problems:\n  - ' + problems.join('\n  - '));
   return cfg;
 }

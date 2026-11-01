@@ -6,7 +6,7 @@
    ===================================================================== */
 (function () {
   'use strict';
-  const APP_VERSION = '8.3.0';
+  const APP_VERSION = '9.0.0';
   const cap = window.Capacitor;
   const isNative = !!(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform());
   // Without a bundler the native bridge exposes registered plugins on Capacitor.Plugins
@@ -222,6 +222,7 @@
       const co = state.company;
       const text = `${DOC_TYPES[d.docType].short} ${d.num} · ${money(d.grandTotal)} · ${co.name}`;
       await Native.sharePdf({ fileName: docFileName(d) + '.pdf', text, title: `${DOC_TYPES[d.docType].short} ${d.num}` });
+      PDFQ.add(d, 'pdf', docFileName(d) + '.pdf');
     } catch (e) { toast('Could not create PDF: ' + (e.message || e), 'error'); }
     finally { renderPreviewPages([copies[0]]); }
   }
@@ -229,7 +230,7 @@
     if (!previewDoc) return;
     if (!isNative) return triggerPrint();
     const copies = renderForOutput(); if (!copies) return;
-    try { const r = await Native.savePdf({ fileName: docFileName(previewDoc) + '.pdf' }); toast(`PDF saved: ${r.location || 'Downloads'}`); }
+    try { const r = await Native.savePdf({ fileName: docFileName(previewDoc) + '.pdf' }); toast(`PDF saved: ${r.location || 'Downloads'}`); PDFQ.add(previewDoc, 'pdf', docFileName(previewDoc) + '.pdf'); }
     catch (e) { toast('Could not save PDF: ' + (e.message || e), 'error'); }
     finally { renderPreviewPages([copies[0]]); }
   }
@@ -890,6 +891,7 @@
       const label = d.docType === 'QUO' ? quoteLabel : 'ORIGINAL FOR RECIPIENT';
       const r = await withRendered(d, [label], () => Native.shareToWhatsApp({ fileName: docFileName(d) + '.pdf', text: whatsAppText(d, true), phone: whatsAppPhone(d), title: `${DOC_TYPES[d.docType].short} ${d.num}` }));
       if (r && r.target === 'share-sheet') toast(t('WhatsApp is not installed — choose an app to send the PDF.'), 'info');
+      PDFQ.add(d, 'pdf', docFileName(d) + '.pdf');
     } catch (e) { toast(t('Could not share on WhatsApp') + ': ' + (e.message || e), 'error'); }
     finally { busy(''); }
   }
@@ -970,6 +972,66 @@
     } catch (e) { toast(t('Export failed') + ': ' + (e.message || e), 'error'); }
     finally { busy(''); Native.clearCacheDir({ dir: 'bulk' }).catch(() => {}); }
   }
+
+  /* ------------------------------------------------------------------ cloud copies of invoice PDFs (signed-in accounts, server with PDF storage) */
+  const pdfStamp = d => `${d.updatedAt || ''}|${d.num}|${d.grandTotal}|${(d.payments || []).length}|${d.cancelled ? 1 : 0}`;
+  const PDFQ = {
+    q: [], busy: false,
+    on() { return isNative && Native && typeof Native.readCacheFile === 'function' && window.HGI_SYNC && HGI_SYNC.active() && HGI_SYNC.features().files; },
+    doneKey() { return 'hgi_pdfs_u_' + ((window.HGI_ACCOUNT || {}).key || ''); },
+    done() { try { return JSON.parse(localStorage.getItem(this.doneKey()) || '{}'); } catch (e) { return {}; } },
+    mark(id, stamp) { const m = this.done(); m[id] = stamp; try { localStorage.setItem(this.doneKey(), JSON.stringify(m)); } catch (e) { /* full */ } },
+    add(d, dir, name) {
+      if (!this.on() || !d || !state.invoices.some(x => x.id === d.id)) return;
+      this.q = this.q.filter(x => x.id !== d.id);
+      this.q.push({ id: d.id, num: d.num, docType: d.docType, stamp: pdfStamp(d), dir, name, tries: 0 });
+      this.drain();
+    },
+    async drain() {
+      if (this.busy || !this.on()) return;
+      this.busy = true;
+      try {
+        while (this.q.length) {
+          const it = this.q[0];
+          try {
+            const f = await Native.readCacheFile({ dir: it.dir, name: it.name });
+            await HGI_SYNC.uploadPdf(it.id, f.base64, { num: it.num, docType: it.docType, hash: it.stamp });
+            this.mark(it.id, it.stamp); this.q.shift();
+          } catch (e) {
+            if (e && (e.code === 'not_found' || e.status === 400 || e.status === 413)) { this.q.shift(); continue; }
+            if (++it.tries >= 3) this.q.shift();
+            break;                                   // offline or server busy: the next sync retries
+          }
+        }
+      } finally { this.busy = false; }
+    },
+    // makes / refreshes the cloud PDF of every invoice and note whose copy is missing or out of date
+    async backupAll() {
+      if (!this.on()) return toast(t('PDF cloud copies are not available right now.'), 'info');
+      const done = this.done();
+      const docs = state.invoices.filter(d => !d.demo && (d.items || []).length && done[d.id] !== pdfStamp(d));
+      if (!docs.length) return toast(t('All invoice PDFs are already in the cloud'));
+      let cancelled = false, ok = 0, failed = 0;
+      busy(t('Preparing…'), () => { cancelled = true; });
+      try {
+        await Native.clearCacheDir({ dir: 'cloud' });
+        for (let i = 0; i < docs.length && !cancelled; i++) {
+          const d = docs[i];
+          busy(`${t('Uploading PDF')} ${i + 1} ${t('of')} ${docs.length} — ${d.num}`); progress(i / docs.length);
+          const name = d.id.replace(/[^\w.-]/g, '_') + '.pdf';
+          try {
+            await withRendered(d, [d.docType === 'QUO' ? quoteLabel : 'ORIGINAL FOR RECIPIENT'], () => Native.pdfToCache({ fileName: name, dir: 'cloud' }));
+            const f = await Native.readCacheFile({ dir: 'cloud', name });
+            await HGI_SYNC.uploadPdf(d.id, f.base64, { num: d.num, docType: d.docType, hash: pdfStamp(d) });
+            this.mark(d.id, pdfStamp(d)); ok++;
+          } catch (e) { failed++; if (e && e.code === 'offline') { toast(t('No internet — PDF backup stopped. Try again later.'), 'error'); break; } }
+        }
+      } finally { busy(''); Native.clearCacheDir({ dir: 'cloud' }).catch(() => {}); }
+      window.__lastPdfBackup = { ok, failed };
+      toast(`${ok} ${t('PDFs backed up to the cloud')}${failed ? ` · ${failed} ${t('failed')}` : ''}`, failed ? 'warn' : 'success');
+    }
+  };
+  window.HGI_PDFQ = PDFQ;
 
   window.HGI_M = {
     go(tab) { closeMore(); switchTab(tab); },
@@ -1124,6 +1186,7 @@
     installNativeEvents();
     if (window.HGI_STUDIO) HGI_STUDIO.ready();
     if (window.HGI_SYNC) HGI_SYNC.start();       // automatic cloud sync + Settings → Account card
+    if (window.HGI_GSTIN) HGI_GSTIN.install();   // GSTIN → buyer details from GST records
     applyTheme();                                // system bar colours from the final page colour
     document.documentElement.classList.toggle('is-native', isNative);
     if ((isNative || window.HGI_ACCOUNT) && !loggedOut()) {

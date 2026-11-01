@@ -19,7 +19,8 @@ for daily use at HARIGURU INDUSTRIES, so it is designed for real day-to-day bill
 • Share invoice PDFs on WhatsApp or e-mail, or print through any Android printer
 • UPI scan-to-pay QR on every invoice
 • English, हिन्दी and ગુજરાતી app interface, plus dark mode
-• Sign in with Google: your data syncs automatically to your HGI cloud account and comes back after a reinstall or on a new phone
+• Sign in with Google on any phone: buyers, products, invoices and payments sync automatically, also between several phones
+• Type a buyer's GSTIN to fill the name, address and registration status from GST records
 • Works offline: billing never waits for the internet, changes sync when you are back online
 • No ads. PIN lock. Optional backup file
 
@@ -28,12 +29,14 @@ product with your tax adviser.
 
 **Category:** Business · **Tags:** invoice, GST, billing, accounting · **Contact e-mail:** info@hariguru.com
 
-## Data safety form (answers for version 8.1 — cloud sync)
+## Data safety form (answers for version 9.0 — cloud account)
 - **Does the app collect or share user data?** Collects: **Yes**. Shares: **No**. Google Cloud and Drive act only as HGI's service providers, which Play does not count as sharing.
 - **Data types collected:**
   - Personal info: **Name, Email address, User IDs**. Purposes: Account management, App functionality.
   - Personal info: **Address, Phone number**. These are business contact details you enter for your company and buyers. Purpose: App functionality.
   - Financial info: **Other financial info**, meaning invoices, payments, GSTIN and bank/UPI details you enter. Purpose: App functionality.
+  - Files and docs: **Files and docs** (invoice PDFs you create, stored as private cloud copies). Purpose: App functionality.
+  - A GSTIN typed for GST look-up goes through HGI's server to its GST data provider (a service provider). Play counts this as service-provider processing, not sharing.
   - Collection is **required** (sign-in is needed to use the app). It is not processed ephemerally: it is stored to sync and restore.
 - **Encrypted in transit:** Yes (HTTPS only; cleartext is blocked in the app).
 - **Users can request deletion:** Yes. In the app: Settings → Account → Delete account and cloud data. On the web: `<sync-url>/delete-account`.

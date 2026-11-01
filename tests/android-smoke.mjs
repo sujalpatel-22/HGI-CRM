@@ -16,9 +16,22 @@ const { FakeGoogle } = require('../backend/test/fake-google.js');
 const { createServer } = require('../backend/server.js');
 const config = require('../backend/lib/config.js');
 const g = await new FakeGoogle().start();
-const syncCfg = config.load({ GOOGLE_CLIENT_IDS: 'test-web-client.apps.googleusercontent.com', SESSION_SECRET: 'emulator-test-secret-0123456789abcdef', DRIVE_FOLDER_ID: 'hgi-folder',
-  DRIVE_AUTH: 'metadata', HGI_ALLOW_TEST_LOGIN: '1', ALLOWED_ORIGINS: 'https://localhost' });
-syncCfg.endpoints = g.endpoints();
+const { gstinCheck } = require('../backend/lib/gst.js');
+const GSTIN_OK = (b => { for (const c of '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ') if (gstinCheck(b + c)) return b + c; })('27AAPFU0939F1Z');
+g.gstRecords.set(GSTIN_OK, { gstin: GSTIN_OK, lgnm: 'SHREE RAM ENGINEERING PRIVATE LIMITED', tradeNam: 'Shree Ram Engineering', sts: 'Active', rgdt: '01/07/2017', ctb: 'Private Limited Company', dty: 'Regular',
+  pradr: { addr: { bno: 'Plot 14', st: 'MIDC Road', loc: 'Bhosari', dst: 'Pune', stcd: 'Maharashtra', pncd: '411026' } } });
+const syncCfg = config.load({ GOOGLE_CLIENT_IDS: 'test-web-client.apps.googleusercontent.com', SESSION_SECRET: 'emulator-test-secret-0123456789abcdef', PROJECT_ID: 'demo-hgi',
+  FILES_BUCKET: 'hgi-files', GST_API_URL: 'http://x/{gstin}', GST_API_HEADERS: JSON.stringify({ 'x-api-key': g.gstKey }), GST_API_NAME: 'Test GSP', HGI_ALLOW_TEST_LOGIN: '1', ALLOWED_ORIGINS: 'https://localhost' });
+syncCfg.endpoints = g.endpoints(); syncCfg.gst.url = g.gstUrl();
+// what the cloud holds for the account signed in on the phone
+async function cloudOf(pg) {
+  const tok = await pg.evaluate(() => JSON.parse(localStorage.getItem('hgi_account')).session);
+  const r = await (await fetch('http://127.0.0.1:8787/v1/sync/pull?since=0&limit=500', { headers: { Authorization: 'Bearer ' + tok } })).json();
+  const live = new Map(); r.records.forEach(x => live.set(x.kind + '~' + x.id, x));
+  const recs = [...live.values()].filter(x => !x.deleted);
+  const files = await (await fetch('http://127.0.0.1:8787/v1/files', { headers: { Authorization: 'Bearer ' + tok } })).json();
+  return { invoices: recs.filter(x => x.kind === 'invoice').map(x => JSON.parse(x.data)), company: JSON.parse((recs.find(x => x.kind === 'company') || { data: '{}' }).data), files: files.files || [] };
+}
 const syncServer = createServer(syncCfg);
 await new Promise((res, rej) => { syncServer.once('error', rej); syncServer.listen(8787, '127.0.0.1', res); });
 try { execFileSync('adb', ['reverse', 'tcp:8787', 'tcp:8787'], { stdio: 'pipe' }); } catch (e) { console.log('adb reverse failed:', String(e.stderr || e)); }
@@ -257,9 +270,9 @@ check(await page.evaluate(() => document.querySelector('#bottom-nav button[data-
 await page.evaluate(() => { HGI_M.setTheme('light'); HGI_M.setLang('en'); });
 const synced = await page.evaluate(() => HGI_SYNC._syncNow().then(() => HGI_SYNC.status()));
 const acctKey = synced.account && synced.account.key;
-const sheet = acctKey && g.spreadsheetOf(acctKey);
-check(synced.status === 'ok' && sheet && g.rows(sheet.id, 'Invoices').length === 2 && g.rows(sheet.id, 'Company')[1][1] === 'Emulator Test Traders',
-  `data synced from the phone to the account's spreadsheet (status ${synced.status}${synced.error ? ': ' + synced.error : ''})`);
+const cl1 = await cloudOf(page);
+check(synced.status === 'ok' && !!acctKey && cl1.invoices.length === 1 && cl1.invoices[0].grandTotal === 11800 && cl1.company.name === 'Emulator Test Traders',
+  `phone data synced to the cloud database as records (status ${synced.status}${synced.error ? ': ' + synced.error : ''}, ${cl1.invoices.length} invoice)`);
 // real uninstall + reinstall of the same APK, then sign in again → everything back
 const apk = process.env.HGI_APK;
 if (apk && fs.existsSync(apk)) {
@@ -279,6 +292,21 @@ if (apk && fs.existsSync(apk)) {
   check(await page.evaluate(() => window.__hgiLoginShown === false && document.documentElement.classList.contains('booted') && !document.getElementById('signin-screen') && !document.getElementById('app-container').classList.contains('hidden')),
     'signed-in restart opens the dashboard directly — no login / sign-in screen at any moment');
 } else console.log('    (HGI_APK not set — reinstall check skipped)');
+// v9: an invoice PDF made on the phone gets a cloud copy
+await page.waitForFunction(() => HGI_SYNC.features().checked === true, null, { timeout: 20000 }).catch(() => null);
+await page.evaluate(() => { previewDoc = state.invoices[0]; renderPreviewPages(['ORIGINAL FOR RECIPIENT']); });
+await page.evaluate(async () => { await HGI_M.savePdf(); });
+await page.waitForTimeout(4000);
+const clf = await cloudOf(page);
+check(clf.files.length === 1 && clf.files[0].bytes > 20000 && clf.files[0].num === clf.invoices[0].num, `invoice PDF saved on the phone → private cloud copy (${clf.files.length ? clf.files[0].bytes + ' bytes' : 'none'})`);
+// v9: GSTIN look-up on the phone
+await page.evaluate(() => { switchTab('customers'); openCustomerModal(); });
+await page.fill('#modal-cust-gstin', GSTIN_OK); await page.dispatchEvent('#modal-cust-gstin', 'input');
+await page.waitForSelector('#gst-fetch.done', { timeout: 20000 }).catch(() => null);
+const gx = await page.evaluate(() => ({ name: document.getElementById('modal-cust-name').value, pin: document.getElementById('modal-cust-pin').value, st: document.getElementById('modal-cust-state').value }));
+check(gx.name === 'Shree Ram Engineering' && gx.pin === '411026' && gx.st === 'Maharashtra', `GSTIN typed in the buyer form → details from GST records (${JSON.stringify(gx)})`);
+await shot('06b-gstin');
+await page.evaluate(() => closeModal('customer-modal'));
 // second account on the same phone sees nothing of the first
 await page.evaluate(() => { HGI_SYNC.signOut(); }); await page.waitForSelector('.acct-dlg'); await page.click('.acct-dlg .acct-btn-primary');
 page = await afterReload(() => window.HGI_SIGNIN_READY === true && !!document.getElementById('signin-screen'));
@@ -293,10 +321,10 @@ await page.evaluate(async () => {
     invoices: [{ id: 'OLD1', docType: 'INV', num: 'OLD/1', date: '2026-09-01', buyerName: 'Old Buyer', items: [{ desc: 'Valve', hsn: '8481', gst: 18, qty: 1, unit: 'NOS', rate: 100 }], payments: [], grandTotal: 118 }] };
   await Capacitor.Plugins.HgiNative.writeState({ key: 'state', data: JSON.stringify(old) });
 });
-page = await signIn('upgrader@example.com');
+page = await signIn('upgrader@example.com', '.acct-dlg .acct-btn-primary');   // "Move to my account" (asked first)
 check(await page.evaluate(() => state.company.name === 'Pre-8.1 Traders' && state.invoices.length === 1), 'upgrade: data saved before sign-in existed is kept and opened in the account');
 const up = await page.evaluate(() => HGI_SYNC._syncNow().then(() => HGI_SYNC.status()));
-check(up.status === 'ok' && g.rows(g.spreadsheetOf(up.account.key).id, 'Invoices').some(r => r[1] === 'OLD/1'), 'upgrade: that data is uploaded to the account');
+check(up.status === 'ok' && (await cloudOf(page)).invoices.some(d => d.num === 'OLD/1'), 'upgrade: after the user agreed, that data is uploaded to the account');
 await shot('07-upgraded');
 
 /* ---------------------------------------------------------------- v8.2 in the no-cloud mode (what builds without a sync service run) */

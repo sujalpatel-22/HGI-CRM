@@ -1,42 +1,39 @@
 #!/usr/bin/env bash
-# Deploys the HGI Billing sync service to Google Cloud Run.
-# Run it yourself (or let Claude run it after you approve) — it asks before changing anything.
+# Deploys / updates the HGI Billing cloud service on Cloud Run. Asks before changing anything.
+# Run deploy/setup-gcp.sh once first.
 #
-#   PROJECT_ID=hgi-billing REGION=asia-south1 \
-#   GOOGLE_CLIENT_IDS=1234-abc.apps.googleusercontent.com \
-#   DRIVE_FOLDER_ID=1AbC... DRIVE_AUTH=metadata SUPPORT_EMAIL=info@hariguru.com \
+#   PROJECT_ID=hgi-billing REGION=asia-south1 GOOGLE_CLIENT_IDS=1234-abc.apps.googleusercontent.com \
+#   FILES_BUCKET=hgi-billing-pdfs SUPPORT_EMAIL=info@hariguru.com \
+#   GST_API_URL='https://<provider>/…{gstin}…' GST_API_NAME='<provider name>' [GST_API_AUTH_URL=… GST_API_TOKEN_PATH=… GST_API_TOKEN_HEADER=…] \
 #   bash deploy/cloudrun.sh
 #
-# Secrets live in Secret Manager (created once, see docs/PLAY-RELEASE.md Part B):
-#   hgi-session-secret            always
-#   hgi-owner-client-id / hgi-owner-client-secret / hgi-owner-refresh-token   only for DRIVE_AUTH=owner-oauth
-#   hgi-sa-key                    only for DRIVE_AUTH=sa-key
+# Secrets (Secret Manager): hgi-session-secret (always); hgi-gst-headers (when GST_API_URL is set);
+# hgi-gst-auth-headers (when GST_API_AUTH_URL is set).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 : "${PROJECT_ID:?set PROJECT_ID}"; : "${REGION:=asia-south1}"; : "${GOOGLE_CLIENT_IDS:?set GOOGLE_CLIENT_IDS (OAuth Web client ID)}"
-: "${DRIVE_FOLDER_ID:?set DRIVE_FOLDER_ID}"; : "${DRIVE_AUTH:=metadata}"; : "${SERVICE:=hgi-sync}"; : "${RUN_SA:=hgi-sync@${PROJECT_ID}.iam.gserviceaccount.com}"
+: "${SERVICE:=hgi-sync}"; : "${RUN_SA:=hgi-sync@${PROJECT_ID}.iam.gserviceaccount.com}"; : "${FILES_BUCKET:=}"; : "${GST_API_URL:=}"
 
 node test/run-tests.js > /dev/null || { echo "Tests failed — not deploying"; exit 1; }
 node scripts/build-pages.js
 
 SECRETS="SESSION_SECRET=hgi-session-secret:latest"
-case "$DRIVE_AUTH" in
-  owner-oauth) SECRETS="$SECRETS,OWNER_CLIENT_ID=hgi-owner-client-id:latest,OWNER_CLIENT_SECRET=hgi-owner-client-secret:latest,OWNER_REFRESH_TOKEN=hgi-owner-refresh-token:latest" ;;
-  sa-key)      SECRETS="$SECRETS,SA_KEY_JSON=hgi-sa-key:latest" ;;
-  metadata)    ;;
-  *) echo "DRIVE_AUTH must be metadata, sa-key or owner-oauth"; exit 1 ;;
-esac
+[ -n "$GST_API_URL" ] && SECRETS="$SECRETS,GST_API_HEADERS=hgi-gst-headers:latest"
+[ -n "${GST_API_AUTH_URL:-}" ] && SECRETS="$SECRETS,GST_API_AUTH_HEADERS=hgi-gst-auth-headers:latest"
+# '@' separates the variables (values such as URLs may contain commas)
+ENVV="PROJECT_ID=$PROJECT_ID@GOOGLE_CLIENT_IDS=$GOOGLE_CLIENT_IDS@GCP_AUTH=metadata@FILES_BUCKET=$FILES_BUCKET@SUPPORT_EMAIL=${SUPPORT_EMAIL:-}"
+ENVV="$ENVV@GST_API_URL=$GST_API_URL@GST_API_NAME=${GST_API_NAME:-}@GST_API_AUTH_URL=${GST_API_AUTH_URL:-}@GST_API_TOKEN_PATH=${GST_API_TOKEN_PATH:-}@GST_API_TOKEN_HEADER=${GST_API_TOKEN_HEADER:-}"
 
-echo "About to deploy '$SERVICE' to project $PROJECT_ID ($REGION), Drive access: $DRIVE_AUTH, runtime account: $RUN_SA"
+echo "About to deploy '$SERVICE' to $PROJECT_ID ($REGION) as $RUN_SA"
+echo "  PDF storage: ${FILES_BUCKET:-off} · GST look-up: ${GST_API_URL:+on}${GST_API_URL:-off}"
 read -r -p "Type DEPLOY to continue: " OK; [ "$OK" = "DEPLOY" ] || { echo "Cancelled"; exit 1; }
 
-# max-instances 1: one instance keeps the per-account write order simple (it serves many users at once).
 gcloud run deploy "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --source . \
-  --service-account "$RUN_SA" --allow-unauthenticated --max-instances 1 --concurrency 40 --memory 512Mi --cpu 1 --timeout 120 \
-  --set-env-vars "GOOGLE_CLIENT_IDS=$GOOGLE_CLIENT_IDS,DRIVE_FOLDER_ID=$DRIVE_FOLDER_ID,DRIVE_AUTH=$DRIVE_AUTH,SUPPORT_EMAIL=${SUPPORT_EMAIL:-},SHARE_WITH=${SHARE_WITH:-}" \
-  --set-secrets "$SECRETS"
+  --service-account "$RUN_SA" --allow-unauthenticated --min-instances 0 --max-instances 4 --concurrency 40 --memory 512Mi --cpu 1 --timeout 120 \
+  --set-env-vars "^@^$ENVV" --set-secrets "$SECRETS"
 
 URL=$(gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format 'value(status.url)')
 echo; echo "Deployed: $URL"
 curl -fsS "$URL/healthz" && echo
-echo "Next: set the GitHub repository variable HGI_SYNC_URL=$URL and add $URL as an Authorized JavaScript origin of the Web OAuth client."
+echo "Check: $URL/privacy · $URL/delete-account"
+echo "Then: GitHub repository variable HGI_SYNC_URL=$URL; add $URL as an Authorized JavaScript origin of the Web OAuth client."

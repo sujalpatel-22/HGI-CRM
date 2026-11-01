@@ -483,4 +483,19 @@ public class HgiNativePlugin extends Plugin {
         send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         return send;
     }
+
+    /* ------------------------------------------------------------------ read a generated file (for the cloud PDF copy) */
+    @PluginMethod
+    public void readCacheFile(PluginCall call) {
+        try {
+            File dir = cacheSub(call.getString("dir", "pdf"));
+            File f = new File(dir, safeName(call.getString("name", ""), "x"));
+            if (!f.exists() || !f.getCanonicalPath().startsWith(dir.getCanonicalPath())) { call.reject("File not found", "not_found"); return; }
+            if (f.length() > 20 * 1024 * 1024) { call.reject("File too large", "too_large"); return; }
+            byte[] buf = new byte[(int) f.length()];
+            try (FileInputStream in = new FileInputStream(f)) { int off = 0, n; while (off < buf.length && (n = in.read(buf, off, buf.length - off)) > 0) off += n; }
+            JSObject r = new JSObject(); r.put("base64", Base64.encodeToString(buf, Base64.NO_WRAP)); r.put("bytes", buf.length);
+            call.resolve(r);
+        } catch (Exception e) { call.reject("Read failed: " + e.getMessage(), e); }
+    }
 }

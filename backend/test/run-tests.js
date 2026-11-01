@@ -1,264 +1,298 @@
 #!/usr/bin/env node
 'use strict';
-/* Sync service tests against the in-memory Google stand-in (test/fake-google.js). Run: npm test */
+/*
+ * Cloud service tests. Google sign-in keys, Cloud Storage and the GST provider are in-memory stand-ins (test/fake-google.js).
+ * Firestore: the stand-in by default, or the official Firestore emulator when FIRESTORE_EMULATOR_HOST is set
+ * (CI: `npx firebase-tools emulators:exec --only firestore "node backend/test/run-tests.js"`).
+ */
 const assert = require('assert');
 const crypto = require('crypto');
 const { FakeGoogle, rsa } = require('./fake-google');
 const { createServer } = require('../server');
 const config = require('../lib/config');
+const { gstinCheck } = require('../lib/gst');
 
 const CLIENT = 'test-web-client.apps.googleusercontent.com';
-const FOLDER = 'folder-hgi-customers';
+const EMU = process.env.FIRESTORE_EMULATOR_HOST || '';
+const RUN = crypto.randomBytes(3).toString('hex');      // unique accounts per run (the emulator keeps data between runs)
 let pass = 0, fail = 0;
 const results = [];
 async function test(name, fn) {
   try { await fn(); pass++; results.push('PASS ' + name); console.log('  ✓ ' + name); }
-  catch (e) { fail++; results.push('FAIL ' + name + ' — ' + e.message); console.log('  ✗ ' + name + '\n      ' + (e.stack || e.message).split('\n').slice(0, 3).join('\n      ')); }
+  catch (e) { fail++; results.push('FAIL ' + name + ' — ' + e.message); console.log('  ✗ ' + name + '\n      ' + (e.stack || e.message).split('\n').slice(0, 4).join('\n      ')); }
 }
-
-function book(n = 3, extra = {}) {
-  const invoices = [];
-  for (let i = 1; i <= n; i++) invoices.push({ id: 'INV' + i, docType: 'INV', num: 'HGI/' + i, date: '2026-10-0' + ((i % 9) + 1), buyerName: 'Buyer ' + i, buyerGstin: '24ABCDE1234F1Z5',
-    pos: '24', taxable: 1000 * i, cgst: 90 * i, sgst: 90 * i, igst: 0, grandTotal: 1180 * i, items: [{ desc: 'Pump ' + i, hsn: '8413', gst: 18, qty: i, unit: 'NOS', rate: 1000 }],
-    payments: i % 2 ? [{ id: 'P' + i, date: '2026-10-10', amount: 500, tds: 0, mode: 'UPI', ref: 'UTR' + i }] : [] });
-  return { credentials: {}, company: { name: 'Test Traders', gstin: '24ABCDE1234F1Z5', logo: '' }, products: [{ id: 'PR1', name: 'Pump', hsn: '8413', rate: 1000, gst: 18 }],
-    customers: [{ id: 'C1', name: 'Buyer 1', gstin: '24ABCDE1234F1Z5' }], invoices, ui: { rev: 7 }, ...extra };
-}
+const CH = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+function gstin(base14) { for (const c of CH) if (gstinCheck(base14 + c)) return base14 + c; throw new Error('no check digit'); }
+const tp = (g, o = {}) => ({ gstin: g, lgnm: 'SHREE RAM ENGINEERING PRIVATE LIMITED', tradeNam: 'Shree Ram Engineering', sts: 'Active', rgdt: '01/07/2017', ctb: 'Private Limited Company', dty: 'Regular',
+  nba: ['Factory / Manufacturing', 'Supplier of Services'], stj: 'Ghatak 12', ctj: 'RANGE-I', cxdt: '', lstupdt: '12/03/2024',
+  pradr: { addr: { bno: 'Plot 14', bnm: 'Ram Udyog', flno: '', st: 'MIDC Road', loc: 'Bhosari', dst: 'Pune', stcd: 'Maharashtra', city: '', pncd: '411026', lt: '', lg: '' }, ntr: 'Factory / Manufacturing' }, ...o });
 
 (async () => {
   const g = await new FakeGoogle().start();
-  const env = { PORT: '0', GOOGLE_CLIENT_IDS: CLIENT, SESSION_SECRET: crypto.randomBytes(32).toString('hex'), DRIVE_FOLDER_ID: FOLDER, DRIVE_AUTH: 'metadata', SHARE_WITH: 'owner@hariguru.com', SUPPORT_EMAIL: 'info@hariguru.com' };
-  const cfg = config.load(env);
-  cfg.endpoints = g.endpoints();
+  const G1 = gstin('27AAPFU0939F1Z'), G2 = gstin('24AAACR5055K1Z'), GX = gstin('29AABCT1332L1Z');
+  g.gstRecords.set(G1, tp(G1));
+  g.gstRecords.set(G2, tp(G2, { lgnm: 'CANCELLED TRADERS', tradeNam: '', sts: 'Cancelled', cxdt: '31/03/2023', pradr: { addr: { bno: '5', st: 'Station Road', loc: 'Mehsana', dst: 'Mehsana', stcd: 'Gujarat', pncd: '384002' } } }));
+  const env = { PORT: '0', GOOGLE_CLIENT_IDS: CLIENT, SESSION_SECRET: crypto.randomBytes(32).toString('hex'), PROJECT_ID: 'demo-hgi', GCP_AUTH: 'metadata',
+    FILES_BUCKET: 'hgi-files-test', GST_API_URL: 'http://placeholder/{gstin}', GST_API_HEADERS: JSON.stringify({ 'x-api-key': g.gstKey }), GST_API_NAME: 'Test GSP', SUPPORT_EMAIL: 'info@hariguru.com', HGI_ALLOW_TEST_LOGIN: '1',
+    ...(EMU ? { FIRESTORE_EMULATOR_HOST: EMU } : {}) };
+  const mk = (over = {}) => { const c = config.load({ ...env, ...over }); c.endpoints = g.endpoints(); if (!over.GST_API_URL && c.gst.url) c.gst.url = g.gstUrl(); return c; };
+  const cfg = mk();
+  console.log(`Firestore: ${EMU ? 'official emulator at ' + EMU : 'in-memory stand-in'}`);
   const server = createServer(cfg);
   await new Promise(r => server.listen(0, '127.0.0.1', r));
   const base = `http://127.0.0.1:${server.address().port}`;
-  const call = async (method, p, { body, token, headers = {} } = {}) => {
-    const r = await fetch(base + p, { method, headers: { ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(token ? { Authorization: 'Bearer ' + token } : {}), ...headers }, body: body !== undefined ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined });
+  const call = async (method, p, { body, token, headers = {}, srv } = {}) => {
+    const r = await fetch((srv || base) + p, { method, headers: { ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(token ? { Authorization: 'Bearer ' + token } : {}), ...headers }, body: body !== undefined ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined });
     const text = await r.text(); let json = null; try { json = JSON.parse(text); } catch (e) { /* html */ }
     return { status: r.status, json, text, headers: r.headers };
   };
-  const signIn = async (claims) => (await call('POST', '/v1/auth/google', { body: { idToken: g.idToken(claims) } }));
+  const signIn = claims => call('POST', '/v1/auth/google', { body: { idToken: g.idToken(claims) } });
+  const push = (tok, records, device = 'Phone A') => call('POST', '/v1/sync/push', { token: tok, body: { device, records } });
+  const pullAll = async (tok, since = 0) => { const all = []; let s = since, more = true; while (more) { const r = await call('GET', `/v1/sync/pull?since=${s}&limit=300`, { token: tok }); assert.strictEqual(r.status, 200, r.text); all.push(...r.json.records); more = r.json.more; if (r.json.records.length) s = r.json.records[r.json.records.length - 1].seq; } return all; };
+  const rec = (kind, id, obj, baseRev = 0, extra = {}) => ({ kind, id, baseRev, data: JSON.stringify(obj), modifiedAt: new Date().toISOString(), ...extra });
+  const inv = (id, num, extra = {}) => ({ id, docType: 'INV', num, date: '2026-10-20', buyerName: 'Shree Ram Engineering', items: [{ desc: 'Pump', qty: 1, rate: 1000, gst: 18 }], payments: [], grandTotal: 1180, ...extra });
 
   console.log('Configuration');
-  await test('config refuses test sign-in and Google overrides on Cloud Run', () => {
-    assert.throws(() => config.load({ ...env, K_SERVICE: 'hgi-sync', HGI_ALLOW_TEST_LOGIN: '1' }), /not allowed on Cloud Run/);
-    assert.throws(() => config.load({ ...env, K_SERVICE: 'hgi-sync', GOOGLE_CERTS_URL: 'http://evil' }), /not allowed on Cloud Run/);
+  await test('Cloud Run refuses test sign-in and emulator / endpoint overrides', () => {
+    assert.throws(() => config.load({ ...env, K_SERVICE: 'hgi', FIRESTORE_EMULATOR_HOST: '' , HGI_ALLOW_TEST_LOGIN: '1' }), /not allowed on Cloud Run/);
+    assert.throws(() => config.load({ ...env, HGI_ALLOW_TEST_LOGIN: '', K_SERVICE: 'hgi', FIRESTORE_EMULATOR_HOST: 'localhost:8080' }), /not allowed on Cloud Run/);
   });
-  await test('config requires a strong session secret, client ID and folder', () => {
+  await test('needs PROJECT_ID, a strong session secret and a client ID; GST URL must be https in production', () => {
+    assert.throws(() => config.load({ ...env, PROJECT_ID: '' }), /PROJECT_ID/);
     assert.throws(() => config.load({ ...env, SESSION_SECRET: 'short' }), /SESSION_SECRET/);
-    assert.throws(() => config.load({ ...env, GOOGLE_CLIENT_IDS: '' }), /GOOGLE_CLIENT_IDS/);
-    assert.throws(() => config.load({ ...env, DRIVE_FOLDER_ID: '' }), /DRIVE_FOLDER_ID/);
-    assert.throws(() => config.load({ ...env, DRIVE_AUTH: 'owner-oauth' }), /OWNER_REFRESH_TOKEN/);
+    assert.throws(() => config.load({ ...env, HGI_ALLOW_TEST_LOGIN: '', GOOGLE_CLIENT_IDS: '' }), /GOOGLE_CLIENT_IDS/);
+    assert.throws(() => config.load({ ...env, HGI_ALLOW_TEST_LOGIN: '', GST_API_URL: 'http://plain' }), /https/);
+    assert.throws(() => config.load({ ...env, GST_API_HEADERS: '{bad' }), /JSON/);
   });
 
   console.log('Pages');
-  await test('privacy policy, deletion page and health check are served', async () => {
-    const p = await call('GET', '/privacy'); assert.strictEqual(p.status, 200); assert.match(p.text, /HGI staff can open your spreadsheet/);
-    const d = await call('GET', '/delete-account'); assert.strictEqual(d.status, 200); assert.match(d.text, new RegExp(CLIENT.replace(/\./g, '\\.'))); assert.match(d.text, /info@hariguru\.com/);
+  await test('privacy policy, account deletion page and health check', async () => {
+    const p = await call('GET', '/privacy'); assert.strictEqual(p.status, 200); assert.match(p.text, /Firestore|database/i);
+    const d = await call('GET', '/delete-account'); assert.strictEqual(d.status, 200); assert.match(d.text, new RegExp(CLIENT.replace(/\./g, '\\.')));
     assert.strictEqual((await call('GET', '/healthz')).json.ok, true);
   });
 
   console.log('Sign in with Google');
-  let A, B;
-  await test('valid Google ID token → app session (no Google token returned)', async () => {
-    const r = await signIn({ sub: '1001', email: 'Asha@Gmail.com', name: 'Asha' });
-    assert.strictEqual(r.status, 200, r.text);
-    assert.ok(r.json.session && r.json.user.key && r.json.user.email === 'asha@gmail.com');
-    assert.ok(!/1001/.test(r.json.user.key), 'raw Google ID must not be the data key');
+  let A, B, A2;
+  await test('valid Google ID token → app session; the data key is not the raw Google ID', async () => {
+    const r = await signIn({ sub: 'a' + RUN, email: 'Asha@Gmail.com', name: 'Asha' });
+    assert.strictEqual(r.status, 200, r.text); assert.ok(r.json.session); assert.strictEqual(r.json.user.email, 'asha@gmail.com'); assert.ok(!r.json.user.key.includes(RUN));
     A = r.json;
   });
-  await test('token for another app (audience) is refused', async () => { const r = await signIn({ sub: '1', email: 'x@gmail.com', aud: 'other.apps.googleusercontent.com' }); assert.strictEqual(r.status, 401); });
-  await test('expired token is refused', async () => { const r = await signIn({ sub: '1', email: 'x@gmail.com', exp: Math.floor(Date.now() / 1000) - 600 }); assert.strictEqual(r.status, 401); assert.strictEqual(r.json.error, 'token_expired'); });
-  await test('token not issued by Google is refused', async () => { const r = await signIn({ sub: '1', email: 'x@gmail.com', iss: 'https://evil.example' }); assert.strictEqual(r.status, 401); });
-  await test('token signed by a different key is refused', async () => {
-    const r = await call('POST', '/v1/auth/google', { body: { idToken: g.idToken({ sub: '1', email: 'x@gmail.com' }, { privateKey: rsa().privateKey }) } });
-    assert.strictEqual(r.status, 401); assert.match(r.json.message, /signature/);
+  await test('wrong audience / expired / wrong issuer / foreign key / unknown kid / unverified e-mail / garbage are refused', async () => {
+    assert.strictEqual((await signIn({ sub: '1', email: 'x@gmail.com', aud: 'other.apps.googleusercontent.com' })).status, 401);
+    const ex = await signIn({ sub: '1', email: 'x@gmail.com', exp: Math.floor(Date.now() / 1000) - 600 }); assert.strictEqual(ex.json.error, 'token_expired');
+    assert.strictEqual((await signIn({ sub: '1', email: 'x@gmail.com', iss: 'https://evil.example' })).status, 401);
+    assert.strictEqual((await call('POST', '/v1/auth/google', { body: { idToken: g.idToken({ sub: '1', email: 'x@gmail.com' }, { privateKey: rsa().privateKey }) } })).status, 401);
+    assert.strictEqual((await call('POST', '/v1/auth/google', { body: { idToken: g.idToken({ sub: '1', email: 'x@gmail.com' }, { kid: 'nope' }) } })).status, 401);
+    assert.strictEqual((await signIn({ sub: '1', email: 'x@gmail.com', email_verified: false })).status, 403);
+    assert.strictEqual((await call('POST', '/v1/auth/google', { body: { idToken: 'abc.def' } })).status, 401);
   });
-  await test('token with unknown key id is refused', async () => { const r = await call('POST', '/v1/auth/google', { body: { idToken: g.idToken({ sub: '1', email: 'x@gmail.com' }, { kid: 'nope' }) } }); assert.strictEqual(r.status, 401); });
-  await test('unverified e-mail is refused', async () => { const r = await signIn({ sub: '1', email: 'x@gmail.com', email_verified: false }); assert.strictEqual(r.status, 403); });
-  await test('garbage token is refused', async () => { const r = await call('POST', '/v1/auth/google', { body: { idToken: 'abc.def' } }); assert.strictEqual(r.status, 401); });
-  await test('test sign-in endpoint does not exist unless enabled', async () => { const r = await call('POST', '/v1/auth/test', { body: { email: 'a@example.com' } }); assert.strictEqual(r.status, 404); });
-
-  console.log('Sessions');
-  await test('no session / tampered session / expired session → 401', async () => {
-    assert.strictEqual((await call('GET', '/v1/sync/meta')).status, 401);
+  await test('no / tampered / expired session → 401; nearly expired session is renewed', async () => {
+    assert.strictEqual((await call('GET', '/v1/me')).status, 401);
     const [b, s] = A.session.split('.');
-    const forged = Buffer.from(JSON.stringify({ ...JSON.parse(Buffer.from(b, 'base64url')), sub: '2002' })).toString('base64url') + '.' + s;
-    assert.strictEqual((await call('GET', '/v1/sync/meta', { token: forged })).status, 401);
+    const forged = Buffer.from(JSON.stringify({ ...JSON.parse(Buffer.from(b, 'base64url')), sub: 'b' + RUN })).toString('base64url') + '.' + s;
+    assert.strictEqual((await call('GET', '/v1/me', { token: forged })).status, 401);
     const { Sessions } = require('../lib/identity');
-    const old = new Sessions(cfg).sign({ v: 1, sub: '1001', email: 'asha@gmail.com', iat: Date.now() - 2e9, exp: Date.now() - 1000 });
-    const r = await call('GET', '/v1/sync/meta', { token: old }); assert.strictEqual(r.status, 401); assert.strictEqual(r.json.error, 'session_expired');
-  });
-  await test('session close to expiry is renewed (X-HGI-Session header)', async () => {
-    const { Sessions } = require('../lib/identity');
-    const soon = new Sessions(cfg).sign({ v: 1, sub: '1001', email: 'asha@gmail.com', iat: Date.now(), exp: Date.now() + 5 * 86400e3 });
-    const r = await call('GET', '/v1/sync/meta', { token: soon });
-    assert.strictEqual(r.status, 200); assert.ok(r.headers.get('x-hgi-session'));
+    const old = new Sessions(cfg).sign({ v: 1, sub: 'a' + RUN, email: 'asha@gmail.com', iat: Date.now() - 2e9, exp: Date.now() - 1000 });
+    assert.strictEqual((await call('GET', '/v1/me', { token: old })).json.error, 'session_expired');
+    const soon = new Sessions(cfg).sign({ v: 1, sub: 'a' + RUN, email: 'asha@gmail.com', iat: Date.now(), exp: Date.now() + 5 * 86400e3 });
+    const r = await call('GET', '/v1/me', { token: soon }); assert.strictEqual(r.status, 200); assert.ok(r.headers.get('x-hgi-session'));
   });
 
-  console.log('Sync');
-  const dataA1 = JSON.stringify(book(3));
-  await test('new account: empty cloud, nothing to restore', async () => {
-    const r = await call('GET', '/v1/sync', { token: A.session });
-    assert.strictEqual(r.status, 200); assert.strictEqual(r.json.cloud.version, 0); assert.strictEqual(r.json.data, null);
+  console.log('Records sync');
+  await test('new account: nothing in the cloud; GST lookup and PDF storage reported as set up', async () => {
+    const r = await call('GET', '/v1/me', { token: A.session });
+    assert.strictEqual(r.json.cloud.seq, 0); assert.deepStrictEqual(r.json.features, { gst: true, files: true });
+    assert.deepStrictEqual(await pullAll(A.session), []);
   });
-  await test('first save creates the user\'s spreadsheet in the company folder', async () => {
-    const r = await call('PUT', '/v1/sync', { token: A.session, body: { baseVersion: 0, clientRev: 7, device: 'Pixel 7', data: dataA1 } });
-    assert.strictEqual(r.status, 200, r.text); assert.strictEqual(r.json.cloud.version, 1); assert.strictEqual(r.json.cloud.readable, true);
-    const f = g.spreadsheetOf(A.user.key);
-    assert.ok(f, 'spreadsheet exists'); assert.deepStrictEqual(f.parents, [FOLDER]); assert.match(f.name, /asha@gmail\.com/);
-    assert.deepStrictEqual(f.permissions.map(p => p.emailAddress), ['owner@hariguru.com']);
-    for (const t of ['_sync', '_data_a', '_data_b']) assert.strictEqual(g.tab(f.id, t).hidden, true, t + ' hidden');
-    assert.ok(g.valueInputOptions.every(v => v === 'RAW'), 'values written RAW (no formula evaluation)');
+  await test('push company, buyer, product and invoice → each stored with revision 1 and a sequence number', async () => {
+    const r = await push(A.session, [rec('company', 'main', { name: 'Test Traders', gstin: G1 }), rec('customer', 'C1', { id: 'C1', name: 'Shree Ram Engineering', gstin: G1 }),
+      rec('product', 'P1', { id: 'P1', name: 'Pump', rate: 1000 }), rec('invoice', 'D1', inv('D1', 'HGI/1'))]);
+    assert.strictEqual(r.status, 200, r.text);
+    assert.deepStrictEqual(r.json.results.map(x => x.status + ':' + x.rev), ['ok:1', 'ok:1', 'ok:1', 'ok:1']);
+    assert.strictEqual(r.json.seq, 4);
   });
-  await test('readable tabs show invoices, items, payments, customers, products', async () => {
-    const id = g.spreadsheetOf(A.user.key).id;
-    const inv = g.rows(id, 'Invoices');
-    assert.strictEqual(inv.length, 4); assert.strictEqual(inv[0][1], 'Number'); assert.strictEqual(inv[3][1], 'HGI/3'); assert.strictEqual(inv[3][11], 3540);
-    assert.strictEqual(inv[1][13], 680, 'balance = 1180 − 500');
-    assert.strictEqual(g.rows(id, 'Items sold').length, 4);
-    assert.strictEqual(g.rows(id, 'Payments').length, 3);
-    assert.strictEqual(g.rows(id, 'Customers')[1][0], 'Buyer 1');
-    assert.strictEqual(g.rows(id, 'Company')[1][1], 'Test Traders');
+  await test('another device of the same account pulls exactly that data', async () => {
+    A2 = (await signIn({ sub: 'a' + RUN, email: 'asha@gmail.com' })).json;
+    const all = await pullAll(A2.session);
+    assert.deepStrictEqual(all.map(r => r.kind + '/' + r.id), ['company/main', 'customer/C1', 'product/P1', 'invoice/D1']);
+    assert.strictEqual(JSON.parse(all[3].data).num, 'HGI/1'); assert.deepStrictEqual(all.map(r => r.seq), [1, 2, 3, 4]);
   });
-  await test('restore returns the exact same data', async () => {
-    const r = await call('GET', '/v1/sync', { token: A.session });
-    assert.strictEqual(r.json.cloud.version, 1); assert.strictEqual(r.json.data, dataA1);
+  await test('edit on device 2 (base rev 1) → rev 2; device 1 editing the old version gets a conflict with the cloud copy', async () => {
+    const ok = await push(A2.session, [rec('invoice', 'D1', inv('D1', 'HGI/1', { payments: [{ id: 'PAY1', amount: 500 }] }), 1)], 'Phone B');
+    assert.strictEqual(ok.json.results[0].status, 'ok'); assert.strictEqual(ok.json.results[0].rev, 2);
+    const stale = await push(A.session, [rec('invoice', 'D1', inv('D1', 'HGI/1', { buyerName: 'Changed on A' }), 1)]);
+    const x = stale.json.results[0];
+    assert.strictEqual(x.status, 'conflict'); assert.strictEqual(x.server.rev, 2); assert.strictEqual(JSON.parse(x.server.data).payments[0].id, 'PAY1'); assert.strictEqual(x.server.device, 'Phone B');
   });
-  await test('second user gets a separate spreadsheet and never sees the first user\'s data', async () => {
-    B = (await signIn({ sub: '2002', email: 'bharat@gmail.com' })).json;
-    assert.notStrictEqual(B.user.key, A.user.key);
-    const r0 = await call('GET', '/v1/sync', { token: B.session }); assert.strictEqual(r0.json.data, null);
-    const dB = JSON.stringify(book(1, { company: { name: 'Bharat Steel' } }));
-    assert.strictEqual((await call('PUT', '/v1/sync', { token: B.session, body: { baseVersion: 0, data: dB } })).status, 200);
-    assert.notStrictEqual(g.spreadsheetOf(B.user.key).id, g.spreadsheetOf(A.user.key).id);
-    assert.strictEqual((await call('GET', '/v1/sync', { token: B.session })).json.data, dB);
-    assert.strictEqual((await call('GET', '/v1/sync', { token: A.session })).json.data, dataA1);
+  await test('sending the same content again (reply lost) is accepted without a new revision', async () => {
+    const r = await push(A.session, [rec('customer', 'C1', { id: 'C1', name: 'Shree Ram Engineering', gstin: G1 }, 0)]);
+    assert.strictEqual(r.json.results[0].status, 'ok'); assert.strictEqual(r.json.results[0].unchanged, true); assert.strictEqual(r.json.results[0].rev, 1);
   });
-  await test('save based on an old version is refused (another phone saved first) — 409, cloud unchanged', async () => {
-    const r = await call('PUT', '/v1/sync', { token: A.session, body: { baseVersion: 0, data: JSON.stringify(book(5)) } });
-    assert.strictEqual(r.status, 409); assert.strictEqual(r.json.cloud.version, 1);
-    assert.strictEqual((await call('GET', '/v1/sync', { token: A.session })).json.data, dataA1);
+  await test('pull since a sequence returns only newer changes (cursor)', async () => {
+    const later = await pullAll(A.session, 4);
+    assert.deepStrictEqual(later.map(r => r.kind + '/' + r.id + '@' + r.rev), ['invoice/D1@2']);
   });
-  await test('repeating the last save (reply lost) is accepted without a new version', async () => {
-    const r = await call('PUT', '/v1/sync', { token: A.session, body: { baseVersion: 0, data: dataA1 } });
-    assert.strictEqual(r.status, 200); assert.strictEqual(r.json.cloud.version, 1); assert.strictEqual(r.json.cloud.unchanged, true);
+
+  console.log('Document numbers');
+  await test('a second invoice with the same number is refused (number_taken), naming the document that holds it', async () => {
+    const r = await push(A2.session, [rec('invoice', 'D2', inv('D2', 'HGI/1'))], 'Phone B');
+    const x = r.json.results[0]; assert.strictEqual(x.status, 'number_taken'); assert.strictEqual(x.takenBy, 'D1');
+    assert.ok(!(await pullAll(A.session)).some(r => r.id === 'D2'), 'refused invoice was not stored');
   });
-  let dataA2;
-  await test('large book (≈1.7 MB with a logo, 400 invoices) is split over cells and restored exactly; slots alternate', async () => {
-    const logo = 'data:image/png;base64,' + crypto.randomBytes(1_200_000).toString('base64');
-    dataA2 = JSON.stringify(book(400, { company: { name: 'Test Traders', logo } }));
-    const r = await call('PUT', '/v1/sync', { token: A.session, body: { baseVersion: 1, clientRev: 9, data: dataA2 } });
-    assert.strictEqual(r.status, 200, r.text); assert.strictEqual(r.json.cloud.version, 2); assert.strictEqual(r.json.cloud.slot, 'b'); assert.ok(r.json.cloud.cells > 30);
-    assert.strictEqual((await call('GET', '/v1/sync', { token: A.session })).json.data, dataA2);
-    assert.strictEqual(g.rows(g.spreadsheetOf(A.user.key).id, 'Invoices').length, 401);
+  await test('same number with different spacing / case is the same number; a quotation may reuse it', async () => {
+    assert.strictEqual((await push(A2.session, [rec('invoice', 'D2', inv('D2', ' hgi/1 '))])).json.results[0].status, 'number_taken');
+    assert.strictEqual((await push(A2.session, [rec('invoice', 'Q1', inv('Q1', 'HGI/1', { docType: 'QUO' }))])).json.results[0].status, 'ok');
   });
-  await test('Google failure in the middle of a save → 503, previous cloud copy intact', async () => {
-    g.fail(/values:batchUpdate/, 500, 4);
-    const r = await call('PUT', '/v1/sync', { token: A.session, body: { baseVersion: 2, data: JSON.stringify(book(2)) } });
-    assert.strictEqual(r.status, 503); assert.strictEqual(r.json.error, 'cloud_unavailable');
-    const back = await call('GET', '/v1/sync', { token: A.session }); assert.strictEqual(back.json.cloud.version, 2); assert.strictEqual(back.json.data, dataA2);
+  await test('two new invoices with one number in the same upload: the second is refused', async () => {
+    const r = await push(A.session, [rec('invoice', 'D3', inv('D3', 'HGI/3')), rec('invoice', 'D4', inv('D4', 'HGI/3'))]);
+    assert.deepStrictEqual(r.json.results.map(x => x.status), ['ok', 'number_taken']); assert.strictEqual(r.json.results[1].takenBy, 'D3');
   });
-  await test('a write that cannot be verified is not made live', async () => {
-    g.corruptReadOnce = true;
-    const r = await call('PUT', '/v1/sync', { token: A.session, body: { baseVersion: 2, data: JSON.stringify(book(6)) } });
-    assert.strictEqual(r.status, 500); assert.strictEqual(r.json.error, 'cloud_copy_unreadable');
-    assert.strictEqual((await call('GET', '/v1/sync', { token: A.session })).json.data, dataA2);
+  await test('renumbering frees the old number; a cancelled invoice keeps its number; deleting releases it', async () => {
+    const d3 = (await pullAll(A.session)).find(r => r.id === 'D3');
+    assert.strictEqual((await push(A.session, [rec('invoice', 'D3', inv('D3', 'HGI/30'), d3.rev)])).json.results[0].status, 'ok');
+    assert.strictEqual((await push(A.session, [rec('invoice', 'D4', inv('D4', 'HGI/3'))])).json.results[0].status, 'ok');
+    const d4 = (await pullAll(A.session)).find(r => r.id === 'D4');
+    assert.strictEqual((await push(A.session, [rec('invoice', 'D4', inv('D4', 'HGI/3', { cancelled: true }), d4.rev)])).json.results[0].status, 'ok');
+    assert.strictEqual((await push(A.session, [rec('invoice', 'D5', inv('D5', 'HGI/3'))])).json.results[0].status, 'number_taken');
+    const d4b = (await pullAll(A.session)).find(r => r.id === 'D4');
+    assert.strictEqual((await push(A.session, [{ kind: 'invoice', id: 'D4', baseRev: d4b.rev, deleted: true }])).json.results[0].status, 'ok');
+    assert.strictEqual((await push(A.session, [rec('invoice', 'D5', inv('D5', 'HGI/3'))])).json.results[0].status, 'ok');
+    const chk = await call('POST', '/v1/numbers/check', { token: A.session, body: { docType: 'INV', num: 'HGI/3', docId: 'D9' } });
+    assert.deepStrictEqual(chk.json, { free: false, takenBy: 'D5' });
+    assert.strictEqual((await call('POST', '/v1/numbers/check', { token: A.session, body: { docType: 'INV', num: 'HGI/4', docId: 'D9' } })).json.free, true);
   });
-  await test('temporary Google error (429) is retried transparently', async () => {
-    g.fail(/values:batchClear/, 429, 1);
-    const d = JSON.stringify(book(4));
-    const r = await call('PUT', '/v1/sync', { token: A.session, body: { baseVersion: 2, data: d } });
-    assert.strictEqual(r.status, 200, r.text); assert.strictEqual(r.json.cloud.version, 3);
-    dataA2 = d;
+  await test('deletions reach other devices as tombstones', async () => {
+    const t = (await pullAll(A2.session)).filter(r => r.id === 'D4').pop();
+    assert.strictEqual(t.deleted, true); assert.strictEqual(t.data, null);
   });
-  await test('expired Google access token is refreshed and the call retried', async () => {
-    g.tokens.clear();
-    const r = await call('GET', '/v1/sync', { token: A.session });
-    assert.strictEqual(r.status, 200); assert.strictEqual(r.json.data, dataA2);
+  await test('two phones uploading at the same moment from the same base: one wins, the other gets a conflict', async () => {
+    const p1 = (await pullAll(A.session)).find(r => r.id === 'P1');
+    const [r1, r2] = await Promise.all([push(A.session, [rec('product', 'P1', { id: 'P1', name: 'Pump', rate: 1100 }, p1.rev)]), push(A2.session, [rec('product', 'P1', { id: 'P1', name: 'Pump', rate: 1200 }, p1.rev)], 'Phone B')]);
+    const st = [r1.json.results[0].status, r2.json.results[0].status].sort();
+    assert.deepStrictEqual(st, ['conflict', 'ok']);
   });
-  await test('cell text is stored as text (formula injection is not evaluated)', async () => {
-    const d = book(1); d.invoices[0].buyerName = '=IMPORTXML("http://evil","//a")';
-    const r = await call('PUT', '/v1/sync', { token: B.session, body: { baseVersion: 1, data: JSON.stringify(d) } });
-    assert.strictEqual(r.status, 200);
-    assert.strictEqual(g.rows(g.spreadsheetOf(B.user.key).id, 'Invoices')[1][3], '=IMPORTXML("http://evil","//a")');
-    assert.ok(g.valueInputOptions.every(v => v === 'RAW'));
+
+  console.log('Isolation and limits');
+  await test('another account sees none of this data, and the same record IDs stay separate', async () => {
+    B = (await signIn({ sub: 'b' + RUN, email: 'bharat@gmail.com' })).json;
+    assert.deepStrictEqual(await pullAll(B.session), []);
+    assert.strictEqual((await push(B.session, [rec('invoice', 'D1', inv('D1', 'HGI/1', { buyerName: 'B only' }))])).json.results[0].status, 'ok');
+    assert.strictEqual(JSON.parse((await pullAll(A.session)).filter(r => r.id === 'D1').pop().data).buyerName, 'Shree Ram Engineering');
+    assert.strictEqual((await pullAll(B.session)).length, 1);
   });
-  await test('junk data and oversized requests are refused', async () => {
-    assert.strictEqual((await call('PUT', '/v1/sync', { token: A.session, body: { baseVersion: 3, data: '{"hello":1}' } })).status, 400);
-    assert.strictEqual((await call('PUT', '/v1/sync', { token: A.session, body: { baseVersion: 3, data: 'not json' } })).status, 400);
-    assert.strictEqual((await call('PUT', '/v1/sync', { token: A.session, body: '{bad' })).status, 400);
-    const big = await call('PUT', '/v1/sync', { token: A.session, body: { baseVersion: 3, data: JSON.stringify(book(1, { pad: 'x'.repeat(26 * 1024 * 1024) })) } }).catch(e => ({ status: 413 }));
-    assert.strictEqual(big.status, 413);
+  await test('750 records upload in batches and come back in order over several pages', async () => {
+    const C = (await signIn({ sub: 'c' + RUN, email: 'chetan@gmail.com' })).json;
+    for (let b = 0; b < 750; b += 200) {
+      const batch = []; for (let i = b; i < Math.min(750, b + 200); i++) batch.push(rec('invoice', 'X' + i, inv('X' + i, 'C/' + i)));
+      const r = await push(C.session, batch); assert.ok(r.json.results.every(x => x.status === 'ok'), r.text.slice(0, 200));
+    }
+    const all = await pullAll(C.session);
+    assert.strictEqual(all.length, 750); assert.ok(all.every((r, i) => r.seq === i + 1));
+  });
+  await test('bad uploads are refused: unknown kind, too many, duplicates, junk, oversized record', async () => {
+    assert.strictEqual((await push(A.session, [rec('secret', 'x', {})])).status, 400);
+    assert.strictEqual((await push(A.session, Array.from({ length: 201 }, (_, i) => rec('product', 'Z' + i, {})))).status, 400);
+    assert.strictEqual((await push(A.session, [rec('product', 'Z', {}), rec('product', 'Z', {})])).status, 400);
+    const r = await push(A.session, [{ kind: 'product', id: 'J', baseRev: 0, data: 'not json' }, rec('product', 'Big', { blob: 'x'.repeat(950 * 1024) })]);
+    assert.deepStrictEqual(r.json.results.map(x => x.status), ['invalid', 'too_large']);
+  });
+
+  console.log('GSTIN lookup');
+  await test('valid GSTIN → legal & trade name, address, state, PIN, status, registration details from the provider', async () => {
+    const r = await call('GET', `/v1/gstin/${G1}`, { token: A.session });
+    assert.strictEqual(r.status, 200, r.text);
+    const d = r.json;
+    assert.strictEqual(d.legalName, 'SHREE RAM ENGINEERING PRIVATE LIMITED'); assert.strictEqual(d.tradeName, 'Shree Ram Engineering');
+    assert.strictEqual(d.address.line, 'Plot 14, Ram Udyog, MIDC Road, Bhosari, Pune'); assert.strictEqual(d.address.pin, '411026'); assert.strictEqual(d.address.state, 'Maharashtra');
+    assert.strictEqual(d.stateCode, '27'); assert.strictEqual(d.status, 'Active'); assert.strictEqual(d.registrationDate, '01/07/2017'); assert.strictEqual(d.constitution, 'Private Limited Company');
+    assert.strictEqual(d.taxpayerType, 'Regular'); assert.deepStrictEqual(d.natureOfBusiness, ['Factory / Manufacturing', 'Supplier of Services']); assert.strictEqual(d.source, 'Test GSP');
+  });
+  await test('repeat lookups come from the 7-day cache (no second provider call)', async () => {
+    const n = g.gstCalls;
+    const r = await call('GET', `/v1/gstin/${G1}`, { token: B.session });
+    assert.strictEqual(r.json.cached, true); assert.strictEqual(g.gstCalls, n);
+  });
+  await test('cancelled registration is reported as cancelled, with its cancellation date', async () => {
+    const r = await call('GET', `/v1/gstin/${G2}`, { token: A.session });
+    assert.strictEqual(r.json.status, 'Cancelled'); assert.strictEqual(r.json.cancellationDate, '31/03/2023'); assert.strictEqual(r.json.tradeName, ''); assert.strictEqual(r.json.address.state, 'Gujarat');
+  });
+  await test('wrong check digit → 400 without asking the provider; unknown GSTIN → 404; provider down → 502 (nothing invented)', async () => {
+    const n = g.gstCalls;
+    const bad = G1.slice(0, 14) + (G1[14] === 'A' ? 'B' : 'A');
+    assert.strictEqual((await call('GET', `/v1/gstin/${bad}`, { token: A.session })).json.error, 'invalid_gstin'); assert.strictEqual(g.gstCalls, n);
+    const nf = await call('GET', `/v1/gstin/${GX}`, { token: A.session }); assert.strictEqual(nf.status, 404); assert.strictEqual(nf.json.error, 'gstin_not_found');
+    g.gstDown = true; const GY = gstin('19AABCU9603R1Z'); g.gstRecords.set(GY, tp(GY));
+    const down = await call('GET', `/v1/gstin/${GY}`, { token: A.session }); g.gstDown = false;
+    assert.strictEqual(down.status, 502); assert.strictEqual(down.json.error, 'gst_unavailable'); assert.ok(!down.json.legalName);
+    assert.strictEqual((await call('GET', `/v1/gstin/${GY}`, { token: A.session })).json.legalName, 'SHREE RAM ENGINEERING PRIVATE LIMITED', 'not cached as a failure');
+  });
+  await test('provider with a token step (auth URL → token header) works', async () => {
+    const c2 = mk({ GST_API_URL: g.gstUrl(), GST_API_HEADERS: '{}', GST_API_AUTH_URL: g.base + '/gst/auth', GST_API_AUTH_HEADERS: JSON.stringify({ 'x-api-key': g.gstKey }), GST_API_TOKEN_PATH: 'data.token', GST_API_TOKEN_HEADER: 'authorization: {token}' });
+    const s2 = createServer(c2); await new Promise(r => s2.listen(0, '127.0.0.1', r));
+    const GZ = gstin('33AAACI1195H1Z'); g.gstRecords.set(GZ, tp(GZ, { lgnm: 'TOKEN FLOW LTD' }));
+    const tok = (await call('POST', '/v1/auth/google', { body: { idToken: g.idToken({ sub: 'a' + RUN, email: 'asha@gmail.com' }) }, srv: `http://127.0.0.1:${s2.address().port}` })).json.session;
+    const r = await call('GET', `/v1/gstin/${GZ}`, { token: tok, srv: `http://127.0.0.1:${s2.address().port}` }); s2.close();
+    assert.strictEqual(r.json.legalName, 'TOKEN FLOW LTD');
+  });
+  await test('server without a GST provider → 503 gst_not_configured (the app falls back to manual entry)', async () => {
+    const s3 = createServer(mk({ GST_API_URL: '' })); await new Promise(r => s3.listen(0, '127.0.0.1', r));
+    const srv = `http://127.0.0.1:${s3.address().port}`;
+    const tok = (await call('POST', '/v1/auth/google', { body: { idToken: g.idToken({ sub: 'a' + RUN, email: 'asha@gmail.com' }) }, srv })).json.session;
+    const r = await call('GET', `/v1/gstin/${G1}`, { token: tok, srv }); const me = await call('GET', '/v1/me', { token: tok, srv }); s3.close();
+    assert.strictEqual(r.status, 503); assert.strictEqual(r.json.error, 'gst_not_configured'); assert.strictEqual(me.json.features.gst, false);
+  });
+
+  console.log('Invoice PDFs');
+  const pdf = Buffer.concat([Buffer.from('%PDF-1.4\n'), crypto.randomBytes(3000)]);
+  await test('PDF stored in the private bucket, listed and returned byte-for-byte', async () => {
+    const r = await call('PUT', '/v1/files/pdf/D1', { token: A.session, body: { base64: pdf.toString('base64'), num: 'HGI/1', docType: 'INV', hash: 'h1' } });
+    assert.strictEqual(r.status, 200, r.text);
+    assert.ok([...g.objects.keys()].some(k => k.startsWith('hgi-files-test/users/' + A.user.key + '/pdf/')));
+    const l = await call('GET', '/v1/files', { token: A.session }); assert.deepStrictEqual(l.json.files.map(f => [f.docId, f.num, f.bytes]), [['D1', 'HGI/1', pdf.length]]);
+    const back = await call('GET', '/v1/files/pdf/D1', { token: A2.session }); assert.ok(Buffer.from(back.json.base64, 'base64').equals(pdf));
+  });
+  await test('not a PDF → 400; another account cannot read it (404)', async () => {
+    assert.strictEqual((await call('PUT', '/v1/files/pdf/D9', { token: A.session, body: { base64: Buffer.from('hello world, this is not a pdf file at all'.repeat(5)).toString('base64') } })).status, 400);
+    assert.strictEqual((await call('GET', '/v1/files/pdf/D1', { token: B.session })).status, 404);
   });
 
   console.log('CORS');
-  await test('the app origin (https://localhost) is allowed, other websites are not', async () => {
-    const ok = await call('OPTIONS', '/v1/sync', { headers: { Origin: 'https://localhost', 'Access-Control-Request-Method': 'PUT' } });
-    assert.strictEqual(ok.headers.get('access-control-allow-origin'), 'https://localhost');
-    const bad = await call('OPTIONS', '/v1/sync', { headers: { Origin: 'https://evil.example', 'Access-Control-Request-Method': 'PUT' } });
-    assert.strictEqual(bad.headers.get('access-control-allow-origin'), null);
+  await test('app origin allowed, other websites not', async () => {
+    assert.strictEqual((await call('OPTIONS', '/v1/sync/push', { headers: { Origin: 'https://localhost', 'Access-Control-Request-Method': 'POST' } })).headers.get('access-control-allow-origin'), 'https://localhost');
+    assert.strictEqual((await call('OPTIONS', '/v1/sync/push', { headers: { Origin: 'https://evil.example', 'Access-Control-Request-Method': 'POST' } })).headers.get('access-control-allow-origin'), null);
   });
 
   console.log('Account deletion');
-  await test('in-app deletion removes the spreadsheet and stops the old session', async () => {
-    const id = g.spreadsheetOf(A.user.key).id;
+  await test('in-app deletion removes every record, number and PDF; old sessions stop working', async () => {
     const r = await call('DELETE', '/v1/account', { token: A.session });
-    assert.strictEqual(r.status, 200); assert.strictEqual(r.json.mode, 'deleted');
-    assert.ok(!g.files.has(id), 'spreadsheet gone');
-    const after = await call('GET', '/v1/sync', { token: A.session }); assert.strictEqual(after.status, 401); assert.strictEqual(after.json.error, 'account_deleted');
-    const marker = [...g.files.values()].find(f => f.appProperties.hgiDeletedUser === A.user.key);
-    assert.ok(marker && !/asha/i.test(marker.name), 'marker holds no e-mail');
+    assert.strictEqual(r.status, 200, r.text); assert.ok(r.json.records >= 8); assert.strictEqual(r.json.files, 1);
+    assert.ok(![...g.objects.keys()].some(k => k.includes('/users/' + A.user.key + '/')), 'PDF object removed');
+    assert.strictEqual((await call('GET', '/v1/me', { token: A2.session })).json.error, 'account_deleted');
   });
-  await test('signing in again after deletion starts a new, empty account', async () => {
+  await test('signing in again starts an empty account; the numbers are free again', async () => {
     await new Promise(r => setTimeout(r, 5));
-    const again = (await signIn({ sub: '1001', email: 'asha@gmail.com' })).json;
-    const r = await call('GET', '/v1/sync', { token: again.session }); assert.strictEqual(r.status, 200); assert.strictEqual(r.json.data, null);
+    const again = (await signIn({ sub: 'a' + RUN, email: 'asha@gmail.com' })).json;
+    assert.deepStrictEqual(await pullAll(again.session), []);
+    assert.strictEqual((await push(again.session, [rec('invoice', 'N1', inv('N1', 'HGI/1'))])).json.results[0].status, 'ok');
   });
-  await test('deletion from the web page (Google sign-in) works', async () => {
-    const id = g.spreadsheetOf(B.user.key).id;
-    const r = await call('POST', '/v1/account/delete-with-google', { body: { idToken: g.idToken({ sub: '2002', email: 'bharat@gmail.com' }) } });
-    assert.strictEqual(r.status, 200); assert.strictEqual(r.json.deleted, true); assert.ok(!g.files.has(id));
-    assert.strictEqual((await call('GET', '/v1/sync/meta', { token: B.session })).json.error, 'account_deleted');
+  await test('deletion from the web page (Google sign-in) works; B\'s data is gone, A\'s untouched', async () => {
+    const r = await call('POST', '/v1/account/delete-with-google', { body: { idToken: g.idToken({ sub: 'b' + RUN, email: 'bharat@gmail.com' }) } });
+    assert.strictEqual(r.status, 200); assert.strictEqual(r.json.deleted, true);
+    assert.strictEqual((await call('GET', '/v1/me', { token: B.session })).json.error, 'account_deleted');
   });
-  await test('shared-drive role without delete rights: file is trashed instead', async () => {
-    const C = (await signIn({ sub: '3003', email: 'chetan@gmail.com' })).json;
-    await call('PUT', '/v1/sync', { token: C.session, body: { baseVersion: 0, data: JSON.stringify(book(1)) } });
-    const id = g.spreadsheetOf(C.user.key).id;
-    g.fail(new RegExp('/drive/v3/files/' + id), 403, 1, 'DELETE');
-    const r = await call('DELETE', '/v1/account', { token: C.session });
-    assert.strictEqual(r.json.mode, 'trashed'); assert.strictEqual(g.files.get(id).trashed, true);
-  });
-
-  console.log('Other Drive access modes');
-  await test('owner-oauth mode gets tokens with the refresh token; a revoked token is reported, not faked', async () => {
-    const oc = config.load({ ...env, DRIVE_AUTH: 'owner-oauth', OWNER_CLIENT_ID: 'c', OWNER_CLIENT_SECRET: 's', OWNER_REFRESH_TOKEN: 'good-refresh' }); oc.endpoints = g.endpoints();
-    const { GoogleAccess } = require('../lib/google-access');
-    assert.match(await new GoogleAccess(oc).get(), /^at-/);
-    oc.owner.refreshToken = 'revoked';
-    await assert.rejects(new GoogleAccess(oc).get(), /expired or revoked/);
-  });
-  await test('sa-key mode signs a JWT grant with the key', async () => {
-    const k = rsa();
-    const sc = config.load({ ...env, DRIVE_AUTH: 'sa-key', SA_KEY_JSON: JSON.stringify({ client_email: 'sync@p.iam.gserviceaccount.com', private_key: k.privateKey.export({ type: 'pkcs8', format: 'pem' }) }) }); sc.endpoints = g.endpoints();
-    const { GoogleAccess } = require('../lib/google-access');
-    assert.match(await new GoogleAccess(sc).get(), /^at-/);
-  });
-
-  await test('test sign-in (when enabled locally) accepts only @example.com addresses', async () => {
-    const tc = config.load({ ...env, HGI_ALLOW_TEST_LOGIN: '1' }); tc.endpoints = g.endpoints();
-    const s2 = createServer(tc); await new Promise(r => s2.listen(0, '127.0.0.1', r));
-    const u = `http://127.0.0.1:${s2.address().port}/v1/auth/test`;
-    const ok = await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'qa@example.com' }) });
-    const no = await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'someone@gmail.com' }) });
-    s2.close();
-    assert.strictEqual(ok.status, 200); assert.strictEqual(no.status, 400);
+  await test('test sign-in only accepts @example.com and does not exist when disabled', async () => {
+    assert.strictEqual((await call('POST', '/v1/auth/test', { body: { email: 'qa@example.com' } })).status, 200);
+    assert.strictEqual((await call('POST', '/v1/auth/test', { body: { email: 'someone@gmail.com' } })).status, 400);
+    const s4 = createServer(mk({ HGI_ALLOW_TEST_LOGIN: '', GST_API_URL: 'https://gsp.example/{gstin}' })); await new Promise(r => s4.listen(0, '127.0.0.1', r));
+    const r = await call('POST', '/v1/auth/test', { body: { email: 'qa@example.com' }, srv: `http://127.0.0.1:${s4.address().port}` }); s4.close();
+    assert.strictEqual(r.status, 404);
   });
 
   server.close(); await g.stop();
   console.log(`\n${pass} passed, ${fail} failed`);
   require('fs').mkdirSync(require('path').join(__dirname, 'out'), { recursive: true });
-  require('fs').writeFileSync(require('path').join(__dirname, 'out', 'results.txt'), results.join('\n') + `\n\n${pass} passed, ${fail} failed\n`);
+  require('fs').writeFileSync(require('path').join(__dirname, 'out', 'results.txt'), results.join('\n') + `\n\n${pass} passed, ${fail} failed (${EMU ? 'Firestore emulator' : 'stand-in'})\n`);
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

@@ -28,7 +28,6 @@
   window.HGI_ACCOUNT = account ? { key: account.key, email: account.email } : null;
   const slotKey = key => 'hgi_billing_u_' + key;
   const mirrorKey = key => 'state-u-' + key;
-  const syncKey = key => 'hgi_sync_u_' + key;
 
   /* ------------------------------------------------------------------ environment */
   const cap = window.Capacitor;
@@ -90,29 +89,66 @@
     nativeWrite('account', JSON.stringify(a));
   }
 
-  /* ------------------------------------------------------------------ data helpers */
-  // content fingerprint: what decides whether there is anything new to upload (not the save counter or timestamps)
-  const VOLATILE = ['rev', 'savedAt', 'lastBackup', 'restoredAt'];
-  function contentOf(obj) {
-    const ui = Object.assign({}, obj.ui || {}); VOLATILE.forEach(k => delete ui[k]);
-    return JSON.stringify(Object.assign({}, obj, { ui }));
-  }
-  async function fingerprint(text) {
-    if (window.crypto && crypto.subtle && window.TextEncoder) {
-      const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-      return Array.from(new Uint8Array(b)).map(x => x.toString(16).padStart(2, '0')).join('');
-    }
-    let h1 = 0x811c9dc5, h2 = 0; for (let i = 0; i < text.length; i++) { h1 = Math.imul(h1 ^ text.charCodeAt(i), 16777619); h2 = (h2 * 31 + text.charCodeAt(i)) | 0; }
-    return 'f' + (h1 >>> 0).toString(16) + (h2 >>> 0).toString(16) + text.length;
-  }
-  const meaningful = s => !!s && ((Array.isArray(s.invoices) && s.invoices.length) || (Array.isArray(s.customers) && s.customers.length) || (Array.isArray(s.products) && s.products.length) || (s.company && s.company.name));
+  /* ------------------------------------------------------------------ records: the app's book ⇄ one cloud record per buyer / product / document */
+  // The cloud keeps each buyer, product and document as its own record, so two phones can work at the same time and both
+  // sets of new invoices survive. Device-only settings (PIN, theme, language, local password) stay on the phone.
+  const UI_SYNC = ['invoiceStyle', 'onboarded', 'recentProducts'];
   const parse = txt => { try { const o = JSON.parse(txt); return o && typeof o === 'object' ? o : null; } catch (e) { return null; } };
+  // 53-bit string hash (fast, for change detection only)
+  function hash(str) {
+    let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (let i = 0; i < str.length; i++) { const c = str.charCodeAt(i); h1 = Math.imul(h1 ^ c, 2654435761); h2 = Math.imul(h2 ^ c, 1597334677); }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36) + ':' + str.length;
+  }
+  const recKey = (kind, id) => kind + '~' + id;
+  /** the book → Map(key → {kind, id, obj, text, h}) */
+  function recordsOf(st) {
+    const out = new Map();
+    const put = (kind, id, obj) => { if (id == null || id === '') return; const text = JSON.stringify(obj); out.set(recKey(kind, String(id)), { kind, id: String(id), obj, text, h: hash(text) }); };
+    put('company', 'main', st.company || {});
+    const ui = {}; UI_SYNC.forEach(k => { if (st.ui && st.ui[k] !== undefined) ui[k] = st.ui[k]; });
+    put('settings', 'main', { ui });
+    (st.customers || []).forEach(c => c && put('customer', c.id, c));
+    (st.products || []).forEach(p => p && put('product', p.id, p));
+    (st.invoices || []).forEach(d => d && put('invoice', d.id, d));
+    return out;
+  }
+  const ARR = { customer: 'customers', product: 'products', invoice: 'invoices' };
+  /** puts one record (or its deletion) into the book */
+  function applyRecord(st, kind, id, obj) {
+    if (kind === 'company') { if (obj) st.company = obj; return; }
+    if (kind === 'settings') { if (obj && obj.ui) { st.ui = st.ui || {}; UI_SYNC.forEach(k => { if (obj.ui[k] !== undefined) st.ui[k] = obj.ui[k]; }); } return; }
+    const arr = st[ARR[kind]] = st[ARR[kind]] || [];
+    const i = arr.findIndex(x => x && String(x.id) === String(id));
+    if (!obj) { if (i >= 0) arr.splice(i, 1); return; }
+    if (i >= 0) arr[i] = obj; else arr.push(obj);
+  }
+  const emptyBook = () => ({ credentials: { username: 'admin', password: '123' }, company: {}, products: [], customers: [], invoices: [], ui: { invoiceStyle: 'modern' } });
+  const meaningful = s => !!s && ((Array.isArray(s.invoices) && s.invoices.length) || (Array.isArray(s.customers) && s.customers.length) || (Array.isArray(s.products) && s.products.length) || (s.company && s.company.name));
   const count = (n, one, many) => `${n} ${t(n === 1 ? one : many)}`;
   const summary = s => `${count((s.invoices || []).length, 'document', 'documents')}, ${count((s.customers || []).length, 'buyer', 'buyers')}${s.company && s.company.name ? ' — ' + s.company.name : ''}`;
   const revOf = s => Number(s && s.ui && s.ui.rev) || 0;
 
-  function readSync(key) { try { return JSON.parse(ls.get(syncKey(key)) || 'null') || { version: 0, hash: '' }; } catch (e) { return { version: 0, hash: '' }; } }
-  function writeSync(key, s) { ls.set(syncKey(key), JSON.stringify(s)); nativeWrite('sync-u-' + key, JSON.stringify(s)); }
+  // sync position per account: { v: 2, seq, base: { key: {r: revision, h: hash} }, clash: { key: {...} }, at }
+  const metaKey = key => 'hgi_sync2_u_' + key;
+  function readMeta(key) { const m = parse(ls.get(metaKey(key)) || ''); return m && m.v === 2 ? m : { v: 2, seq: 0, base: {}, clash: {}, at: 0 }; }
+  let metaTimer = null;
+  function writeMeta(key, m) {
+    ls.set(metaKey(key), JSON.stringify(m));
+    clearTimeout(metaTimer); metaTimer = setTimeout(() => nativeWrite('sync2-u-' + key, JSON.stringify(m)), 500);
+  }
+  /** all records of the account (paged) */
+  async function pullAll(session, since = 0) {
+    const out = []; let s = since, more = true;
+    while (more) {
+      const r = await api('GET', `/v1/sync/pull?since=${s}&limit=300`, undefined, session);
+      out.push(...r.records); more = r.more;
+      if (r.records.length) s = r.records[r.records.length - 1].seq;
+    }
+    return { records: out, seq: s };
+  }
 
   /* ------------------------------------------------------------------ small dialogs (no browser confirm(): it blocks the WebView) */
   function dialog({ title, body, buttons, danger }) {
@@ -202,16 +238,17 @@
 
     let local = ls.get(slotKey(key));
     if (!local) { const m = await nativeRead(mirrorKey(key)); if (m) { local = m; ls.set(slotKey(key), m); } }
-    const cloud = await api('GET', '/v1/sync', undefined, s.session);
-    const cloudState = cloud.data ? parse(cloud.data) : null;
-    const cv = Number(cloud.cloud && cloud.cloud.version) || 0;
+    if (!ls.get(metaKey(key))) { const m = await nativeRead('sync2-u-' + key); if (m) ls.set(metaKey(key), m); }
 
-    if (local) {
-      // this account has used this phone before: keep the phone copy; the sync engine reconciles after the reload
-      const sync = readSync(key);
-      if (!sync.version && cv) writeSync(key, { version: 0, hash: '' });
-    } else {
-      // data from before accounts existed (v8.0 and older), not yet claimed by any account on this phone
+    if (!local) {
+      // nothing of this account on the phone: download the account's records
+      msg(t('Downloading your data…'));
+      const cloud = await pullAll(s.session);
+      const book = emptyBook(), meta = { v: 2, seq: cloud.seq, base: {}, clash: {}, at: Date.now() };
+      cloud.records.forEach(r => { const obj = r.deleted ? null : parse(r.data); applyRecord(book, r.kind, r.id, obj); meta.base[recKey(r.kind, r.id)] = { r: r.rev, h: r.deleted ? 'deleted' : hash(r.data) }; });
+      const cloudHas = meaningful(book);
+
+      // data saved before accounts existed (v8.0 and older) and not given to an account yet: only with the user's OK
       let legacy = null;
       if (!ls.get(LEGACY_OWNER)) {
         let lt = ls.get(LEGACY_KEY); const mt = await nativeRead('state');
@@ -219,30 +256,38 @@
         const lo = lt ? parse(lt) : null;
         if (meaningful(lo)) legacy = { text: lt, obj: lo };
       }
-      let use = null, safety = null, pushNeeded = false;
-      if (cloudState && legacy) {
-        const pick = await dialog({ title: t('Which data should this account use?'),
-          body: `<p>${esc(t('This phone has business data from before sign-in, and your account already has a cloud copy.'))}</p>
-            <ul><li><strong>${esc(t('Cloud copy'))}:</strong> ${esc(summary(cloudState))}${cloud.cloud.updatedAt ? ' · ' + esc(new Date(cloud.cloud.updatedAt).toLocaleString('en-IN')) : ''}</li>
-            <li><strong>${esc(t('On this phone'))}:</strong> ${esc(summary(legacy.obj))}</li></ul>
-            <p class="acct-note">${esc(t('The other copy is kept on this phone as a safety copy (Settings → Undo restore).'))}</p>`,
-          buttons: [{ label: t('Use data on this phone'), value: 'phone' }, { label: t('Use cloud copy'), value: 'cloud', primary: true }] });
-        if (pick === 'phone') { use = legacy.text; safety = cloud.data; pushNeeded = true; } else { use = cloud.data; safety = legacy.text; }
-      } else if (cloudState) use = cloud.data;
-      else if (legacy) { use = legacy.text; pushNeeded = true; }
-      if (legacy) ls.set(LEGACY_OWNER, key);                 // the pre-sign-in data now belongs to this account only
-      if (use) {
-        const o = parse(use); o.ui = Object.assign({}, o.ui || {}, { onboarded: true });
-        if (safety) o.ui.restoredAt = new Date().toISOString();
-        use = JSON.stringify(o);
-        ls.set(slotKey(key), use);                         // if WebView storage is full, the app-file copy below is loaded at start
-        await nativeWrite(mirrorKey(key), use);
-        if (safety) { ls.set(slotKey(key) + '_before_restore', safety); await nativeWrite('u-' + key + '-before-restore', safety); }
+      let use = book;
+      if (legacy) {
+        const pick = await dialog({ title: cloudHas ? t('Add this phone\'s data to your account?') : t('Move this phone\'s data into your account?'),
+          body: `<p>${esc(t('This phone has business data saved before you signed in:'))} <strong>${esc(summary(legacy.obj))}</strong>.</p>
+            ${cloudHas ? `<p>${esc(t('Your account already has:'))} <strong>${esc(summary(book))}</strong>.</p><p>${esc(t('Adding keeps everything from both; documents that exist in both are not doubled.'))}</p>`
+              : `<p>${esc(t('Moving it uploads it to your cloud account, so it is safe and available on your other phones.'))}</p>`}
+            <p class="acct-note">${esc(t('If you choose not to, that data stays on this phone untouched and is not uploaded.'))}</p>`,
+          buttons: [{ label: cloudHas ? t('Use only my account\'s data') : t('Not now'), value: 'no' }, { label: cloudHas ? t('Add to my account') : t('Move to my account'), value: 'yes', primary: true }] });
+        if (pick === 'yes') {
+          const merged = cloudHas ? book : emptyBook();
+          const L = recordsOf(legacy.obj);
+          L.forEach((r, k) => {
+            if (r.kind === 'company' && cloudHas && book.company && book.company.name) return;          // the account's company profile stays
+            if (r.kind === 'settings') { if (!cloudHas) applyRecord(merged, r.kind, r.id, r.obj); return; }
+            if (!meta.base[k] || meta.base[k].h === 'deleted') applyRecord(merged, r.kind, r.id, r.obj);   // new to the account
+          });
+          if (!cloudHas) { merged.company = legacy.obj.company || {}; merged.credentials = legacy.obj.credentials || merged.credentials; }
+          use = merged;
+          ls.set(LEGACY_OWNER, key);
+          if (cloudHas) { ls.set(slotKey(key) + '_before_restore', legacy.text); await nativeWrite('u-' + key + '-before-restore', legacy.text); }
+          ls.del(LEGACY_KEY);                    // the app-file copy ('state') stays on the phone as an upgrade safety copy
+        }
       }
-      // the pre-sign-in data now lives in this account (as its data or its safety copy); the app-file copy stays as an upgrade safety copy
-      if (legacy && use) ls.del(LEGACY_KEY);
-      const fp = use && !pushNeeded ? await fingerprint(contentOf(parse(use))) : '';
-      writeSync(key, { version: cv, hash: fp, at: cloudState && !pushNeeded ? Date.now() : 0 });
+      if (meaningful(use) || cloud.records.length) {
+        use.ui = Object.assign({}, use.ui || {}, { onboarded: use.ui && use.ui.onboarded !== undefined ? use.ui.onboarded : meaningful(use) });
+        if (meaningful(use)) use.ui.onboarded = true;
+        const text = JSON.stringify(use);
+        ls.set(slotKey(key), text);
+        await nativeWrite(mirrorKey(key), text);
+      }
+      writeMeta(key, meta);
+      await nativeWrite('sync2-u-' + key, JSON.stringify(meta));
     }
     account = next;
     saveAccount(next);
@@ -269,7 +314,7 @@
     const saved = parse(await nativeRead('account'));
     if (saved && /^[a-f0-9]{24}$/.test(String(saved.key || '')) && saved.session) {
       ls.set(ACCOUNT_KEY, JSON.stringify(saved));
-      const sy = await nativeRead('sync-u-' + saved.key); if (sy && !ls.get(syncKey(saved.key))) ls.set(syncKey(saved.key), sy);
+      const sy = await nativeRead('sync2-u-' + saved.key); if (sy && !ls.get(metaKey(saved.key))) ls.set(metaKey(saved.key), sy);
       location.reload(); return false;
     }
     document.documentElement.classList.add('signed-out');
@@ -278,61 +323,111 @@
     return false;
   }
 
-  /* ------------------------------------------------------------------ sync engine */
-  let status = 'idle', lastErr = '', timer = null, running = false, again = false, backoff = 0, conflictOpen = false;
+  /* ------------------------------------------------------------------ sync engine (record by record) */
+  let status = 'idle', lastErr = '', timer = null, running = false, again = false, backoff = 0, features = { gst: false, files: false }, lastPull = 0;
   const active = () => config.auth !== 'off' && !!account && !(typeof DEMO_MODE !== 'undefined' && DEMO_MODE);
-  function setStatus(s, e) { status = s; lastErr = e || ''; renderCard(); }
-  function kick(ms) { if (!active()) return; clearTimeout(timer); timer = setTimeout(syncNow, ms == null ? 4000 : ms); }
+  function setStatus(s, e) { status = s; lastErr = e || ''; renderCard(); renderBanner(); }
+  function kick(ms) { if (!active()) return; clearTimeout(timer); timer = setTimeout(syncNow, ms == null ? 3000 : ms); }
 
-  function applyCloud(text, cv, note) {
-    const o = parse(text); if (!o) return false;
-    o.ui = Object.assign({}, o.ui || {}, { rev: Math.max(revOf(o), revOf(state)) });
-    state = migrateState(o); saveState(); initApp(state);
-    const ob = document.getElementById('onboarding'); if (ob && !needsOnboarding()) ob.remove();
-    if (note) toast(note);
+  const labelOf = (kind, obj) => !obj ? kind : kind === 'invoice' ? `${obj.docType || 'INV'} ${obj.num || ''}`.trim() : kind === 'company' ? t('Company profile') : kind === 'settings' ? t('Settings') : (obj.name || kind);
+  function rememberLoser(kind, id, obj, why) {
+    if (!obj || kind === 'settings') return;
+    const ui = state.ui = state.ui || {};
+    ui.syncConflicts = [{ kind, id, label: labelOf(kind, obj), why, at: new Date().toISOString(), data: JSON.stringify(obj) }, ...(ui.syncConflicts || [])].slice(0, 30);
+  }
+  // both this phone and another device changed the same record
+  function resolve(kind, id, mine, theirs) {
+    if (!mine) return theirs;                       // deleted here, changed there → keep their version (nothing is lost)
+    if (!theirs) return mine;                       // deleted there, changed here → keep this phone's version
+    if (kind === 'invoice') {
+      const newer = String(mine.updatedAt || '') >= String(theirs.updatedAt || '') ? mine : theirs;
+      const older = newer === mine ? theirs : mine;
+      // receipts recorded on either phone are all kept
+      const pays = new Map(); [...(older.payments || []), ...(newer.payments || [])].forEach(p => p && pays.set(p.id || JSON.stringify(p), p));
+      const out = Object.assign({}, newer, { payments: [...pays.values()] });
+      const { payments: a, ...ra } = older, { payments: b, ...rb } = newer;
+      if (JSON.stringify(ra) !== JSON.stringify(rb)) rememberLoser(kind, id, older, newer === mine ? 'kept this phone\'s newer edit' : 'kept the other device\'s newer edit');
+      return out;
+    }
+    rememberLoser(kind, id, mine, 'kept the version already in the cloud');
+    return theirs;
+  }
+
+  // one remote record into the book; returns true when the book changed
+  function takeRemote(meta, cur, r) {
+    const k = recKey(r.kind, r.id), base = meta.base[k], mine = cur.get(k);
+    const rText = r.deleted ? null : r.data, rh = r.deleted ? 'deleted' : hash(rText);
+    const lh = mine ? mine.h : 'deleted';
+    const localChanged = base ? lh !== base.h : !!mine;
+    if (!localChanged || lh === rh) {
+      meta.base[k] = { r: r.rev, h: rh };
+      if (lh === rh) return false;
+      applyRecord(state, r.kind, r.id, r.deleted ? null : parse(rText));
+      return true;
+    }
+    const merged = resolve(r.kind, r.id, mine ? mine.obj : null, r.deleted ? null : parse(rText));
+    applyRecord(state, r.kind, r.id, merged);
+    meta.base[k] = { r: r.rev, h: rh };           // the next upload of a merged version is based on the cloud's revision
     return true;
   }
-  async function conflict(cloud) {
-    if (conflictOpen) return 'later';
-    conflictOpen = true;
+  function refreshApp() {
     try {
-      const full = await api('GET', '/v1/sync', undefined, account.session);
-      const co = parse(full.data);
-      // both devices ended up with the same content (e.g. both opened the same restored copy): no real conflict
-      if (co && await fingerprint(contentOf(co)) === await fingerprint(contentOf(state))) {
-        writeSync(account.key, { version: Number(full.cloud.version) || 0, hash: await fingerprint(contentOf(state)), at: Date.now() });
-        return 'same';
+      state = migrateState(state);
+      if (typeof sortInvoices === 'function') sortInvoices();
+      saveStateQuiet();
+      renderAll(); populateCustomerDropdown(); refreshProductDatalist(); refreshCompanyNames();
+      const st = document.getElementById('tab-settings'); if (st && st.classList.contains('hidden')) loadSettingsForm();
+      const ob = document.getElementById('onboarding'); if (ob && !needsOnboarding()) ob.remove();
+    } catch (e) { console.error('[HGI] refresh after sync', e); }
+  }
+  let quiet = false;
+  function saveStateQuiet() { quiet = true; try { saveState(); } finally { quiet = false; } }
+
+  async function pullRound(meta) {
+    let changed = false, more = true, since = meta.seq || 0, n = 0;
+    while (more) {
+      const r = await api('GET', `/v1/sync/pull?since=${since}&limit=300`, undefined, account.session);
+      if (r.records.length) {
+        const cur = recordsOf(state);
+        for (const rec of r.records) { if (takeRemote(meta, cur, rec)) changed = true; n++; }
+        since = r.records[r.records.length - 1].seq;
       }
-      const pick = await dialog({ title: t('Data changed on two devices'),
-        body: `<p>${esc(t('Your account was updated from another device while this phone also had changes that were not synced yet.'))}</p>
-          <ul><li><strong>${esc(t('Cloud copy'))}:</strong> ${co ? esc(summary(co)) : ''}${full.cloud.device ? ' · ' + esc(full.cloud.device) : ''}${full.cloud.updatedAt ? ' · ' + esc(new Date(full.cloud.updatedAt).toLocaleString('en-IN')) : ''}</li>
-          <li><strong>${esc(t('This phone'))}:</strong> ${esc(summary(state))}</li></ul>
-          <p class="acct-note">${esc(t('The copy you do not choose is kept on this phone as a safety copy (Settings → Undo restore).'))}</p>`,
-        buttons: [{ label: t('Keep this phone\'s data'), value: 'phone' }, { label: t('Use cloud copy'), value: 'cloud', primary: true }] });
-      const cv = Number(full.cloud.version) || 0;
-      if (pick === 'cloud') {
-        snapshotBeforeRestore();
-        applyCloud(full.data, cv, t('Cloud copy opened'));
-        state.ui.restoredAt = new Date().toISOString(); saveState();
-        writeSync(account.key, { version: cv, hash: await fingerprint(contentOf(state)), at: Date.now() });
-        if (window.HGI_M && HGI_M.renderPrefs) HGI_M.renderPrefs();
-        return 'cloud';
-      }
-      if (full.data) { ls.set(STORAGE_KEY + '_before_restore', full.data); if (window.HGI_nativeSnapshot) window.HGI_nativeSnapshot('before-restore', full.data); }
-      state.ui.restoredAt = new Date().toISOString(); saveState();
-      writeSync(account.key, Object.assign(readSync(account.key), { version: cv }));   // next upload is based on the cloud's version
-      if (window.HGI_M && HGI_M.renderPrefs) HGI_M.renderPrefs();
-      return 'phone';
-    } finally { conflictOpen = false; }
+      more = r.more;
+      meta.seq = since;
+    }
+    lastPull = Date.now();
+    if (changed) refreshApp();
+    return { changed, n };
   }
 
-  // the user is in the middle of something an in-place refresh would throw away
-  function editing() {
-    const ed = document.getElementById('tab-create-invoice');
-    const formOpen = ed && !ed.classList.contains('hidden');
-    const modal = Array.from(document.querySelectorAll('.fixed.inset-0.z-50.flex')).some(m => !m.classList.contains('hidden') && m.id !== 'login-overlay');
-    return formOpen || modal || !!document.querySelector('.acct-dlg, #onboarding');
+  async function pushRound(meta) {
+    const cur = recordsOf(state), items = [];
+    cur.forEach((r, k) => {
+      const b = meta.base[k];
+      if (b && b.h === r.h) return;
+      const c = meta.clash[k];
+      if (c && c.h === r.h) return;                // still the clashing number: waits until the user renumbers it
+      if (c) delete meta.clash[k];
+      items.push({ kind: r.kind, id: r.id, baseRev: b ? b.r : 0, data: r.text, modifiedAt: (r.obj && r.obj.updatedAt) || new Date().toISOString(), _h: r.h, _k: k });
+    });
+    Object.keys(meta.base).forEach(k => { if (!cur.has(k) && meta.base[k].h !== 'deleted') { const i = k.indexOf('~'); items.push({ kind: k.slice(0, i), id: k.slice(i + 1), baseRev: meta.base[k].r, deleted: true, _h: 'deleted', _k: k }); } });
+    let sent = 0, conflicts = 0;
+    for (let i = 0; i < items.length; i += 150) {
+      const batch = items.slice(i, i + 150);
+      const r = await api('POST', '/v1/sync/push', { device: device(), records: batch.map(({ _h, _k, ...x }) => x) }, account.session);
+      const now = recordsOf(state);
+      r.results.forEach((x, j) => {
+        const it = batch[j], k = it._k;
+        if (x.status === 'ok') { meta.base[k] = { r: x.rev, h: it._h }; sent++; }
+        else if (x.status === 'conflict') { conflicts++; takeRemote(meta, now, { kind: x.kind, id: x.id, rev: x.server.rev, deleted: x.server.deleted, data: x.server.data }); }
+        else if (x.status === 'number_taken') meta.clash[k] = { h: it._h, num: x.num, docType: x.docType, takenBy: x.takenBy, at: Date.now() };
+        else meta.clash[k] = { h: it._h, error: x.status, at: Date.now() };
+      });
+    }
+    if (conflicts) refreshApp();
+    return { sent, conflicts, total: items.length };
   }
+
   let currentRun = null;
   function syncNow() {
     if (!active()) return Promise.resolve();
@@ -343,54 +438,92 @@
   }
   async function runSync() {
     try {
+      setStatus('syncing');
+      if (!features.checked) { try { const me = await api('GET', '/v1/me', undefined, account.session); features = Object.assign({ checked: true }, me.features || {}); } catch (e) { if (e.status === 401) throw e; } }
+      let rounds = 0;
       do {
         again = false;
-        const sync = readSync(account.key);
-        const snapshot = JSON.stringify(state);
-        const fp = await fingerprint(contentOf(parse(snapshot)));
-        const dirty = fp !== sync.hash;
-        setStatus('syncing');
-        const meta = (await api('GET', '/v1/sync/meta', undefined, account.session)).cloud || { version: 0 };
-        const cv = Number(meta.version) || 0;
-        if (cv > sync.version && !dirty && editing()) { kick(60000); break; }   // never replace data under an open form or dialog
-        if (cv > sync.version && !dirty) {
-          // changed on another device, nothing new here → download
-          const full = await api('GET', '/v1/sync', undefined, account.session);
-          if (full.data && applyCloud(full.data, cv, t('Updated with changes from your other device'))) {
-            writeSync(account.key, { version: Number(full.cloud.version) || cv, hash: await fingerprint(contentOf(state)), at: Date.now() });
-          }
-        } else if (cv > sync.version && dirty) {
-          const r = await conflict(meta);
-          if (r !== 'later') again = true;
-        } else if (dirty || cv < sync.version) {
-          try {
-            const r = await api('PUT', '/v1/sync', { baseVersion: cv < sync.version ? cv : sync.version, clientRev: revOf(state), device: device(), data: snapshot }, account.session);
-            writeSync(account.key, { version: Number(r.cloud.version) || 0, hash: fp, at: Date.now() });
-            if (JSON.stringify(state) !== snapshot) again = true;   // edited while uploading
-          } catch (e) {
-            if (e.status === 409) { const r = await conflict(e.body && e.body.cloud); if (r !== 'later') again = true; }
-            else throw e;
-          }
-        } else writeSync(account.key, Object.assign(sync, { at: Date.now() }));
-      } while (again);
+        const meta = readMeta(account.key);
+        const before = Object.keys(meta.clash).length;
+        await pullRound(meta);
+        const p = await pushRound(meta);
+        if (p.sent || p.conflicts) await pullRound(meta);       // moves the cursor past our own uploads
+        meta.at = Date.now();
+        writeMeta(account.key, meta);
+        if (Object.keys(meta.clash).length > before) notifyClash(meta);
+        if (p.conflicts) again = true;
+      } while (again && ++rounds < 4);
       backoff = 0; setStatus('ok');
+      if (window.HGI_PDFQ) HGI_PDFQ.drain();
     } catch (e) {
       if (e.status === 401 && e.code === 'account_deleted') { await wipeLocal(account.key); await clearAccount(); toast(t('This account was deleted. Its data was removed from this phone.'), 'error'); return location.reload(); }
       if (e.status === 401) { setStatus('signin', t('Sign in again to keep syncing. Your data is safe on this phone.')); return; }
       backoff = Math.min(backoff ? backoff * 2 : 15000, 10 * 60000);
-      setStatus(e.code === 'offline' ? 'offline' : 'error', e.code === 'offline' ? t('Waiting for internet — changes are saved on this phone and will sync automatically.') : e.message);
+      setStatus(e.code === 'offline' ? 'offline' : 'error', e.code === 'offline' ? t('Offline — billing works normally; changes upload automatically when the internet is back.') : e.message);
       kick(backoff);
     } finally { running = false; }
   }
 
+  /* ------------------------------------------------------------------ document-number clashes (two phones issued the same number offline) */
+  function clashes() {
+    if (!account) return [];
+    const meta = readMeta(account.key);
+    return Object.entries(meta.clash).map(([k, c]) => { const id = k.slice(k.indexOf('~') + 1); const d = (state.invoices || []).find(x => String(x.id) === id); return d ? { k, d, c } : null; }).filter(x => x && x.c.num);
+  }
+  function notifyClash() {
+    const list = clashes(); if (!list.length) return;
+    toast(`${list.length === 1 ? t('1 document was not uploaded') : list.length + ' ' + t('documents were not uploaded')}: ${t('its number is already used on another device. Tap Fix on the red banner.')}`, 'error');
+  }
+  function renderBanner() {
+    let b = document.getElementById('sync-banner');
+    const list = active() ? clashes() : [];
+    if (!list.length) { if (b) b.remove(); return; }
+    if (!b) { b = document.createElement('div'); b.id = 'sync-banner'; b.className = 'no-print'; const h = document.querySelector('#app-container > header'); if (h) h.after(b); else document.body.prepend(b); }
+    b.innerHTML = `<span>⚠ ${esc(list.map(x => `${x.d.num}`).join(', '))} — ${esc(t('number already used on another device; not uploaded'))}</span><button type="button" onclick="HGI_SYNC.fixClashes()">${esc(t('Fix'))}</button>`;
+  }
+  async function fixClashes() {
+    const list = clashes(); if (!list.length) return;
+    await syncNow();                                      // newest numbers from the other devices first
+    const rows = clashes().map(x => ({ ...x, next: generateNextNumber(x.d.docType || 'INV', x.d.date) }));
+    if (!rows.length) return;
+    const ok = await dialog({ title: t('Give these documents new numbers?'),
+      body: `<p>${esc(t('Another device already issued documents with these numbers. Each number may be used only once, so these copies were kept on this phone and not uploaded.'))}</p>
+        <ul>${rows.map(x => `<li><strong>${esc(x.d.num)}</strong> → <strong>${esc(x.next)}</strong> · ${esc(x.d.buyerName || '')} · ${esc(typeof money === 'function' ? money(x.d.grandTotal || 0) : '')}</li>`).join('')}</ul>
+        <p class="acct-note">${esc(t('If you already sent one of them to the buyer, tell the buyer about the new number.'))}</p>`,
+      buttons: [{ label: t('Not now'), value: false }, { label: t('Renumber and upload'), value: true, primary: true }] });
+    if (!ok) return;
+    for (const x of rows) { x.d.num = generateNextNumber(x.d.docType || 'INV', x.d.date); x.d.updatedAt = new Date().toISOString(); }
+    saveState(); renderAll();
+    await syncNow();
+    toast(t('Renumbered and uploaded'));
+  }
+
+  /* ------------------------------------------------------------------ GSTIN look-up + PDF backup (server features) */
+  async function gstLookup(gstin, fresh) {
+    if (!active()) throw new ApiErr(t('GST look-up works when you are signed in to HGI cloud.'), 0, 'not_signed_in');
+    return api('GET', `/v1/gstin/${encodeURIComponent(gstin)}${fresh ? '?fresh=1' : ''}`, undefined, account.session);
+  }
+  async function uploadPdf(docId, base64, info) {
+    if (!active()) throw new ApiErr('not signed in', 0, 'not_signed_in');
+    return api('PUT', `/v1/files/pdf/${encodeURIComponent(docId)}`, Object.assign({ base64 }, info || {}), account.session);
+  }
+  async function listPdfs() { return api('GET', '/v1/files', undefined, account.session); }
+
   async function wipeLocal(key) {
-    [slotKey(key), slotKey(key) + '_before_restore', syncKey(key)].forEach(ls.del);
-    for (const k of [mirrorKey(key), 'u-' + key + '-before-restore', 'sync-u-' + key]) await nativeWrite(k, '');
+    [slotKey(key), slotKey(key) + '_before_restore', metaKey(key), 'hgi_sync_u_' + key].forEach(ls.del);
+    for (const k of [mirrorKey(key), 'u-' + key + '-before-restore', 'sync2-u-' + key, 'sync-u-' + key]) await nativeWrite(k, '');
   }
   async function clearAccount() {
     ls.del(ACCOUNT_KEY); await nativeWrite('account', '');
     const N = Native(); if (N && N.googleSignOut) { try { await timeout(N.googleSignOut(), 3000); } catch (e) { /* ignore */ } }
     account = null;
+  }
+  function pendingCount() {
+    if (!account) return 0;
+    const meta = readMeta(account.key), cur = recordsOf(state);
+    let n = 0; cur.forEach((r, k) => { if (!meta.base[k] || meta.base[k].h !== r.h) n++; });
+    Object.keys(meta.base).forEach(k => { if (!cur.has(k) && meta.base[k].h !== 'deleted') n++; });
+    return n;
   }
 
   /* ------------------------------------------------------------------ account actions (Settings) */
@@ -401,9 +534,7 @@
     const box = { wipe: dialog.last.checked };
     if (!v) return;
     saveState(); await syncNow();
-    const sync = readSync(account.key);
-    const unsynced = (await fingerprint(contentOf(state))) !== sync.hash;
-    if (unsynced) {
+    if (pendingCount()) {
       const go = await dialog({ title: t('Not synced yet'), body: `<p>${esc(t('Some changes could not be uploaded yet (no internet?).'))} ${box.wipe ? esc(t('If you remove the data from this phone now, those changes are lost.')) : esc(t('They stay on this phone and upload when you sign in again.'))}</p>`,
         buttons: [{ label: t('Cancel'), value: false }, { label: t('Sign out anyway'), value: true, danger: true }] });
       if (!go) return;
@@ -415,16 +546,13 @@
   }
   async function deleteAccount() {
     const r = await dialog({ title: t('Delete account and cloud data?'), danger: true,
-      body: `<p>${esc(t('This permanently deletes the cloud copy of all business data of'))} <strong>${esc(account.email)}</strong> ${esc(t('and removes it from this phone. It cannot be undone.'))}</p>
+      body: `<p>${esc(t('This permanently deletes all business data and invoice PDFs of'))} <strong>${esc(account.email)}</strong> ${esc(t('from the cloud and removes it from this phone. It cannot be undone.'))}</p>
         <p class="acct-note">${esc(t('Tip: share a backup file first if you may need the invoices later.'))}</p><p>${esc(t('Type DELETE to confirm:'))}</p><input type="text" class="inp" autocomplete="off" autocapitalize="characters">`,
       buttons: [{ label: t('Cancel'), value: false }, { label: t('Delete permanently'), value: true, danger: true }] });
     if (!r) return;
     if (String(dialog.last.text).trim().toUpperCase() !== 'DELETE') return toast(t('Not deleted — type DELETE to confirm.'), 'info');
-    try {
-      await api('DELETE', '/v1/account', undefined, account.session);
-    } catch (e) {
-      if (!(e.status === 401 && e.code === 'account_deleted')) return toast(t('Could not delete the account') + ': ' + e.message, 'error');
-    }
+    try { await api('DELETE', '/v1/account', undefined, account.session); }
+    catch (e) { if (!(e.status === 401 && e.code === 'account_deleted')) return toast(t('Could not delete the account') + ': ' + e.message, 'error'); }
     clearTimeout(timer);
     await wipeLocal(account.key);
     await clearAccount();
@@ -437,13 +565,20 @@
     const close = document.createElement('button'); close.type = 'button'; close.className = 'si-close'; close.textContent = t('Not now');
     close.onclick = hideSignIn; el.querySelector('.si-card').appendChild(close);
   }
+  async function reviewConflicts() {
+    const list = (state.ui && state.ui.syncConflicts) || [];
+    if (!list.length) return toast(t('Nothing to review'), 'info');
+    await dialog({ title: t('Edits replaced during sync'),
+      body: `<p>${esc(t('The same record was changed on two devices. The app kept one version; the other is listed here so nothing is lost.'))}</p><ul>${list.slice(0, 15).map(c => `<li><strong>${esc(c.label)}</strong> · ${esc(new Date(c.at).toLocaleString('en-IN'))} · ${esc(c.why)}</li>`).join('')}</ul>`,
+      buttons: [{ label: t('Clear list'), value: 'clear' }, { label: t('Close'), value: false, primary: true }] }).then(v => { if (v === 'clear') { state.ui.syncConflicts = []; saveState(); renderCard(); } });
+  }
 
   /* ------------------------------------------------------------------ Settings card */
   function ago(ms) { if (!ms) return ''; const m = Math.round((Date.now() - ms) / 60000); return m < 1 ? t('just now') : m < 60 ? m + ' ' + t('min ago') : new Date(ms).toLocaleString('en-IN'); }
   function renderCard() {
     if (!account) return;
     const col = document.querySelector('#tab-settings .set-col') || document.getElementById('tab-settings');
-    if (!col) return;
+    if (!col || typeof state === 'undefined') return;
     let card = document.getElementById('acct-card');
     if (!card) {
       card = document.createElement('div'); card.id = 'acct-card'; card.className = 'bg-white p-6 rounded-lg shadow-sm border border-slate-200 set-card';
@@ -451,22 +586,27 @@
       const nav = document.querySelector('#tab-settings .set-index');
       if (nav && !nav.querySelector('[data-t="acct-card"]')) { const b = document.createElement('button'); b.type = 'button'; b.dataset.t = 'acct-card'; b.innerHTML = `<span>${esc(t('Account & sync'))}</span>`; nav.prepend(b); }
     }
-    const sync = readSync(account.key);
+    const meta = readMeta(account.key);
     const demo = typeof DEMO_MODE !== 'undefined' && DEMO_MODE;
+    const pend = demo ? 0 : pendingCount(), cl = clashes(), lost = ((state.ui && state.ui.syncConflicts) || []).length;
     const line = demo ? t('Demo Mode — sample data is not synced.')
       : status === 'syncing' ? t('Syncing…')
-      : status === 'ok' ? `${t('Synced')} ${ago(sync.at)}`
-      : status === 'idle' ? (sync.at ? `${t('Last synced')} ${ago(sync.at)}` : t('Not synced yet'))
+      : status === 'ok' ? (pend ? `${pend} ${t('changes waiting to upload')}` : `${t('All data synced')} · ${ago(meta.at)}`)
+      : status === 'idle' ? (meta.at ? `${t('Last synced')} ${ago(meta.at)}` : t('Not synced yet'))
       : lastErr;
-    const tone = demo ? 'muted' : status === 'ok' ? 'ok' : status === 'syncing' || status === 'idle' ? 'muted' : 'warn';
+    const tone = demo ? 'muted' : cl.length ? 'warn' : status === 'ok' && !pend ? 'ok' : status === 'syncing' || status === 'idle' ? 'muted' : 'warn';
     card.innerHTML = `<h3 class="set-group"><i class="fa-solid fa-cloud-arrow-up"></i>${esc(t('Account & cloud sync'))}</h3>
       <div class="acct-row"><div class="acct-avatar" aria-hidden="true">${esc((account.name || account.email || '?').trim().charAt(0).toUpperCase())}</div>
         <div class="acct-who"><strong>${esc(account.name || account.email)}</strong><span>${esc(account.email)}</span></div></div>
       <p class="acct-status acct-${tone}" id="acct-status" role="status">${esc(line)}</p>
-      <p class="text-[11px] text-slate-500 mt-1">${esc(t('Every change is saved on this phone and synced automatically to your HGI cloud account. After a reinstall, sign in with this Google account to get everything back. No manual backups needed.'))}</p>
+      ${cl.length ? `<p class="acct-alert">${esc(cl.length === 1 ? t('1 document has a number already used on another device.') : cl.length + ' ' + t('documents have numbers already used on another device.'))} <button type="button" class="acct-link" onclick="HGI_SYNC.fixClashes()">${esc(t('Fix'))}</button></p>` : ''}
+      ${lost ? `<p class="acct-note mt-1">${esc(lost + ' ' + t('edit(s) replaced by another device\'s version'))} <button type="button" class="acct-link" onclick="HGI_SYNC.reviewConflicts()">${esc(t('Review'))}</button></p>` : ''}
+      <p class="text-[11px] text-slate-500 mt-1">${esc(t('Buyers, products, invoices, payments and your business profile are saved on this phone and synced automatically to your HGI cloud account. Sign in on any phone to get everything back; several phones stay in step. No manual backups needed.'))}</p>
+      <p class="text-[11px] text-slate-500 mt-1" id="acct-features">${features.checked ? `${esc(t('GST look-up'))}: <strong>${features.gst ? esc(t('on')) : esc(t('not set up on the server'))}</strong> · ${esc(t('PDF cloud copies'))}: <strong>${features.files ? esc(t('on')) : esc(t('not set up on the server'))}</strong>` : ''}</p>
       <div class="flex flex-wrap gap-2 mt-3">
         ${status === 'signin' ? `<button type="button" class="px-3 py-2 bg-orange-600 text-white rounded text-xs font-bold" onclick="HGI_SYNC.reSignIn()">${esc(t('Sign in again'))}</button>` : ''}
         <button type="button" id="acct-sync-now" class="px-3 py-2 bg-slate-800 text-white rounded text-xs font-bold" onclick="HGI_SYNC.syncNow()" ${demo ? 'disabled' : ''}>${esc(t('Sync now'))}</button>
+        ${features.files && window.HGI_PDFQ ? `<button type="button" id="acct-pdfs" class="px-3 py-2 border rounded text-xs font-bold" onclick="HGI_PDFQ.backupAll()">${esc(t('Back up invoice PDFs'))}</button>` : ''}
         <button type="button" id="acct-signout" class="px-3 py-2 border rounded text-xs font-bold" onclick="HGI_SYNC.signOut()">${esc(t('Sign out'))}</button>
         <button type="button" id="acct-delete" class="px-3 py-2 border border-rose-300 text-rose-700 rounded text-xs font-bold" onclick="HGI_SYNC.deleteAccount()">${esc(t('Delete account and cloud data'))}</button>
       </div>`;
@@ -477,21 +617,34 @@
     if (!active()) { renderCard(); return; }
     if (typeof window.saveState === 'function' && !window.saveState.__hgiSync) {
       const orig = window.saveState;
-      window.saveState = function () { const r = orig.apply(this, arguments); kick(); return r; };
+      window.saveState = function () { const r = orig.apply(this, arguments); if (!quiet) kick(); return r; };
       window.saveState.__hgiSync = true;
+    }
+    // a saved invoice goes up at once, so a number clash with another phone shows within seconds
+    if (typeof window.saveCurrentInvoice === 'function' && !window.saveCurrentInvoice.__hgiSync) {
+      const o = window.saveCurrentInvoice;
+      window.saveCurrentInvoice = function () { const r = o.apply(this, arguments); if (r) kick(200); return r; };
+      window.saveCurrentInvoice.__hgiSync = true;
+    }
+    // a new document: fetch other phones' latest numbers first (if the last check is more than a minute old)
+    if (typeof window.newDocument === 'function' && !window.newDocument.__hgiSync) {
+      const o = window.newDocument;
+      window.newDocument = function () { const r = o.apply(this, arguments); if (Date.now() - lastPull > 60000) kick(0); return r; };
+      window.newDocument.__hgiSync = true;
     }
     window.addEventListener('online', () => kick(500));
     const A = AppPlugin();
-    if (A) A.addListener('appStateChange', ({ isActive }) => { if (!isActive) kick(0); else kick(1500); });
+    if (A) A.addListener('appStateChange', ({ isActive }) => { if (!isActive) kick(0); else kick(1000); });
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') kick(0); });
-    setInterval(() => { if (document.visibilityState !== 'hidden') kick(0); }, 5 * 60000);   // picks up changes from other devices
-    renderCard();
-    kick(800);
+    setInterval(() => { if (document.visibilityState !== 'hidden') kick(0); }, 2 * 60000);   // picks up changes from other devices
+    renderCard(); renderBanner();
+    kick(600);
   }
 
   window.HGI_SYNC = {
-    gate, start, syncNow: () => { kick(0); }, signOut: signOutFlow, deleteAccount, reSignIn,
-    active, status: () => ({ status, error: lastErr, account: account && { key: account.key, email: account.email }, sync: account ? readSync(account.key) : null, config: { auth: config.auth } }),
+    gate, start, syncNow: () => { kick(0); }, signOut: signOutFlow, deleteAccount, reSignIn, fixClashes, reviewConflicts,
+    gstLookup, uploadPdf, listPdfs, features: () => features,
+    active, status: () => ({ status, error: lastErr, account: account && { key: account.key, email: account.email }, sync: account ? readMeta(account.key) : null, pending: account && typeof state !== 'undefined' ? pendingCount() : 0, clashes: clashes().map(x => x.d.num), config: { auth: config.auth } }),
     renderCard, _syncNow: syncNow
   };
 })();
