@@ -115,3 +115,16 @@ The Android CI run for 8.0.1 passed, but the PDFs the emulators themselves produ
   CI steps now use bash pipefail (a failing check piped into `tee` had not failed the job).
 - CI 41246442112: backend 36, web 266, sync 44, v8.2 15, picker 68 (5,000 products: open 61 ms, keystroke ≤ 15 ms),
   Android 63/63 on API 30/33/35/36 (API 33 on the AOSP image now; emulator launcher ANR needed retries/rerun on 33 and 35).
+
+### v9.0.0 — cloud account on Firestore, multi-device, GSTIN look-up (1 Nov 2026)
+- Backend: Firestore (REST, transactions) replaces the 8.1 Sheets store (never deployed); record per buyer/product/document/
+  company/settings; per-account sequence for pulls; conflicts per record; unique document numbers (numbers/{sha1}); private
+  Cloud Storage PDFs; GSTIN look-up through a configurable GST provider (GSTN Search Taxpayer format) with cache; deny-all
+  Firestore rules; setup-gcp.sh (database, rules, daily backups, PITR, service account, bucket, secrets); cloudrun.sh.
+- App: record-level sync engine (offline queue, merge of two phones, receipts union, newer edit wins + review list),
+  number clashes → banner + renumber, pre-account data moved only after confirmation, GSTIN auto-fetch (buyer form + invoice),
+  PDF cloud copies.
+- CI 41318169190: backend 34 (stand-in) + 34 on the official Firestore emulator (it caught a reserved-field mask the stand-in
+  had accepted), web 266, cloud e2e 38, v8.2 15, picker 68, Android 65/65 on API 30/33/35/36.
+- External setup still pending (owner): Google Cloud project + billing, OAuth clients, setup-gcp.sh, GST provider contract and
+  credentials, deploy, GitHub variables, release key. See docs/CLOUD-SETUP.md.
