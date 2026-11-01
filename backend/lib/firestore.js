@@ -98,10 +98,11 @@ class Firestore {
     return res.filter(x => x.document).map(x => this.docFrom(x.document));
   }
   /** all document paths in a collection (paged) */
-  async listPaths(collectionPath) {
+  async listPaths(collectionPath, maskField) {
     const out = []; let token = '';
     do {
-      const r = await this.call('GET', `${this.base}/${collectionPath}?pageSize=300&mask.fieldPaths=__none__${token ? '&pageToken=' + encodeURIComponent(token) : ''}`);
+      // the mask (one small, existing field) keeps large documents out of the answer
+      const r = await this.call('GET', `${this.base}/${collectionPath}?pageSize=300${maskField ? '&mask.fieldPaths=' + encodeURIComponent(maskField) : ''}${token ? '&pageToken=' + encodeURIComponent(token) : ''}`);
       for (const d of r.documents || []) out.push(this.pathOf(d.name));
       token = r.nextPageToken || '';
     } while (token);

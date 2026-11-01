@@ -28,7 +28,7 @@ const { FileStore } = require('./lib/files');
 const { GstLookup } = require('./lib/gst');
 const { UpstreamError } = require('./lib/http');
 
-const log = e => console.log(JSON.stringify({ severity: e.error ? 'ERROR' : e.warn ? 'WARNING' : 'INFO', at: new Date().toISOString(), ...e }));
+const log = e => console.log(JSON.stringify({ severity: e.warn ? 'WARNING' : e.error ? 'ERROR' : 'INFO', at: new Date().toISOString(), ...e }));
 
 function createServer(cfg, deps = {}) {
   const verifier = deps.verifier || new GoogleVerifier(cfg);

@@ -128,6 +128,7 @@ class FakeGoogle {
         return json(200, rows.length ? rows.map(x => ({ document: { name: x.n, fields: x.d.fields }, readTime: new Date().toISOString() })) : [{ readTime: new Date().toISOString() }]);
       }
       if (req.method === 'GET' && rest) {
+        if (url.searchParams.getAll('mask.fieldPaths').some(f => /^__.*__$/.test(f))) return err(400, 'Invalid reserved name in field path ' + url.searchParams.get('mask.fieldPaths'), 'INVALID_ARGUMENT');   // as the real service
         const col = `${root}${rest}`, prefix = col + '/';
         const names = [...this.docs.keys()].filter(n => n.startsWith(prefix) && !n.slice(prefix.length).includes('/')).sort();
         const size = Number(url.searchParams.get('pageSize')) || 100, start = Number(url.searchParams.get('pageToken') || 0);
