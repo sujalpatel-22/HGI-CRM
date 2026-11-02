@@ -137,7 +137,7 @@ class RecordStore {
   /** removes every record, number and file entry of the account (objects in Cloud Storage are removed by the caller) */
   async deleteAll(uid) {
     const paths = [];
-    for (const [col, f] of [['records', 'kind'], ['numbers', 'docId'], ['files', 'docId']]) paths.push(...await this.fs.listPaths(`users/${uid}/${col}`, f));
+    for (const [col, f] of [['records', 'kind'], ['numbers', 'docId'], ['files', 'docId'], ['edocs', 'key'], ['edoc_cred', 'gstin']]) paths.push(...await this.fs.listPaths(`users/${uid}/${col}`, f));
     const deletedAt = new Date().toISOString();
     await this.fs.commit([{ set: `deletions/${uid}`, data: { deletedAt } }]);
     this.tomb.set(uid, { at: Date.now(), deletedAt: Date.parse(deletedAt) });

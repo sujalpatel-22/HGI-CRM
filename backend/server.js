@@ -12,6 +12,16 @@
  *   PUT    /v1/files/pdf/{docId}  {base64, num, …}      store an invoice PDF;  GET /v1/files (list), GET …/pdf/{docId}
  *   DELETE /v1/account                                  delete the account and all its cloud data (in-app)
  *   POST   /v1/account/delete-with-google {idToken}     same, from the web page /delete-account
+ *   E-invoice / e-way bill (government APIs through HGI's GSP; each business uses its own API login):
+ *   GET    /v1/edoc/credentials                         saved API logins (masked user names only)
+ *   PUT    /v1/edoc/credentials/{GSTIN} {irpUser, irpPass, ewbUser, ewbPass}   verify by logging in, then store encrypted
+ *   DELETE /v1/edoc/credentials/{GSTIN}
+ *   POST   /v1/edoc/preview  {doc, company, mode}       eligibility + validation + the exact JSON (nothing sent)
+ *   POST   /v1/edoc/generate {doc, company, mode}       mode irn | irn+ewb (one step) | ewb
+ *   POST   /v1/edoc/refresh  {key}                      status from the IRP / e-way bill system
+ *   GET    /v1/edoc/record?key=                         stored record
+ *   POST   /v1/edoc/cancel-irn | cancel-ewb {key, reasonCode, remark}
+ *   POST   /v1/edoc/partb {key, vehicleNo, …}  ·  POST /v1/edoc/transporter {key, transporterId}
  *   GET    /privacy, /delete-account, /healthz
  *
  * The app never holds a Google Cloud credential or the GST provider's key: those stay on this server.
@@ -27,6 +37,10 @@ const { RecordStore } = require('./lib/record-store');
 const { FileStore } = require('./lib/files');
 const { GstLookup } = require('./lib/gst');
 const { UpstreamError } = require('./lib/http');
+const { ApiError } = require('./lib/nic-http');
+const { CredentialVault } = require('./lib/credentials');
+const { EdocStore } = require('./lib/edoc-store');
+const { EdocService } = require('./lib/edoc-service');
 
 const log = e => console.log(JSON.stringify({ severity: e.warn ? 'WARNING' : e.error ? 'ERROR' : 'INFO', at: new Date().toISOString(), ...e }));
 
@@ -38,6 +52,8 @@ function createServer(cfg, deps = {}) {
   const store = new RecordStore(fsdb, log);
   const files = new FileStore(cfg, access);
   const gst = new GstLookup(cfg, fsdb, log);
+  const edoc = new EdocService(cfg.edoc, { vault: new CredentialVault(fsdb, cfg.edoc.credKey), store: new EdocStore(fsdb), log, timeoutMs: deps.edocTimeoutMs || 30000 });
+  if (edoc.keyError) log({ warn: edoc.keyError });
   const pub = f => fs.readFileSync(path.join(__dirname, 'public', f), 'utf8');
 
   /* ------------------------------------------------------------ rate limits (per instance) */
@@ -133,7 +149,7 @@ function createServer(cfg, deps = {}) {
       const renewed = sessions.maybeRenew(s);
       const extra = renewed ? { 'X-HGI-Session': renewed.token } : {};
       const uid = user.key;
-      if (req.method === 'GET' && p === '/v1/me') return send(req, res, 200, { user: { key: uid, email: user.email, name: user.name }, cloud: await store.state(uid), features: { gst: gst.configured(), files: files.enabled() } }, extra);
+      if (req.method === 'GET' && p === '/v1/me') return send(req, res, 200, { user: { key: uid, email: user.email, name: user.name }, cloud: await store.state(uid), features: { gst: gst.configured(), files: files.enabled(), edoc: edoc.features() } }, extra);
       if (req.method === 'GET' && p === '/v1/sync/pull') {
         const since = Math.max(0, Number(url.searchParams.get('since')) || 0), limit = Math.min(500, Math.max(1, Number(url.searchParams.get('limit')) || 300));
         const r = await store.pull(uid, since, limit);
@@ -180,6 +196,27 @@ function createServer(cfg, deps = {}) {
           return send(req, res, 200, { base64: buf.toString('base64'), num: e.num, uploadedAt: e.uploadedAt }, extra);
         }
       }
+      if (p.startsWith('/v1/edoc/')) {
+        if (limited('edoc:' + uid, 40)) return send(req, res, 429, { error: 'too_many', message: 'Too many e-invoice requests — wait a minute.' });
+        const by = user.email;
+        if (req.method === 'GET' && p === '/v1/edoc/credentials') return send(req, res, 200, { credentials: await edoc.listCredentials(uid), features: edoc.features() }, extra);
+        if ((m = /^\/v1\/edoc\/credentials\/([0-9A-Za-z]{15})$/.exec(p))) {
+          if (req.method === 'PUT') return send(req, res, 200, { credential: await edoc.saveCredentials(uid, m[1], await readBody(req)) }, extra);
+          if (req.method === 'DELETE') { await edoc.deleteCredentials(uid, m[1]); return send(req, res, 200, { ok: true }, extra); }
+        }
+        if (req.method === 'GET' && p === '/v1/edoc/record') return send(req, res, 200, await edoc.record(uid, url.searchParams.get('key'), url.searchParams.get('full') === '1'), extra);
+        if (req.method === 'POST') {
+          const b = await readBody(req);
+          if (p === '/v1/edoc/preview') return send(req, res, 200, await edoc.preview(uid, b.doc, b.company, b.mode), extra);
+          if (p === '/v1/edoc/generate') return send(req, res, 200, await edoc.generate(uid, b.doc, b.company, b.mode, by), extra);
+          if (p === '/v1/edoc/refresh') return send(req, res, 200, await edoc.refresh(uid, String(b.key || '')), extra);
+          if (p === '/v1/edoc/cancel-irn') return send(req, res, 200, await edoc.cancelIrn(uid, String(b.key || ''), b.reasonCode, b.remark, by), extra);
+          if (p === '/v1/edoc/cancel-ewb') return send(req, res, 200, await edoc.cancelEwb(uid, String(b.key || ''), b.reasonCode, b.remark, by), extra);
+          if (p === '/v1/edoc/partb') return send(req, res, 200, await edoc.updatePartB(uid, String(b.key || ''), b, by), extra);
+          if (p === '/v1/edoc/transporter') return send(req, res, 200, await edoc.updateTransporter(uid, String(b.key || ''), b.transporterId, by), extra);
+        }
+        return send(req, res, 404, { error: 'not_found' });
+      }
       if (req.method === 'DELETE' && p === '/v1/account') return send(req, res, 200, { ok: true, ...(await deleteAccount(uid)) });
     }
     return send(req, res, 404, { error: 'not_found' });
@@ -189,6 +226,12 @@ function createServer(cfg, deps = {}) {
     const t0 = Date.now();
     route(req, res).catch(e => {
       const status = e.status && e.status >= 400 && e.status < 600 ? e.status : 500;
+      if (e instanceof ApiError) {
+        // government API / validation answers: passed on as they are, with the error codes — never turned into success
+        if (e.status >= 500) log({ warn: true, error: e.message, code: e.code, path: req.url.split('?')[0] });
+        if (!res.headersSent) send(req, res, e.status || 502, { error: e.code, message: e.message, errors: e.errors || [], warnings: (e.info && e.info.warnings) || [] });
+        return;
+      }
       const upstream = e instanceof UpstreamError;
       // Google API trouble is reported as 503 (retry later) — never as success
       const code = upstream ? 503 : status;
@@ -202,7 +245,7 @@ if (require.main === module) {
   let cfg;
   try { cfg = config.load(); } catch (e) { console.error(e.message); process.exit(1); }
   const server = createServer(cfg);
-  server.listen(cfg.port, () => log({ event: 'listening', port: cfg.port, project: cfg.projectId, gst: !!cfg.gst.url, files: !!cfg.filesBucket, testLogin: cfg.allowTestLogin }));
+  server.listen(cfg.port, () => log({ event: 'listening', port: cfg.port, project: cfg.projectId, gst: !!cfg.gst.url, files: !!cfg.filesBucket, edoc: { env: cfg.edoc.env, irp: !!cfg.edoc.irp.baseUrl, ewb: !!cfg.edoc.ewb.baseUrl }, testLogin: cfg.allowTestLogin }));
   process.on('SIGTERM', () => server.close(() => process.exit(0)));
 }
 

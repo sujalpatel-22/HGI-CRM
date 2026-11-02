@@ -79,10 +79,11 @@ if (!manifest.includes('EmojiCompatInitializer')) manifest = manifest.replace(/<
             <meta-data android:name="androidx.emoji2.text.EmojiCompatInitializer" tools:node="remove" />
         </provider>
     </application>`);
-// WhatsApp share (Android 11+ package visibility): only these two apps are queried, nothing else
+// WhatsApp share + "is there an e-mail app?" (Android 11+ package visibility): only these are queried, nothing else
 if (!manifest.includes('<queries>')) manifest = manifest.replace(/<application\b/, `<queries>
         <package android:name="com.whatsapp" />
         <package android:name="com.whatsapp.w4b" />
+        <intent><action android:name="android.intent.action.SENDTO" /><data android:scheme="mailto" /></intent>
     </queries>
 
     <application`);

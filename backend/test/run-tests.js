@@ -103,7 +103,7 @@ const tp = (g, o = {}) => ({ gstin: g, lgnm: 'SHREE RAM ENGINEERING PRIVATE LIMI
   console.log('Records sync');
   await test('new account: nothing in the cloud; GST lookup and PDF storage reported as set up', async () => {
     const r = await call('GET', '/v1/me', { token: A.session });
-    assert.strictEqual(r.json.cloud.seq, 0); assert.deepStrictEqual(r.json.features, { gst: true, files: true });
+    assert.strictEqual(r.json.cloud.seq, 0); assert.deepStrictEqual(r.json.features, { gst: true, files: true, edoc: { irp: false, ewb: false, env: 'sandbox' } });
     assert.deepStrictEqual(await pullAll(A.session), []);
   });
   await test('push company, buyer, product and invoice → each stored with revision 1 and a sequence number', async () => {
@@ -263,6 +263,8 @@ const tp = (g, o = {}) => ({ gstin: g, lgnm: 'SHREE RAM ENGINEERING PRIVATE LIMI
     assert.strictEqual((await call('OPTIONS', '/v1/sync/push', { headers: { Origin: 'https://localhost', 'Access-Control-Request-Method': 'POST' } })).headers.get('access-control-allow-origin'), 'https://localhost');
     assert.strictEqual((await call('OPTIONS', '/v1/sync/push', { headers: { Origin: 'https://evil.example', 'Access-Control-Request-Method': 'POST' } })).headers.get('access-control-allow-origin'), null);
   });
+
+  await require('./edoc-tests')({ test, g, env, mk, call, gstin, RUN, EMU });
 
   console.log('Account deletion');
   await test('in-app deletion removes every record, number and PDF; old sessions stop working', async () => {

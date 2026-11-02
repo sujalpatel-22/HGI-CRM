@@ -6,7 +6,7 @@
    ===================================================================== */
 (function () {
   'use strict';
-  const APP_VERSION = '9.0.0';
+  const APP_VERSION = '9.1.0';
   const cap = window.Capacitor;
   const isNative = !!(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform());
   // Without a bundler the native bridge exposes registered plugins on Capacitor.Plugins
@@ -897,6 +897,31 @@
   }
   let coreShareWhatsApp = () => {};
 
+  /* ------------------------------------------------------------------ e-mail: PDF attached (an e-mail app chosen by the user) */
+  function emailText(d) {
+    const co = state.company;
+    return whatsAppText(d, true).replace(/\*/g, '').replace(/_([^_]+)_/g, '$1') + (co.email ? `\n${co.email}` : '');
+  }
+  async function emailPdf(id) {
+    const d = id ? state.invoices.find(x => x.id === id) : (previewDoc || collectDocFromForm());
+    if (!d || !d.num) return toast(t('Save the document first'), 'error');
+    const subject = `${{ INV: 'Tax Invoice', CRN: 'Credit Note', DBN: 'Debit Note', QUO: 'Quotation' }[d.docType] || 'Document'} ${d.num} — ${state.company.name}`;
+    if (!isNative || !Native || typeof Native.emailPdf !== 'function') {
+      // web: the e-mail program opens with the text; the PDF is attached by the user (browsers cannot attach files to mailto:)
+      window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(emailText(d))}`;
+      return toast(t('Attach the PDF (Print → Save as PDF) to the e-mail.'), 'info');
+    }
+    if (!(d.items || []).length) return toast('Add at least one item before sharing', 'error');
+    busy(t('Preparing PDF for e-mail…'));
+    try {
+      const label = d.docType === 'QUO' ? quoteLabel : 'ORIGINAL FOR RECIPIENT';
+      const r = await withRendered(d, [label], () => Native.emailPdf({ fileName: docFileName(d) + '.pdf', subject, text: emailText(d) }));
+      if (r && r.target === 'share-sheet') toast(t('No e-mail app found — choose an app to send the PDF.'), 'info');
+      PDFQ.add(d, 'pdf', docFileName(d) + '.pdf');
+    } catch (e) { toast(t('Could not prepare the e-mail') + ': ' + (e.message || e), 'error'); }
+    finally { busy(''); }
+  }
+
   /* ------------------------------------------------------------------ bulk export: all matching documents as PDFs in one ZIP */
   const BULK_TYPES = { INV: ['INV'], NOTES: ['CRN', 'DBN'], QUO: ['QUO'], ALL: ['INV', 'CRN', 'DBN', 'QUO'] };
   function bulkMatches(f) {
@@ -1047,7 +1072,7 @@
     about() { closeMore(); toast(`HGI Billing ${APP_VERSION} ${isNative ? '(Android)' : '(Web)'}`, 'info'); },
     enterDemo, exitDemo, undoRestore, runRowAction,
     restoreAndClose(ev) { const el = document.getElementById('onboarding'); ui().onboarded = true; if (el) el.remove(); importJSONBackup(ev); },
-    sharePdf, savePdf, flushMirror, renderPrefs, logout, bulkExport, bulkMatches, whatsAppPdf
+    sharePdf, savePdf, flushMirror, renderPrefs, logout, bulkExport, bulkMatches, whatsAppPdf, emailPdf, withRendered, docFileName
   };
 
   /* ------------------------------------------------------------------ hook into the core app */
@@ -1187,6 +1212,7 @@
     if (window.HGI_STUDIO) HGI_STUDIO.ready();
     if (window.HGI_SYNC) HGI_SYNC.start();       // automatic cloud sync + Settings → Account card
     if (window.HGI_GSTIN) HGI_GSTIN.install();   // GSTIN → buyer details from GST records
+    if (window.HGI_EDOC) HGI_EDOC.install();     // e-invoice (IRN) + e-way bill through the HGI server
     applyTheme();                                // system bar colours from the final page colour
     document.documentElement.classList.toggle('is-native', isNative);
     if ((isNative || window.HGI_ACCOUNT) && !loggedOut()) {

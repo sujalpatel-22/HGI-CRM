@@ -508,6 +508,16 @@
     return api('PUT', `/v1/files/pdf/${encodeURIComponent(docId)}`, Object.assign({ base64 }, info || {}), account.session);
   }
   async function listPdfs() { return api('GET', '/v1/files', undefined, account.session); }
+  /** e-invoice / e-way bill calls (the server holds the government API access; the app never sees a password back) */
+  async function edocApi(method, path, body) {
+    if (!active()) throw new ApiErr(t('E-invoice and e-way bill need your HGI cloud account (signed in).'), 0, 'not_signed_in');
+    return api(method, '/v1/edoc' + path, body, account.session);
+  }
+  async function refreshFeatures() {
+    if (!active()) return features;
+    try { const me = await api('GET', '/v1/me', undefined, account.session); features = Object.assign({ checked: true }, me.features || {}); renderCard(); } catch (e) { /* keep the last answer */ }
+    return features;
+  }
 
   async function wipeLocal(key) {
     [slotKey(key), slotKey(key) + '_before_restore', metaKey(key), 'hgi_sync_u_' + key].forEach(ls.del);
@@ -643,7 +653,7 @@
 
   window.HGI_SYNC = {
     gate, start, syncNow: () => { kick(0); }, signOut: signOutFlow, deleteAccount, reSignIn, fixClashes, reviewConflicts,
-    gstLookup, uploadPdf, listPdfs, features: () => features,
+    gstLookup, uploadPdf, listPdfs, edocApi, refreshFeatures, features: () => features,
     active, status: () => ({ status, error: lastErr, account: account && { key: account.key, email: account.email }, sync: account ? readMeta(account.key) : null, pending: account && typeof state !== 'undefined' ? pendingCount() : 0, clashes: clashes().map(x => x.d.num), config: { auth: config.auth } }),
     renderCard, _syncNow: syncNow
   };

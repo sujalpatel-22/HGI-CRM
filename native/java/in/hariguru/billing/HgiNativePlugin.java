@@ -72,6 +72,7 @@ import com.getcapacitor.JSArray;
  *  - writeState() / readState(): durable copy of the app data in private app storage
  *  - pdfToCache() / clearCacheDir() / zipAndDeliver(): bulk export — each document rendered to a PDF, all zipped into one file
  *  - shareToWhatsApp(): renders the current document to PDF and hands PDF + message to WhatsApp (share sheet if WhatsApp is missing)
+ *  - emailPdf():   the same PDF to an e-mail app (subject + text), share sheet if no e-mail app is installed
  *  - getConfig():  public cloud-sync settings of this build (sync service URL, OAuth web client ID) — no secrets
  *  - googleSignIn() / googleSignOut(): "Sign in with Google" (Android Credential Manager) → Google ID token,
  *                  which the app exchanges for its own session at the HGI sync service
@@ -482,6 +483,38 @@ public class HgiNativePlugin extends Plugin {
         if (phone != null && phone.length() >= 10) send.putExtra("jid", phone + "@s.whatsapp.net");
         send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         return send;
+    }
+
+    /* ------------------------------------------------------------------ e-mail: PDF attached, e-mail apps only */
+    @PluginMethod
+    public void emailPdf(PluginCall call) {
+        final String fileName = call.getString("fileName", "Invoice.pdf");
+        final String subject = call.getString("subject", "Invoice");
+        final String text = call.getString("text", "");
+        final String to = call.getString("to", "");
+        renderPdf(call, fileName, f -> {
+            try {
+                Uri uri = providerUri(f);
+                JSObject r = new JSObject();
+                Intent send = new Intent(Intent.ACTION_SEND);
+                send.setType("application/pdf");
+                send.putExtra(Intent.EXTRA_STREAM, uri);
+                send.putExtra(Intent.EXTRA_SUBJECT, subject);
+                if (!text.isEmpty()) send.putExtra(Intent.EXTRA_TEXT, text);
+                if (!to.isEmpty()) send.putExtra(Intent.EXTRA_EMAIL, new String[] { to });
+                send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                Intent mailto = new Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:"));
+                if (mailto.resolveActivity(getContext().getPackageManager()) == null) {
+                    shareUri(uri, "application/pdf", text, subject);
+                    r.put("target", "share-sheet"); call.resolve(r); return;
+                }
+                send.setSelector(mailto);                       // only e-mail apps are offered
+                Intent chooser = Intent.createChooser(send, "Send by e-mail");
+                chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                getActivity().startActivity(chooser);
+                r.put("target", "email"); call.resolve(r);
+            } catch (Exception e) { call.reject("E-mail failed: " + e.getMessage(), e); }
+        });
     }
 
     /* ------------------------------------------------------------------ read a generated file (for the cloud PDF copy) */

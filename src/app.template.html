@@ -388,7 +388,19 @@
             </div>
 
             <details id="edoc-block" class="mb-4 border rounded">
-              <summary class="cursor-pointer px-4 py-2 text-xs font-bold uppercase text-slate-600 bg-slate-50"><i class="fa-solid fa-qrcode mr-1"></i> E-Way Bill & E-Invoice (IRN) details <span id="edoc-flag" class="ml-2 normal-case font-semibold"></span></summary>
+              <summary class="cursor-pointer px-4 py-2 text-xs font-bold uppercase text-slate-600 bg-slate-50"><i class="fa-solid fa-qrcode mr-1"></i> E-Invoice (IRN) &amp; E-Way Bill <span id="edoc-flag" class="ml-2 normal-case font-semibold"></span></summary>
+              <div id="edoc-panel" class="px-4 pt-3"></div>
+              <div class="px-4 pt-3"><div class="text-[11px] font-bold uppercase text-slate-500">E-way bill transport (Part-B)</div></div>
+              <div class="grid grid-cols-2 md:grid-cols-6 gap-3 px-4 pt-2" id="edoc-transport">
+                <div><label class="field-label">Mode</label><select id="inv-ewb-mode" class="inp"><option value="1">Road</option><option value="2">Rail</option><option value="3">Air</option><option value="4">Ship</option></select></div>
+                <div><label class="field-label">Vehicle No.</label><input type="text" id="inv-ewb-veh" maxlength="15" class="inp uppercase" placeholder="GJ05AB1234"></div>
+                <div><label class="field-label">Vehicle Type</label><select id="inv-ewb-vtype" class="inp"><option value="R">Regular</option><option value="O">Over-dimensional</option></select></div>
+                <div><label class="field-label">Distance (km)</label><input type="number" min="0" max="4000" id="inv-ewb-dist" class="inp" placeholder="0 = auto (PIN)"></div>
+                <div class="md:col-span-2"><label class="field-label">Transporter ID (GSTIN / TRANSIN)</label><input type="text" id="inv-ewb-transid" maxlength="15" class="inp uppercase" placeholder="optional"></div>
+                <div><label class="field-label">Transport Doc No.</label><input type="text" id="inv-ewb-tdoc" maxlength="15" class="inp" placeholder="LR / RR / AWB"></div>
+                <div><label class="field-label">Transport Doc Date</label><input type="date" id="inv-ewb-tdocdate" class="inp"></div>
+              </div>
+              <div class="px-4 pt-3"><div class="text-[11px] font-bold uppercase text-slate-500">Recorded numbers <span class="normal-case font-normal">(filled automatically after generation; type them only for documents made on the government portal)</span></div></div>
               <div class="grid grid-cols-2 md:grid-cols-5 gap-4 p-4">
                 <div><label class="field-label">E-Way Bill No.</label><input type="text" id="inv-ewb-no" maxlength="12" class="inp" placeholder="12 digits"></div>
                 <div><label class="field-label">E-Way Bill Date</label><input type="date" id="inv-ewb-date" class="inp"></div>
@@ -720,6 +732,7 @@
         <div class="flex flex-wrap gap-2">
           <button onclick="saveCurrentInvoice()" class="bg-emerald-600 text-white px-4 py-2 rounded text-sm font-semibold hover:bg-emerald-700"><i class="fa-solid fa-floppy-disk mr-1"></i> Save</button>
           <button onclick="shareWhatsApp()" class="bg-green-500 text-white px-4 py-2 rounded text-sm font-semibold hover:bg-green-600"><i class="fa-brands fa-whatsapp mr-1"></i> WhatsApp</button>
+          <button onclick="HGI_M.emailPdf()" id="btn-email-pdf" class="bg-sky-600 text-white px-4 py-2 rounded text-sm font-semibold hover:bg-sky-700"><i class="fa-solid fa-envelope mr-1"></i> Email</button>
           <button onclick="triggerPrint()" class="bg-slate-900 text-white px-5 py-2 rounded text-sm font-semibold hover:bg-black"><i class="fa-solid fa-print mr-1"></i> Print / Save PDF</button>
         </div>
       </div>
@@ -1697,6 +1710,8 @@
         transport: v('inv-transport'), lr: v('inv-lr').toUpperCase(), deliveryTerms: v('inv-delivery-terms'),
         ewbNo: v('inv-ewb-no'), ewbDate: $('inv-ewb-date').value,
         irn: v('inv-irn'), ackNo: v('inv-ack-no'), ackDate: $('inv-ack-date').value, signedQr: v('inv-signed-qr'),
+        ewbTransport: { transMode: $('inv-ewb-mode').value || '1', vehicleNo: v('inv-ewb-veh').toUpperCase().replace(/[^A-Z0-9]/g, ''), vehicleType: $('inv-ewb-vtype').value || 'R',
+          distance: parseInt($('inv-ewb-dist').value, 10) || 0, transId: v('inv-ewb-transid').toUpperCase(), transDocNo: v('inv-ewb-tdoc'), transDocDate: $('inv-ewb-tdocdate').value },
         buyerName: v('inv-buyer-name'), buyerGstin: v('inv-buyer-gstin').toUpperCase(), buyerPhone: v('inv-buyer-phone'),
         buyerAddress: $('inv-buyer-address').value.trim(), buyerState: v('inv-buyer-state'),
         buyerStateCode: normalizeStateCode(v('inv-buyer-state-code')), buyerPin: v('inv-buyer-pin'),
@@ -1723,6 +1738,9 @@
       set('inv-po-num', d.poNum); set('inv-po-date', d.poDate); set('inv-transport', d.transport); set('inv-lr', d.lr);
       set('inv-delivery-terms', d.deliveryTerms); set('inv-ewb-no', d.ewbNo); set('inv-ewb-date', d.ewbDate);
       set('inv-irn', d.irn); set('inv-ack-no', d.ackNo); set('inv-ack-date', d.ackDate); set('inv-signed-qr', d.signedQr);
+      const et = d.ewbTransport || {};
+      $('inv-ewb-mode').value = et.transMode || '1'; set('inv-ewb-veh', et.vehicleNo); $('inv-ewb-vtype').value = et.vehicleType === 'O' ? 'O' : 'R';
+      set('inv-ewb-dist', et.distance || ''); set('inv-ewb-transid', et.transId); set('inv-ewb-tdoc', et.transDocNo); set('inv-ewb-tdocdate', et.transDocDate);
       fillPartyFromDoc(d);
       $('inv-customer-select').value = '';
       set('inv-discount', d.discount || 0); set('inv-pf-charges', d.pfCharges || 0); set('inv-other-charges', d.otherCharges || 0);
@@ -1789,7 +1807,7 @@
       h += row('Grand Total:', money(c.grandTotal), 'font-bold text-lg border-t pt-2 text-slate-900');
       $('form-summary').innerHTML = h;
 
-      $('edoc-flag').innerHTML = (d.ewbNo || d.irn) ? '<span class="text-emerald-600">✓ filled</span>' : '';
+      $('edoc-flag').innerHTML = window.HGI_EDOC ? HGI_EDOC.flag(currentEditId ? state.invoices.find(x => x.id === currentEditId) : null, d) : ((d.ewbNo || d.irn) ? '<span class="text-emerald-600">✓ filled</span>' : '');
       renderChecks(runChecks(d));
     }
 
@@ -2074,9 +2092,11 @@
       m.push(['Place of Supply', stateLabel(d.pos)]);
       m.push(['Reverse Charge', d.reverseCharge ? 'Yes' : 'No']);
       if (d.poNum) m.push(['PO No. / Date', `${d.poNum}${d.poDate ? ' dt. ' + fmtDate(d.poDate) : ''}`]);
-      if (d.ewbNo) m.push(['E-Way Bill', `${d.ewbNo}${d.ewbDate ? ' dt. ' + fmtDate(d.ewbDate) : ''}`]);
+      const ew = d.edoc && d.edoc.ewb;
+      if (d.ewbNo) m.push(['E-Way Bill', `${d.ewbNo}${d.ewbDate ? ' dt. ' + fmtDate(d.ewbDate) : ''}${ew && ew.status === 'CNL' ? ' (CANCELLED)' : ew && ew.validUpto ? ' · valid till ' + ew.validUpto : ''}`]);
       if (d.transport) m.push(['Transporter', d.transport]);
       if (d.lr) m.push(['Vehicle / L.R.', d.lr]);
+      else if (d.ewbTransport && d.ewbTransport.vehicleNo && d.ewbNo) m.push(['Vehicle No.', d.ewbTransport.vehicleNo]);
       if (d.deliveryTerms) m.push(['Delivery Terms', d.deliveryTerms]);
       return m;
     }
@@ -2108,7 +2128,7 @@
       const supplierLine = `GSTIN: <strong>${esc(co.gstin)}</strong>${co.pan ? ` | PAN: ${esc(co.pan)}` : ''} | State: ${esc(co.state || GST_STATES[co.stateCode] || '')} (${esc(co.stateCode)})`;
       const contactLine = [co.phone && 'Ph: ' + esc(co.phone), co.email && esc(co.email)].filter(Boolean).join(' | ');
       const rcmNote = d.reverseCharge ? `<div class="font-bold text-[10px]">Tax is payable on reverse charge basis by the recipient (CGST ${amt(c.cgst)} / SGST ${amt(c.sgst)} / IGST ${amt(c.igst)}).</div>` : '';
-      const irnBlock = d.irn ? `<div class="text-[9px] break-all"><strong>IRN:</strong> ${esc(d.irn)}${d.ackNo ? ` &nbsp; <strong>Ack No:</strong> ${esc(d.ackNo)}` : ''}${d.ackDate ? ` &nbsp; <strong>Ack Dt:</strong> ${fmtDate(d.ackDate)}` : ''}</div>` : '';
+      const irnBlock = d.irn ? `<div class="text-[9px] break-all"><strong>IRN:</strong> ${esc(d.irn)}${d.ackNo ? ` &nbsp; <strong>Ack No:</strong> ${esc(d.ackNo)}` : ''}${d.edoc && d.edoc.irn && d.edoc.irn.ackDt ? ` &nbsp; <strong>Ack Dt:</strong> ${esc(d.edoc.irn.ackDt)}` : d.ackDate ? ` &nbsp; <strong>Ack Dt:</strong> ${fmtDate(d.ackDate)}` : ''}${d.edoc && d.edoc.irn && d.edoc.irn.status === 'CNL' ? ' &nbsp; <strong>IRN CANCELLED</strong>' : ''}</div>` : '';
       const bank = `<div><strong>Bank:</strong> ${esc(co.bankName)}</div><div><strong>A/c No:</strong> ${esc(co.bankAcc)}</div><div><strong>IFSC:</strong> ${esc(co.bankIfsc)}</div><div><strong>Branch:</strong> ${esc(co.bankBranch)}</div>${co.upiId ? `<div><strong>UPI:</strong> ${esc(co.upiId)}</div>` : ''}`;
 
       if (style === 'classic') {
@@ -2238,7 +2258,10 @@
     }
     function renderPreviewPages(labels) {
       const style = $('invoice-style-select').value;
-      $('invoice-preview-container').innerHTML = labels.map(l => renderDocPage(previewDoc, style, l)).join('');
+      $('invoice-preview-container').innerHTML = labels.map(l => l === 'E-WAY BILL' && window.HGI_EDOC ? HGI_EDOC.ewbPage(previewDoc) : renderDocPage(previewDoc, style, l)).join('');
+      const edocEnv = previewDoc && previewDoc.edoc && previewDoc.edoc.env;
+      if (edocEnv && edocEnv !== 'production') $('invoice-preview-container').querySelectorAll('.a4-page').forEach(p =>
+        p.insertAdjacentHTML('beforeend', `<div class="demo-watermark" aria-hidden="true"><span>${edocEnv === 'test' ? 'TEST' : 'SANDBOX'} IRN / E-WAY BILL — NOT A VALID TAX INVOICE</span></div>`));
       if (DEMO_MODE) $('invoice-preview-container').querySelectorAll('.a4-page').forEach(p =>
         p.insertAdjacentHTML('beforeend', '<div class="demo-watermark" aria-hidden="true"><span>DEMO — NOT A VALID TAX INVOICE</span></div>'));
       fitInvoicePages();
@@ -2310,9 +2333,16 @@
 
       const old = currentEditId ? state.invoices.find(x => x.id === currentEditId) : null;
       // An e-invoice registered on the IRP cannot be amended: only non-tax details (transport, PO, terms…) may change
-      if (old && old.irn && !old.cancelled) {
+      if (old && old.edoc && old.edoc.irn && old.edoc.irn.status === 'CNL')
+        return toast(`The IRN of ${old.num} was cancelled — this number can never be reported again. Create a new invoice with a new number.`, 'error');
+      const liveEwb = !!(old && old.edoc && old.edoc.ewb && old.edoc.ewb.status === 'ACT');
+      if (old && (old.irn || liveEwb) && !old.cancelled) {
         const sig = x => JSON.stringify([x.docType, x.num, x.date, (x.buyerGstin || '').toUpperCase(), x.supplyType, x.pos, !!x.reverseCharge,
           (x.items || []).map(i => [i.desc, i.hsn, Number(i.gst), Number(i.qty), Number(i.rate), normUQC(i.unit) || i.unit]), Number(x.discount) || 0, Number(x.pfCharges) || 0, Number(x.otherCharges) || 0]);
+        if ((sig(old) !== sig(d) || (d.irn && d.irn !== old.irn)) && !old.irn)
+          return toast(`${old.num} has an active e-way bill — its number, date, buyer, items and amounts cannot be changed. Cancel the e-way bill first (within 24 hours) in the E-Invoice & E-Way Bill section.`, 'error');
+        if (old.edoc && ((old.edoc.ewb && old.edoc.ewb.ewbNo && d.ewbNo !== old.ewbNo) || (old.edoc.irn && d.ackNo !== old.ackNo)))
+          return toast(`${old.num}: the IRN / e-way bill numbers come from the government system and cannot be edited.`, 'error');
         if (sig(old) !== sig(d) || (d.irn && d.irn !== old.irn))
           return toast(`${old.num} has an IRN — its number, date, buyer GSTIN, items and amounts cannot be changed. Issue a credit or debit note, or cancel the IRN on the portal (within 24 hours) and the document here.`, 'error');
       }
@@ -2421,7 +2451,7 @@
       const notes = state.invoices.filter(n => n.refId === d.id && n.id !== d.id);
       if (notes.length) return toast(`${d.num} has ${notes.map(n => n.num).join(', ')} issued against it — it cannot be deleted. Use Cancel instead.`, 'error');
       if ((d.payments || []).length) return toast(`${d.num} has ${d.payments.length} receipt(s) recorded — delete the receipts first, or use Cancel.`, 'error');
-      if (d.irn) return toast(`${d.num} has an IRN — it cannot be deleted. Cancel the IRN on the portal and use Cancel here.`, 'error');
+      if (d.irn || (d.edoc && (d.edoc.irn || d.edoc.ewb))) return toast(`${d.num} was reported to the GST system (IRN / e-way bill) — it cannot be deleted. Cancel it instead.`, 'error');
       const later = state.invoices.some(x => x.docType === d.docType && fyOf(x.date) === fyOf(d.date) && seqOf(x) > seqOf(d));
       if (later && !confirm(`Deleting ${d.num} will leave a gap in your number series (not allowed under Rule 46). "Cancel" is the compliant option.\n\nDelete permanently anyway?`)) return;
       if (!later && !confirm(`Permanently delete ${d.num}? This cannot be undone.`)) return;
@@ -2495,6 +2525,9 @@
       let msg = `Dear ${d.buyerName || 'Sir/Madam'},\n\nGreetings from *${co.name}*.\n\n`;
       msg += attached ? `Please find attached our *${kind} No. ${d.num}* dated ${fmtDate(d.date)}.\n\n` : `Here are the details of our *${kind} No. ${d.num}* dated ${fmtDate(d.date)}.\n\n`;
       msg += `*Amount:* ${money(d.grandTotal)}\n`;
+      const ed = d.edoc || {}, testEnv = ed.env && ed.env !== 'production' ? ' (TEST — not valid)' : '';
+      if (d.irn && !(ed.irn && ed.irn.status === 'CNL')) msg += `*IRN:* ${d.irn}${d.ackNo ? `\n*Ack No.:* ${d.ackNo}` : ''}${testEnv}\n`;
+      if (d.ewbNo && !(ed.ewb && ed.ewb.status === 'CNL')) msg += `*E-Way Bill:* ${d.ewbNo}${ed.ewb && ed.ewb.validUpto ? ` (valid till ${ed.ewb.validUpto})` : ''}${testEnv}\n`;
       if (d.docType === 'CRN' || d.docType === 'DBN') msg += `*Against Invoice:* ${d.refNum}${d.noteReason ? ` (${d.noteReason})` : ''}\n`;
       else if (d.docType === 'QUO') msg += `*Valid till:* ${fmtDate(getDueDate(d))}\n`;
       else if (bal > 0) {
@@ -3228,5 +3261,6 @@
   <script src="studio.js"></script>
   <script src="picker.js"></script>
   <script src="gstin.js"></script>
+  <script src="edoc.js"></script>
 </body>
 </html>
