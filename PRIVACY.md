@@ -26,8 +26,20 @@ When you type a GSTIN for a buyer, the app can fetch that business's registratio
 address, registration status) from GST records. The GSTIN is sent through our server to our authorised GST data
 provider; nothing else about you or your buyers is sent. Results may be kept for up to 7 days to avoid repeat look-ups.
 
+## 3a. E-invoice (IRN) and e-way bill
+Only when you tap *Generate* (or check a status / cancel), the document's details — your business, the buyer and consignee,
+items, amounts and transport details — are sent through our server and our GST Suvidha Provider (GSP) to the government's
+e-invoice (IRP) and e-way bill systems, as the GST law requires. The answer (IRN, acknowledgement, signed QR code, e-way bill
+number and validity) is stored with the invoice in your account. The e-invoice / e-way bill API user name and password you
+enter are checked with the government system and kept only on our server, encrypted; they are never stored on the phone or
+shown again. You can remove them at any time in Settings; deleting your account removes them.
+
+## 3b. PIN codes
+State, state code and district are found from a PIN code using the India Post PIN directory stored inside the app. No PIN
+code is sent anywhere for this.
+
 ## 4. When data leaves the phone
-- Sync with your HGI cloud account and GSTIN look-ups, always over encrypted HTTPS.
+- Sync with your HGI cloud account, GSTIN look-ups and e-invoice / e-way bill requests you start, always over encrypted HTTPS.
 - When you choose to share a PDF, CSV or backup file (WhatsApp, e-mail, Drive …) or open a link (WhatsApp, UPI payment).
 
 The app contains no advertising or analytics SDKs. Android's own Google cloud backup of the app is switched off.

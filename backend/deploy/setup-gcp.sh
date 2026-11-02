@@ -28,5 +28,10 @@ echo
 echo "GST look-up (optional now, needed for auto-fetch): put your GST provider's request headers in a secret, e.g."
 echo "   echo -n '{\"x-api-key\":\"…\"}' | gcloud secrets create hgi-gst-headers --data-file=-"
 echo "(and hgi-gst-auth-headers if the provider has a token step). See docs/CLOUD-SETUP.md."
+step "E-invoice API-login encryption key (random 32 bytes; only for e-invoice / e-way bill)" "openssl rand -base64 32 | tr -d '\n' | gcloud secrets create hgi-edoc-cred-key --data-file=-"
+echo "E-invoice / e-way bill through your GSP (after the GSP contract — docs/EINVOICE-SETUP.md):"
+echo "   gcloud secrets create hgi-irp-client-secret --data-file=<file with the GSP client secret>"
+echo "   gcloud secrets create hgi-irp-public-key   --data-file=<NIC / GSP public key .pem>"
+echo "   (same for hgi-ewb-client-secret / hgi-ewb-public-key)"
 echo
 echo "Next: deploy the service with deploy/cloudrun.sh (FILES_BUCKET=$BUCKET)."

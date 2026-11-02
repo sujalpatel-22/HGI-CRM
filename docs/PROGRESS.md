@@ -128,3 +128,17 @@ The Android CI run for 8.0.1 passed, but the PDFs the emulators themselves produ
   had accepted), web 266, cloud e2e 38, v8.2 15, picker 68, Android 65/65 on API 30/33/35/36.
 - External setup still pending (owner): Google Cloud project + billing, OAuth clients, setup-gcp.sh, GST provider contract and
   credentials, deploy, GitHub variables, release key. See docs/CLOUD-SETUP.md.
+
+### v9.1.0 — e-invoice + e-way bill, proforma invoice, purchase orders, PIN code look-up (2 Nov 2026)
+- E-invoice (IRN) + e-way bill through the HGI server: NIC IRP / EWB clients (RSA + SEK + AES, rek/HMAC), one workflow
+  (IRN + EWB together, IRN only, EWB only / from IRN), Part-B and transporter updates, status refresh, cancellation (24 h,
+  EWB before IRN), per-document lease + duplicate-IRN (2150) recovery, server-side totals check, each business's API login
+  verified and stored encrypted (AES-256-GCM, Secret Manager key). Tested only against the NIC protocol simulator — no GSP
+  contract or NIC access yet (docs/EINVOICE-SETUP.md).
+- Proforma Invoice (PI/…), Purchase Order to supplier (PO/…, supplier master, our delivery address, supplier-state GST,
+  "received" → optional stock-in), Customer PO (SO/…, customer's PO no.) — own PDFs, WhatsApp / e-mail text, sync,
+  one-tap conversion of PI / customer PO / quotation to a GST invoice. None of them enter sales, GST returns or stock.
+- PIN code → state, state code, district per address block (India Post directory, 19,297 PINs, offline); shipping never
+  changes billing; GSTIN state wins over a billing PIN; PINs in two states → user chooses; address text checked against
+  PIN/state; buyer master keeps its own ship-to state; place of supply per Sec 10(1)(a)/(b) and 12(2) with the reason shown.
+- E-mail sharing of PDFs (Android: e-mail apps only, share sheet as fallback).

@@ -21,10 +21,12 @@ for daily use at HARIGURU INDUSTRIES, so it is designed for real day-to-day bill
 • English, हिन्दी and ગુજરાતી app interface, plus dark mode
 • Sign in with Google on any phone: buyers, products, invoices and payments sync automatically, also between several phones
 • Type a buyer's GSTIN to fill the name, address and registration status from GST records
+• Proforma invoices, purchase orders to suppliers and customer orders — convert to a GST invoice in one tap
+• Type a PIN code: state, state code and district are filled in (India Post directory, works offline)
 • Works offline: billing never waits for the internet, changes sync when you are back online
 • No ads. PIN lock. Optional backup file
 
-HGI Billing does not file returns or generate e-invoices / e-way bills on the government portal. Please verify the GST rate of each
+HGI Billing does not file GST returns. E-invoice (IRN) and e-way bill generation needs your own API login through HGI's GSP (Settings → E-Invoice & E-Way Bill). Please verify the GST rate of each
 product with your tax adviser.
 
 **Category:** Business · **Tags:** invoice, GST, billing, accounting · **Contact e-mail:** info@hariguru.com

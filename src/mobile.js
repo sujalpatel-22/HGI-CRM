@@ -183,9 +183,13 @@
     openSheet(`<div class="text-xs font-bold uppercase text-slate-500 mb-2 px-1">${t('New')}</div><div class="grid grid-cols-2 gap-2.5">
       ${tile('fa-file-invoice-dollar', t('Tax Invoice'), "HGI_M.newDoc('INV')")}
       ${tile('fa-file-signature', t('Quotation'), "HGI_M.newDoc('QUO')")}
+      ${tile('fa-file-invoice', t('Proforma Invoice'), "HGI_M.newDoc('PI')")}
+      ${tile('fa-cart-flatbed', t('Purchase Order (to supplier)'), "HGI_M.newDoc('PO')")}
+      ${tile('fa-clipboard-check', t('Customer PO (order received)'), "HGI_M.newDoc('CPO')")}
       ${tile('fa-rotate-left', t('Credit Note'), "HGI_M.newDoc('CRN')")}
       ${tile('fa-file-circle-plus', t('Debit Note'), "HGI_M.newDoc('DBN')")}
       ${tile('fa-user-plus', t('Add Buyer'), "HGI_M.close(); switchTab('customers'); openCustomerModal()")}
+      ${tile('fa-industry', t('Add Supplier'), "HGI_M.close(); switchTab('customers'); window.__newPartyType = 'supplier'; openCustomerModal()")}
       ${tile('fa-box-open', t('Add Product'), "HGI_M.close(); switchTab('items'); openItemModal()")}
     </div>`);
   }
@@ -695,7 +699,7 @@
   }
   // Documents: one row of filter chips with counts; the original selects stay the source of truth
   const DOC_CHIPS = [['All', '', ''], ['Unpaid', 'INV', 'Unpaid'], ['Overdue', 'INV', 'Overdue'], ['Partial', 'INV', 'Partial'], ['Paid', 'INV', 'Paid'],
-    ['Quotations', 'QUO', ''], ['Credit notes', 'CRN', ''], ['Debit notes', 'DBN', ''], ['Cancelled', '', 'Cancelled']];
+    ['Quotations', 'QUO', ''], ['Proforma', 'PI', ''], ['Customer POs', 'CPO', ''], ['Purchase orders', 'PO', ''], ['Credit notes', 'CRN', ''], ['Debit notes', 'DBN', ''], ['Cancelled', '', 'Cancelled']];
   function buildDocChips() {
     const search = document.getElementById('inv-search'); if (!search || document.getElementById('doc-chips')) return;
     const bar = document.createElement('div'); bar.id = 'doc-chips'; bar.className = 'chips no-print'; bar.setAttribute('role', 'toolbar');
@@ -725,7 +729,7 @@
   }
 
   // Document type as a segmented control (the select stays as the source of truth for the core logic)
-  const DOC_SEG = [['INV', 'Invoice'], ['QUO', 'Quotation'], ['CRN', 'Credit note'], ['DBN', 'Debit note']];
+  const DOC_SEG = [['INV', 'Invoice'], ['QUO', 'Quotation'], ['PI', 'Proforma'], ['CPO', 'Customer PO'], ['PO', 'Purchase order'], ['CRN', 'Credit note'], ['DBN', 'Debit note']];
   function buildDocTypeSeg() {
     const sel = document.getElementById('inv-doc-type'); if (!sel || document.getElementById('doc-seg')) return;
     const seg = document.createElement('div'); seg.id = 'doc-seg'; seg.className = 'seg'; seg.setAttribute('role', 'tablist');
@@ -748,7 +752,7 @@
 
   // Phones: a list row is one tap target; its actions open in a labelled bottom sheet instead of 9 tiny icons.
   const ACTION_NAMES = { 'fa-pen-to-square': 'Edit', 'fa-trash': 'Delete', 'fa-eye': 'View / Print', 'fa-copy': 'Duplicate', 'fa-ban': 'Cancel document',
-    'fa-indian-rupee-sign': 'Record receipt', 'fa-whatsapp': 'Share on WhatsApp', 'fa-file-export': 'Convert to invoice' };
+    'fa-indian-rupee-sign': 'Record receipt', 'fa-whatsapp': 'Share on WhatsApp', 'fa-file-export': 'Convert to GST invoice', 'fa-box-open': 'Goods received' };
   function actionLabel(btn) {
     const ic = iconOf(btn); const cls = faOf(ic).find(c => ACTION_NAMES[c]);
     const title = btn.getAttribute('title');
@@ -851,6 +855,7 @@
   /* ------------------------------------------------------------------ render any document for PDF output, then put the screen back */
   const nextPaint = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 60)));
   const quoteLabel = 'THIS IS A QUOTATION — NOT A TAX INVOICE';
+  const firstLabel = d => (typeof copyLabelFor === 'function' ? copyLabelFor(d) : d.docType === 'QUO' ? quoteLabel : 'ORIGINAL FOR RECIPIENT');
   async function withRendered(doc, labels, fn) {
     const prev = previewDoc, sec = document.getElementById('preview-section'), wasHidden = sec.classList.contains('hidden');
     previewDoc = doc; sec.classList.remove('hidden');
@@ -888,7 +893,7 @@
     if (!(d.items || []).length) return toast('Add at least one item before sharing', 'error');
     busy(t('Preparing PDF for WhatsApp…'));
     try {
-      const label = d.docType === 'QUO' ? quoteLabel : 'ORIGINAL FOR RECIPIENT';
+      const label = firstLabel(d);
       const r = await withRendered(d, [label], () => Native.shareToWhatsApp({ fileName: docFileName(d) + '.pdf', text: whatsAppText(d, true), phone: whatsAppPhone(d), title: `${DOC_TYPES[d.docType].short} ${d.num}` }));
       if (r && r.target === 'share-sheet') toast(t('WhatsApp is not installed — choose an app to send the PDF.'), 'info');
       PDFQ.add(d, 'pdf', docFileName(d) + '.pdf');
@@ -905,7 +910,7 @@
   async function emailPdf(id) {
     const d = id ? state.invoices.find(x => x.id === id) : (previewDoc || collectDocFromForm());
     if (!d || !d.num) return toast(t('Save the document first'), 'error');
-    const subject = `${{ INV: 'Tax Invoice', CRN: 'Credit Note', DBN: 'Debit Note', QUO: 'Quotation' }[d.docType] || 'Document'} ${d.num} — ${state.company.name}`;
+    const subject = `${{ INV: 'Tax Invoice', CRN: 'Credit Note', DBN: 'Debit Note', QUO: 'Quotation', PI: 'Proforma Invoice', CPO: 'Order Confirmation', PO: 'Purchase Order' }[d.docType] || 'Document'} ${d.num} — ${state.company.name}`;
     if (!isNative || !Native || typeof Native.emailPdf !== 'function') {
       // web: the e-mail program opens with the text; the PDF is attached by the user (browsers cannot attach files to mailto:)
       window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(emailText(d))}`;
@@ -914,7 +919,7 @@
     if (!(d.items || []).length) return toast('Add at least one item before sharing', 'error');
     busy(t('Preparing PDF for e-mail…'));
     try {
-      const label = d.docType === 'QUO' ? quoteLabel : 'ORIGINAL FOR RECIPIENT';
+      const label = firstLabel(d);
       const r = await withRendered(d, [label], () => Native.emailPdf({ fileName: docFileName(d) + '.pdf', subject, text: emailText(d) }));
       if (r && r.target === 'share-sheet') toast(t('No e-mail app found — choose an app to send the PDF.'), 'info');
       PDFQ.add(d, 'pdf', docFileName(d) + '.pdf');
@@ -923,7 +928,7 @@
   }
 
   /* ------------------------------------------------------------------ bulk export: all matching documents as PDFs in one ZIP */
-  const BULK_TYPES = { INV: ['INV'], NOTES: ['CRN', 'DBN'], QUO: ['QUO'], ALL: ['INV', 'CRN', 'DBN', 'QUO'] };
+  const BULK_TYPES = { INV: ['INV'], NOTES: ['CRN', 'DBN'], QUO: ['QUO'], PI: ['PI'], PO: ['PO'], CPO: ['CPO'], ALL: ['INV', 'CRN', 'DBN', 'QUO', 'PI', 'CPO', 'PO'] };
   function bulkMatches(f) {
     const types = BULK_TYPES[f.type] || BULK_TYPES.INV;
     const buyer = String(f.buyer || '').trim().toLowerCase();
@@ -942,7 +947,7 @@
     const today = todayISO(), fy = fyStartISO(today);
     const buyers = [...new Set(state.invoices.map(d => String(d.buyerName || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
     const body = `<div class="bx-grid">
-        <label>${t('Documents')}<select id="bx-type" class="inp"><option value="INV">${t('Tax invoices')}</option><option value="NOTES">${t('Credit & debit notes')}</option><option value="QUO">${t('Quotations')}</option><option value="ALL">${t('All documents')}</option></select></label>
+        <label>${t('Documents')}<select id="bx-type" class="inp"><option value="INV">${t('Tax invoices')}</option><option value="NOTES">${t('Credit & debit notes')}</option><option value="QUO">${t('Quotations')}</option><option value="PI">${t('Proforma invoices')}</option><option value="CPO">${t('Customer POs')}</option><option value="PO">${t('Purchase orders')}</option><option value="ALL">${t('All documents')}</option></select></label>
         <div class="bx-row"><label>${t('From')}<input id="bx-from" type="date" class="inp" value="${fy}"></label><label>${t('To')}<input id="bx-to" type="date" class="inp" value="${today}"></label></div>
         <label>${t('Buyer')}<select id="bx-buyer" class="inp"><option value="">${t('All buyers')}</option>${buyers.map(b => `<option value="${b.replace(/"/g, '&quot;').replace(/</g, '&lt;')}">${b.replace(/</g, '&lt;')}</option>`).join('')}</select></label>
         <label class="acct-check"><input type="checkbox" id="bx-copies"> ${t('Include duplicate & triplicate copies')}</label>
@@ -979,7 +984,7 @@
         busy(`${t('Creating PDF')} ${i + 1} ${t('of')} ${docs.length} — ${d.num}`); progress(i / docs.length);
         let name = docFileName(d), k = 2; while (used.has(name.toLowerCase())) name = docFileName(d) + '_' + k++;
         used.add(name.toLowerCase()); name += '.pdf';
-        const labels = d.docType === 'QUO' ? [quoteLabel] : f.copies ? allCopies : ['ORIGINAL FOR RECIPIENT'];
+        const labels = ['QUO', 'PI', 'CPO', 'PO'].includes(d.docType) ? [firstLabel(d)] : f.copies ? allCopies : ['ORIGINAL FOR RECIPIENT'];
         try {
           await withRendered(d, labels, () => Native.pdfToCache({ fileName: name, dir: 'bulk' }));
           names.push(name);
@@ -990,7 +995,7 @@
       if (!names.length) { toast(t('No PDFs could be created'), 'error'); return; }
       busy(t('Packing ZIP…')); progress(1);
       const tag = `${f.from || 'start'}_to_${f.to || todayISO()}${f.buyer ? '_' + String(f.buyer).replace(/[^\w]+/g, '_').slice(0, 30) : ''}`;
-      const zipName = `${DEMO_MODE ? 'DEMO_' : ''}HGI_${{ INV: 'Invoices', NOTES: 'Notes', QUO: 'Quotations', ALL: 'Documents' }[f.type] || 'Invoices'}_${tag}.zip`;
+      const zipName = `${DEMO_MODE ? 'DEMO_' : ''}HGI_${{ INV: 'Invoices', NOTES: 'Notes', QUO: 'Quotations', PI: 'Proforma_Invoices', PO: 'Purchase_Orders', CPO: 'Customer_POs', ALL: 'Documents' }[f.type] || 'Invoices'}_${tag}.zip`;
       const r = await Native.zipAndDeliver({ dir: 'bulk', zipName, names, action, extra: [{ name: 'index.csv', text: '﻿' + rows.map(r => r.map(csvCell).join(',')).join('\r\n') + '\r\n' }] });
       window.__lastBulk = { count: r.count, name: r.name, location: r.location, failed };
       toast(`${r.count} PDF${r.count === 1 ? '' : 's'} ${t('exported')}${r.location && r.location !== 'share sheet' ? ': ' + r.location : ''}${failed ? ` — ${failed} ${t('failed')}` : ''}`, failed ? 'warn' : 'success');
@@ -1045,7 +1050,7 @@
           busy(`${t('Uploading PDF')} ${i + 1} ${t('of')} ${docs.length} — ${d.num}`); progress(i / docs.length);
           const name = d.id.replace(/[^\w.-]/g, '_') + '.pdf';
           try {
-            await withRendered(d, [d.docType === 'QUO' ? quoteLabel : 'ORIGINAL FOR RECIPIENT'], () => Native.pdfToCache({ fileName: name, dir: 'cloud' }));
+            await withRendered(d, [firstLabel(d)], () => Native.pdfToCache({ fileName: name, dir: 'cloud' }));
             const f = await Native.readCacheFile({ dir: 'cloud', name });
             await HGI_SYNC.uploadPdf(d.id, f.base64, { num: d.num, docType: d.docType, hash: pdfStamp(d) });
             this.mark(d.id, pdfStamp(d)); ok++;
@@ -1213,6 +1218,7 @@
     if (window.HGI_SYNC) HGI_SYNC.start();       // automatic cloud sync + Settings → Account card
     if (window.HGI_GSTIN) HGI_GSTIN.install();   // GSTIN → buyer details from GST records
     if (window.HGI_EDOC) HGI_EDOC.install();     // e-invoice (IRN) + e-way bill through the HGI server
+    if (window.HGI_PIN) HGI_PIN.install();       // PIN code → state / state code / district (India Post directory, offline)
     applyTheme();                                // system bar colours from the final page colour
     document.documentElement.classList.toggle('is-native', isNative);
     if ((isNative || window.HGI_ACCOUNT) && !loggedOut()) {

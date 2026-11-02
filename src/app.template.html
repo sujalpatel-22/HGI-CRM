@@ -298,6 +298,8 @@
             <div class="flex gap-2">
               <button type="button" onclick="newDocument('CRN')" class="bg-slate-100 text-slate-700 px-3 py-1 rounded text-xs font-bold hover:bg-slate-200">+ Credit Note</button>
               <button type="button" onclick="newDocument('DBN')" class="bg-slate-100 text-slate-700 px-3 py-1 rounded text-xs font-bold hover:bg-slate-200">+ Debit Note</button>
+              <button type="button" onclick="newDocument('PI')" class="bg-amber-50 text-amber-800 px-3 py-1 rounded text-xs font-bold hover:bg-amber-100">+ Proforma</button>
+              <button type="button" onclick="newDocument('PO')" class="bg-indigo-50 text-indigo-800 px-3 py-1 rounded text-xs font-bold hover:bg-indigo-100">+ Purchase Order</button>
               <button type="button" onclick="newDocument(currentDocType())" class="bg-slate-200 text-slate-700 px-3 py-1 rounded text-xs font-bold hover:bg-slate-300"><i class="fa-solid fa-rotate-right mr-1"></i> Clear Form</button>
             </div>
           </div>
@@ -311,6 +313,9 @@
                   <option value="CRN">Credit Note</option>
                   <option value="DBN">Debit Note</option>
                   <option value="QUO">Quotation / Estimate</option>
+                  <option value="PI">Proforma Invoice</option>
+                  <option value="CPO">Purchase Order — from customer</option>
+                  <option value="PO">Purchase Order — to supplier</option>
                 </select>
               </div>
               <div>
@@ -322,7 +327,7 @@
                 <input type="date" id="inv-date" required onchange="updateAutoInvoiceNumber(); updateDueDateLabel();" class="inp">
               </div>
               <div>
-                <label class="field-label text-orange-700"><i class="fa-solid fa-user-check mr-1"></i> Saved Buyer</label>
+                <label class="field-label text-orange-700" id="saved-party-label"><i class="fa-solid fa-user-check mr-1"></i> Saved Buyer</label>
                 <select id="inv-customer-select" onchange="populateCustomerData()" class="inp bg-orange-50 font-semibold border-orange-200">
                   <option value="">-- Choose Saved Buyer --</option>
                 </select>
@@ -366,6 +371,7 @@
               <div>
                 <label class="field-label">Place of Supply</label>
                 <select id="inv-pos" onchange="posManual = true; refreshForm();" class="inp"></select>
+                <p id="pos-reason" class="text-[11px] mt-1 text-slate-500"></p>
                 <p class="text-[11px] mt-1"><span id="pos-hint" class="text-slate-500"></span> <button type="button" id="pos-auto-btn" onclick="posManual=false; autoPlaceOfSupply(); refreshForm();" class="hidden text-orange-600 font-semibold underline">reset to auto</button></p>
               </div>
               <div>
@@ -380,8 +386,8 @@
             </div>
 
             <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
-              <div><label class="field-label">PO Number</label><input type="text" id="inv-po-num" class="inp" placeholder="PO-123"></div>
-              <div><label class="field-label">PO Date</label><input type="date" id="inv-po-date" class="inp"></div>
+              <div><label class="field-label" id="po-num-label">PO Number</label><input type="text" id="inv-po-num" class="inp" placeholder="PO-123"></div>
+              <div><label class="field-label" id="po-date-label">PO Date</label><input type="date" id="inv-po-date" class="inp"></div>
               <div><label class="field-label">Transporter</label><input type="text" id="inv-transport" class="inp" placeholder="VRL Logistics"></div>
               <div><label class="field-label">Vehicle / L.R. No.</label><input type="text" id="inv-lr" class="inp uppercase" placeholder="GJ05AB1234"></div>
               <div><label class="field-label">Delivery Terms</label><input type="text" id="inv-delivery-terms" class="inp" placeholder="Ex-Factory"></div>
@@ -414,8 +420,8 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
               <div class="border p-4 rounded bg-slate-50/50 space-y-3">
                 <div class="flex justify-between items-center border-b pb-1">
-                  <h3 class="text-xs font-bold uppercase tracking-wider text-orange-700"><i class="fa-solid fa-file-invoice mr-1"></i> Billed To (Recipient)</h3>
-                  <button type="button" onclick="saveBuyerFromInvoice()" class="text-[11px] text-orange-700 font-bold hover:underline"><i class="fa-solid fa-user-plus mr-1"></i>Save to Buyer Master</button>
+                  <h3 class="text-xs font-bold uppercase tracking-wider text-orange-700" id="party-a-title"><i class="fa-solid fa-file-invoice mr-1"></i> Billed To (Recipient)</h3>
+                  <button type="button" onclick="saveBuyerFromInvoice()" id="save-party-btn" class="text-[11px] text-orange-700 font-bold hover:underline"><i class="fa-solid fa-user-plus mr-1"></i>Save to Buyer Master</button>
                 </div>
                 <div><label class="field-label">Buyer Name</label><input type="text" id="inv-buyer-name" required class="inp" placeholder="Company / Party Name"></div>
                 <div class="grid grid-cols-2 gap-2">
@@ -430,13 +436,15 @@
                 <div class="grid grid-cols-3 gap-2">
                   <div><label class="field-label">State</label><input type="text" id="inv-buyer-state" class="inp"></div>
                   <div><label class="field-label">State Code</label><input type="text" id="inv-buyer-state-code" maxlength="2" oninput="onBuyerStateCodeInput()" class="inp font-bold"></div>
-                  <div><label class="field-label">PIN</label><input type="text" id="inv-buyer-pin" maxlength="6" class="inp"></div>
+                  <div><label class="field-label">PIN</label><input type="text" id="inv-buyer-pin" maxlength="6" inputmode="numeric" class="inp"></div>
                 </div>
+                <div><label class="field-label">City / District</label><input type="text" id="inv-buyer-city" class="inp"></div>
+                <p id="buyer-pin-status" class="pin-status hidden" aria-live="polite"></p>
               </div>
 
               <div class="border p-4 rounded bg-slate-50/50 space-y-3">
                 <div class="flex justify-between items-center border-b pb-1">
-                  <h3 class="text-xs font-bold uppercase tracking-wider text-blue-700"><i class="fa-solid fa-truck-fast mr-1"></i> Shipped To (Consignee)</h3>
+                  <h3 class="text-xs font-bold uppercase tracking-wider text-blue-700" id="party-b-title"><i class="fa-solid fa-truck-fast mr-1"></i> Shipped To (Consignee)</h3>
                   <label class="text-xs text-slate-600 font-semibold cursor-pointer flex items-center"><input type="checkbox" id="sync-shipping-chk" onchange="syncShippingIfChecked(); refreshForm();" class="mr-1"> Same as Billing</label>
                 </div>
                 <div><label class="field-label">Consignee Name</label><input type="text" id="inv-ship-name" class="inp"></div>
@@ -448,8 +456,10 @@
                 <div class="grid grid-cols-3 gap-2">
                   <div><label class="field-label">State</label><input type="text" id="inv-ship-state" class="inp"></div>
                   <div><label class="field-label">State Code</label><input type="text" id="inv-ship-state-code" maxlength="2" oninput="onShipStateCodeInput()" class="inp font-bold"></div>
-                  <div><label class="field-label">PIN</label><input type="text" id="inv-ship-pin" maxlength="6" class="inp"></div>
+                  <div><label class="field-label">PIN</label><input type="text" id="inv-ship-pin" maxlength="6" inputmode="numeric" class="inp"></div>
                 </div>
+                <div><label class="field-label">City / District</label><input type="text" id="inv-ship-city" class="inp"></div>
+                <p id="ship-pin-status" class="pin-status hidden" aria-live="polite"></p>
               </div>
             </div>
 
@@ -522,10 +532,10 @@
             <div class="flex flex-wrap gap-2 items-center">
               <input type="text" id="inv-search" oninput="renderInvoiceList()" placeholder="Search no / buyer / GSTIN / PO..." class="inp !w-56">
               <select id="inv-filter-type" onchange="renderInvoiceList()" class="inp !w-auto">
-                <option value="">All Types</option><option value="INV">Invoices</option><option value="CRN">Credit Notes</option><option value="DBN">Debit Notes</option><option value="QUO">Quotations</option>
+                <option value="">All Types</option><option value="INV">Invoices</option><option value="CRN">Credit Notes</option><option value="DBN">Debit Notes</option><option value="QUO">Quotations</option><option value="PI">Proforma Invoices</option><option value="CPO">Customer POs</option><option value="PO">Purchase Orders</option>
               </select>
               <select id="inv-filter-status" onchange="renderInvoiceList()" class="inp !w-auto">
-                <option value="">All Status</option><option>Unpaid</option><option>Partial</option><option>Paid</option><option>Overdue</option><option>Cancelled</option><option>Open</option><option>Converted</option><option>Expired</option>
+                <option value="">All Status</option><option>Unpaid</option><option>Partial</option><option>Paid</option><option>Overdue</option><option>Cancelled</option><option>Open</option><option>Converted</option><option>Expired</option><option>Received</option>
               </select>
               <input type="date" id="inv-filter-from" onchange="renderInvoiceList()" class="inp !w-auto" title="From date">
               <input type="date" id="inv-filter-to" onchange="renderInvoiceList()" class="inp !w-auto" title="To date">
@@ -654,6 +664,9 @@
                 <div><label class="field-label">Credit Note</label><input type="text" id="set-prefix-crn" maxlength="6" class="inp" placeholder="CN/"></div>
                 <div><label class="field-label">Debit Note</label><input type="text" id="set-prefix-dbn" maxlength="6" class="inp" placeholder="DN/"></div>
                 <div><label class="field-label">Quotation</label><input type="text" id="set-prefix-quo" maxlength="6" class="inp" placeholder="QT/"></div>
+                <div><label class="field-label">Proforma</label><input type="text" id="set-prefix-pi" maxlength="6" class="inp" placeholder="PI/"></div>
+                <div><label class="field-label">Purchase Order</label><input type="text" id="set-prefix-po" maxlength="6" class="inp" placeholder="PO/"></div>
+                <div><label class="field-label">Customer PO (our ref.)</label><input type="text" id="set-prefix-cpo" maxlength="6" class="inp" placeholder="SO/"></div>
               </div>
               <div><label class="field-label">LUT ARN (for exports / SEZ without IGST)</label><input type="text" id="set-lut-arn" class="inp uppercase"></div>
               <div><label class="field-label">LUT valid for FY</label><input type="text" id="set-lut-fy" class="inp" placeholder="26-27"></div>
@@ -662,6 +675,8 @@
               <div><label class="field-label">Default Credit Period (Days)</label><input type="number" min="0" id="set-credit-days" class="inp"></div>
               <div class="md:col-span-3"><label class="field-label">Declaration (printed on invoice)</label><input type="text" id="set-declaration" class="inp"></div>
               <div class="md:col-span-4"><label class="field-label">Default Terms & Conditions</label><textarea id="set-comp-terms" rows="3" class="inp"></textarea></div>
+              <div class="md:col-span-2"><label class="field-label">Proforma Invoice terms</label><textarea id="set-pi-terms" rows="3" class="inp" placeholder="e.g. 50% advance with order; prices valid for 15 days"></textarea></div>
+              <div class="md:col-span-2"><label class="field-label">Purchase Order terms</label><textarea id="set-po-terms" rows="3" class="inp" placeholder="e.g. Deliver to our factory; invoice must quote this PO number"></textarea></div>
             </div>
 
             <h3 class="set-group text-sm font-bold text-slate-800 pt-4 border-t uppercase"><i class="fa-solid fa-palette"></i>Branding</h3>
@@ -798,8 +813,18 @@
       <div class="grid grid-cols-4 gap-2">
         <div class="col-span-2"><label class="field-label">State</label><input type="text" id="modal-cust-state" class="inp"></div>
         <div><label class="field-label">Code</label><input type="text" id="modal-cust-state-code" maxlength="2" oninput="const n=GST_STATES[normalizeStateCode(this.value)]; if(n) $('modal-cust-state').value=n;" class="inp"></div>
-        <div><label class="field-label">PIN</label><input type="text" id="modal-cust-pin" maxlength="6" class="inp"></div>
+        <div><label class="field-label">PIN</label><input type="text" id="modal-cust-pin" maxlength="6" inputmode="numeric" class="inp"></div>
       </div>
+      <div><label class="field-label">City / District</label><input type="text" id="modal-cust-city" class="inp"></div>
+      <p id="cust-pin-status" class="pin-status hidden" aria-live="polite"></p>
+      <div class="grid grid-cols-4 gap-2">
+        <div class="col-span-2"><label class="field-label">Ship-to State</label><input type="text" id="modal-cust-ship-state" class="inp" placeholder="(same as billing)"></div>
+        <div><label class="field-label">Code</label><input type="text" id="modal-cust-ship-state-code" maxlength="2" oninput="const n=GST_STATES[normalizeStateCode(this.value)]; if(n) $('modal-cust-ship-state').value=n;" class="inp"></div>
+        <div><label class="field-label">Ship PIN</label><input type="text" id="modal-cust-ship-pin" maxlength="6" inputmode="numeric" class="inp"></div>
+      </div>
+      <div><label class="field-label">Ship-to City / District</label><input type="text" id="modal-cust-ship-city" class="inp"></div>
+      <p id="custship-pin-status" class="pin-status hidden" aria-live="polite"></p>
+      <div><label class="field-label">Party type</label><select id="modal-cust-type" class="inp"><option value="customer">Customer (buyer)</option><option value="supplier">Supplier (vendor)</option><option value="both">Customer and supplier</option></select></div>
       <div class="grid grid-cols-2 gap-2">
         <div><label class="field-label">Credit Days</label><input type="number" min="0" id="modal-cust-credit" class="inp"></div>
         <div><label class="field-label">Credit Limit (₹, optional)</label><input type="number" min="0" id="modal-cust-limit" class="inp"></div>
@@ -893,8 +918,19 @@
       INV: { title: 'TAX INVOICE', short: 'Invoice', badge: 'bg-slate-100 text-slate-700' },
       CRN: { title: 'CREDIT NOTE', short: 'Credit Note', badge: 'bg-blue-100 text-blue-800' },
       DBN: { title: 'DEBIT NOTE', short: 'Debit Note', badge: 'bg-purple-100 text-purple-800' },
-      QUO: { title: 'QUOTATION', short: 'Quotation', badge: 'bg-teal-100 text-teal-800' }
+      QUO: { title: 'QUOTATION', short: 'Quotation', badge: 'bg-teal-100 text-teal-800' },
+      PI: { title: 'PROFORMA INVOICE', short: 'Proforma Invoice', badge: 'bg-amber-100 text-amber-800' },
+      CPO: { title: 'ORDER CONFIRMATION', short: 'Customer PO', badge: 'bg-sky-100 text-sky-800' },
+      PO: { title: 'PURCHASE ORDER', short: 'Purchase Order', badge: 'bg-indigo-100 text-indigo-800' }
     };
+    // documents that are not tax documents: never in sales, GST returns, receivables or stock
+    const NON_TAX = ['QUO', 'PI', 'CPO', 'PO'];
+    const isNonTax = t => NON_TAX.includes(t);
+    const isPurchase = t => t === 'PO';                      // we buy: the party is the supplier
+    const convertsToInvoice = t => t === 'QUO' || t === 'PI' || t === 'CPO';
+    const DEFAULT_PREFIX = { INV: '', CRN: 'CN/', DBN: 'DN/', QUO: 'QT/', PI: 'PI/', CPO: 'SO/', PO: 'PO/' };
+    const NON_TAX_LABEL = { QUO: 'THIS IS A QUOTATION — NOT A TAX INVOICE', PI: 'PROFORMA INVOICE — NOT A TAX INVOICE', CPO: 'ORDER CONFIRMATION — NOT A TAX INVOICE', PO: 'ORIGINAL — FOR SUPPLIER' };
+    const copyLabelFor = d => (d && NON_TAX_LABEL[d.docType]) || 'ORIGINAL FOR RECIPIENT';
     const SUPPLY_LABEL = { B2B: 'B2B', B2C: 'B2C', SEZWP: 'SEZ (with IGST)', SEZWOP: 'SEZ (LUT)', EXPWP: 'Export (with IGST)', EXPWOP: 'Export (LUT)', DEXP: 'Deemed Export' };
 
     // Production defaults are EMPTY: a fresh install has no business data. Every value printed on an
@@ -906,7 +942,7 @@
       phone: "", email: "",
       bankName: "", bankAcc: "", bankIfsc: "", bankBranch: "",
       upiId: "", defaultCreditDays: 30, logo: "", showLogo: true, tagline: "",
-      aato: "upto5", prefixes: { INV: "", CRN: "CN/", DBN: "DN/", QUO: "QT/" }, lutArn: "", lutFy: "",
+      aato: "upto5", prefixes: { INV: "", CRN: "CN/", DBN: "DN/", QUO: "QT/", PI: "PI/", CPO: "SO/", PO: "PO/" }, lutArn: "", lutFy: "",
       ewbLimit: 50000, interestRate: 18,
       declaration: "We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.",
       terms: "1. Goods once sold will not be taken back or exchanged.\n2. Interest @ 18% p.a. will be charged if payment is not made within the due date."
@@ -1172,7 +1208,8 @@
       state.invoices.forEach(d => {
         if (d.docType === docType && String(d.num).endsWith('/' + fy)) max = Math.max(max, seqOf(d));
       });
-      return `${state.company.prefixes[docType] || ''}${String(max + 1).padStart(2, '0')}/${fy}`;
+      const pre = state.company.prefixes && state.company.prefixes[docType] !== undefined ? state.company.prefixes[docType] : (DEFAULT_PREFIX[docType] || '');
+      return `${pre}${String(max + 1).padStart(2, '0')}/${fy}`;
     }
     function updateAutoInvoiceNumber() {
       if (currentEditId === null) $('inv-num').value = generateNextNumber(currentDocType(), $('inv-date').value);
@@ -1191,7 +1228,8 @@
 
     function computeDoc(d, company) {
       const co = company || state.company;
-      const compSC = normalizeStateCode(co.stateCode);
+      // purchase order: the supplier is the party, so its state (not ours) is the supplying state
+      const compSC = isPurchase(d.docType) ? (normalizeStateCode(d.buyerStateCode) || normalizeStateCode(co.stateCode)) : normalizeStateCode(co.stateCode);
       const items = (d.items || []).map(it => {
         const qty = Number(it.qty) || 0, rate = Number(it.rate) || 0;
         return { ...it, qty, rate, gst: Number(it.gst) || 0, amount: round2(qty * rate) };
@@ -1264,7 +1302,7 @@
     /* =====================================================================
        RECEIVABLES
        ===================================================================== */
-    const liveDocs = () => state.invoices.filter(d => !d.cancelled && d.docType !== 'QUO');
+    const liveDocs = () => state.invoices.filter(d => !d.cancelled && !isNonTax(d.docType));
     // credit/debit-note totals per invoice, indexed once per data revision (was a full scan per call → O(n²) lists)
     let notesIdx = null, notesIdxKey = '';
     function notesAgainst(inv) {
@@ -1292,7 +1330,9 @@
     function isOverdue(inv) { return inv.docType === 'INV' && !inv.cancelled && balanceOf(inv) > 0.009 && getDueDate(inv) < todayISO(); }
     function displayStatus(d) {
       if (d.cancelled) return 'Cancelled';
-      if (d.docType === 'QUO') return d.convertedTo ? 'Converted' : (getDueDate(d) < todayISO() ? 'Expired' : 'Open');
+      if (d.docType === 'QUO' || d.docType === 'PI') return d.convertedTo ? 'Converted' : (getDueDate(d) < todayISO() ? 'Expired' : 'Open');
+      if (d.docType === 'CPO') return d.convertedTo ? 'Converted' : 'Open';
+      if (d.docType === 'PO') return d.receivedAt ? 'Received' : 'Open';
       if (d.docType !== 'INV') return 'Issued';
       const bal = balanceOf(d);
       if (bal <= 0.009) return 'Paid';
@@ -1303,7 +1343,7 @@
       const s = displayStatus(d);
       const cls = { Paid: 'bg-emerald-100 text-emerald-800', Partial: 'bg-blue-100 text-blue-800', Unpaid: 'bg-amber-100 text-amber-800',
         Overdue: 'bg-rose-100 text-rose-800', Cancelled: 'bg-slate-200 text-slate-500 line-through', Issued: 'bg-slate-100 text-slate-700',
-        Open: 'bg-teal-100 text-teal-800', Converted: 'bg-emerald-100 text-emerald-800', Expired: 'bg-slate-200 text-slate-600' }[s];
+        Open: 'bg-teal-100 text-teal-800', Converted: 'bg-emerald-100 text-emerald-800', Expired: 'bg-slate-200 text-slate-600', Received: 'bg-emerald-100 text-emerald-800' }[s];
       const extra = s === 'Overdue' ? ` · ${daysBetween(getDueDate(d), todayISO())}d` : '';
       return `<span class="px-2 py-0.5 rounded text-xs font-bold whitespace-nowrap ${cls}">${s}${extra}</span>`;
     }
@@ -1311,7 +1351,7 @@
       if (!isOverdue(inv)) return 0;
       return round2(balanceOf(inv) * (Number(state.company.interestRate) || 0) / 100 * daysBetween(getDueDate(inv), todayISO()) / 365);
     }
-    const signed = d => d.docType === 'QUO' ? 0 : d.docType === 'CRN' ? -1 : 1;
+    const signed = d => isNonTax(d.docType) ? 0 : d.docType === 'CRN' ? -1 : 1;
 
     function sortInvoices() {
       state.invoices.sort((a, b) => (b.date || '').localeCompare(a.date || '') || seqOf(b) - seqOf(a));
@@ -1466,13 +1506,14 @@
       $('inv-num').value = generateNextNumber(docType, today);
       ['inv-po-num', 'inv-po-date', 'inv-transport', 'inv-lr', 'inv-delivery-terms', 'inv-customer-select', 'inv-ewb-no', 'inv-ewb-date',
        'inv-irn', 'inv-ack-no', 'inv-ack-date', 'inv-signed-qr',
-       'inv-buyer-name', 'inv-buyer-gstin', 'inv-buyer-phone', 'inv-buyer-address', 'inv-buyer-state', 'inv-buyer-state-code', 'inv-buyer-pin',
-       'inv-ship-name', 'inv-ship-gstin', 'inv-ship-phone', 'inv-ship-address', 'inv-ship-state', 'inv-ship-state-code', 'inv-ship-pin', 'inv-ref-date'
+       'inv-buyer-name', 'inv-buyer-gstin', 'inv-buyer-phone', 'inv-buyer-address', 'inv-buyer-state', 'inv-buyer-state-code', 'inv-buyer-pin', 'inv-buyer-city',
+       'inv-ship-name', 'inv-ship-gstin', 'inv-ship-phone', 'inv-ship-address', 'inv-ship-state', 'inv-ship-state-code', 'inv-ship-pin', 'inv-ship-city', 'inv-ref-date'
       ].forEach(id => $(id).value = '');
+      ['buyer-pin-status', 'ship-pin-status'].forEach(id => { const p = $(id); if (p) { p.className = 'pin-status hidden'; p.innerHTML = ''; } });
       $('inv-supply-type').value = 'AUTO';
       $('inv-rcm').value = 'N';
       $('inv-pos').value = state.company.stateCode;
-      $('inv-terms').value = docType === 'INV' ? (state.company.terms || '') : '';
+      $('inv-terms').value = docType === 'INV' ? (state.company.terms || '') : docType === 'PO' ? (state.company.poTerms || '') : docType === 'PI' ? (state.company.piTerms || '') : '';
       $('inv-credit-days').value = state.company.defaultCreditDays ?? 30;
       $('sync-shipping-chk').checked = true;
       $('inv-gst-rate').value = '18';
@@ -1480,17 +1521,44 @@
       $('buyer-gstin-status').classList.add('hidden');
       $('preview-section').classList.add('hidden');
       addInvoiceRow();
+      if (isPurchase(docType)) fillOurDeliveryAddress();
+      populateCustomerDropdown();
       onDocTypeChange(true);
       if (!silent) { switchTab('create-invoice'); window.scrollTo({ top: 0, behavior: 'smooth' }); }
     }
 
+    // purchase order: goods come to us — the delivery block starts with our own address
+    function fillOurDeliveryAddress() {
+      const co = state.company, set = (id, v) => { $(id).value = v || ''; };
+      $('sync-shipping-chk').checked = false;
+      set('inv-ship-name', co.name); set('inv-ship-gstin', co.gstin); set('inv-ship-phone', co.phone); set('inv-ship-address', co.address);
+      set('inv-ship-state', co.state || GST_STATES[co.stateCode]); set('inv-ship-state-code', co.stateCode); set('inv-ship-pin', co.pin); set('inv-ship-city', '');
+    }
+    const LABELS = {
+      sale: { a: 'Billed To (Recipient)', b: 'Shipped To (Consignee)', saved: 'Saved Buyer', save: 'Save to Buyer Master', poNum: 'PO Number', poDate: 'PO Date' },
+      CPO: { a: 'Customer (Billed To)', b: 'Shipped To (Consignee)', saved: 'Saved Buyer', save: 'Save to Buyer Master', poNum: "Customer's PO No.", poDate: "Customer's PO Date" },
+      PO: { a: 'Supplier / Vendor (Order To)', b: 'Deliver To (our address)', saved: 'Saved Supplier', save: 'Save to Supplier Master', poNum: "Supplier's Quote Ref.", poDate: 'Quote Date' }
+    };
     function onDocTypeChange(keepNumber) {
       const t = currentDocType();
       $('form-title').innerText = currentEditId ? `Edit ${DOC_TYPES[t].short}` : `New ${t === 'INV' ? 'Tax Invoice' : DOC_TYPES[t].short}`;
       const isNote = t === 'CRN' || t === 'DBN';
       $('note-ref-block').classList.toggle('hidden', !isNote);
       $('note-ref-block').classList.toggle('grid', isNote);
-      $('credit-days-label').innerText = t === 'QUO' ? 'Valid For (Days)' : 'Credit Period (Days)';
+      $('credit-days-label').innerText = t === 'QUO' || t === 'PI' ? 'Valid For (Days)' : t === 'PO' ? 'Payment Terms (Days)' : 'Credit Period (Days)';
+      const L = LABELS[t] || LABELS.sale, setT = (id, icon, txt) => { const el = $(id); if (el) el.innerHTML = `<i class="fa-solid ${icon} mr-1"></i> ${esc(txt)}`; };
+      setT('party-a-title', t === 'PO' ? 'fa-industry' : 'fa-file-invoice', L.a); setT('party-b-title', 'fa-truck-fast', L.b);
+      setT('saved-party-label', 'fa-user-check', L.saved); setT('save-party-btn', 'fa-user-plus', L.save);
+      if ($('po-num-label')) $('po-num-label').innerText = L.poNum; if ($('po-date-label')) $('po-date-label').innerText = L.poDate;
+      const firstOpt = $('inv-customer-select') && $('inv-customer-select').options[0]; if (firstOpt) firstOpt.text = `-- Choose ${L.saved} --`;
+      if (currentEditId === null) {
+        const co = state.company, shipIsUs = $('inv-ship-name').value.trim() === String(co.name || '').trim() && $('inv-ship-address').value.trim() === String(co.address || '').trim();
+        if (t === 'PO' && ($('sync-shipping-chk').checked || !$('inv-ship-name').value.trim())) fillOurDeliveryAddress();
+        else if (t !== 'PO' && shipIsUs && co.name) { $('sync-shipping-chk').checked = true; syncShippingIfChecked(); }
+        populateCustomerDropdown();
+      }
+      document.documentElement.classList.toggle('doc-purchase', t === 'PO');
+      document.documentElement.classList.toggle('doc-nontax', isNonTax(t));
       if (!keepNumber && currentEditId === null) $('inv-num').value = generateNextNumber(t, $('inv-date').value);
       if (isNote) populateRefInvoices();
       refreshForm();
@@ -1524,7 +1592,7 @@
 
     function syncShippingIfChecked() {
       if (!$('sync-shipping-chk').checked) return;
-      [['name', 'name'], ['gstin', 'gstin'], ['phone', 'phone'], ['address', 'address'], ['state', 'state'], ['state-code', 'state-code'], ['pin', 'pin']]
+      [['name', 'name'], ['gstin', 'gstin'], ['phone', 'phone'], ['address', 'address'], ['state', 'state'], ['state-code', 'state-code'], ['pin', 'pin'], ['city', 'city']]
         .forEach(([a, b]) => $(`inv-ship-${b}`).value = $(`inv-buyer-${a}`).value);
     }
 
@@ -1534,16 +1602,37 @@
       return $('inv-buyer-gstin').value.trim() ? 'B2B' : 'B2C';
     }
 
-    // Place of supply for goods (Sec 10 IGST Act):
-    // registered buyer → buyer's state (bill-to-ship-to: the person on whose order goods are shipped)
-    // unregistered → where movement ends (ship-to state); export → outside India (96)
+    // Place of supply (IGST Act):
+    //  goods, delivered to the buyer itself (same party, same or no GSTIN) → where the movement ends: the ship-to state  — Sec 10(1)(a)
+    //  goods, delivered to another person on the buyer's order (bill-to ≠ ship-to party) → the buyer's (bill-to) state — Sec 10(1)(b)
+    //  services only → the recipient's location: the buyer's state, else the supplier's — Sec 12(2)
+    //  export → outside India (96).  The billing and shipping state codes are each the party's own; only the POS is derived.
+    function placeOfSupplyFor(f) {
+      const co = state.company, buyerSC = normalizeStateCode(f.buyerStateCode), shipSC = normalizeStateCode(f.shipStateCode);
+      const st = f.supplyType, label = c => `${GST_STATES[c] || c} (${c})`;
+      if (isPurchase(f.docType)) {
+        const pos = shipSC || normalizeStateCode(co.stateCode);
+        return { pos, why: `Purchase: goods delivered to us in ${label(pos)} — that is the supplier's place of supply (Sec 10(1)(a)).` };
+      }
+      if (st === 'EXPWP' || st === 'EXPWOP') return { pos: '96', why: 'Export — place of supply is outside India (96).' };
+      const services = f.items && f.items.length && f.items.every(i => String(i.hsn || '').trim().startsWith('99'));
+      if (services) return buyerSC ? { pos: buyerSC, why: `Services — recipient's location: ${label(buyerSC)} (Sec 12(2)).` } : { pos: co.stateCode, why: 'Services to a buyer without a state — supplier\'s location (Sec 12(2)(b)).' };
+      const norm = x => String(x || '').trim().toLowerCase().replace(/\s+/g, ' ');
+      const shipG = String(f.shipGstin || '').toUpperCase(), buyG = String(f.buyerGstin || '').toUpperCase();
+      const samePerson = (!f.shipName || norm(f.shipName) === norm(f.buyerName)) && (!shipG || shipG === buyG);
+      if (samePerson) {
+        const pos = shipSC || buyerSC || co.stateCode;
+        return { pos, why: shipSC && shipSC !== buyerSC && buyerSC ? `Goods delivered to the buyer in ${label(shipSC)} — movement ends there (Sec 10(1)(a)).` : `Goods delivered in ${label(pos)} (Sec 10(1)(a)).` };
+      }
+      const pos = buyerSC || shipSC || co.stateCode;
+      return { pos, why: `Bill-to / ship-to: goods sent to another person on the buyer's order — buyer's state ${label(pos)} (Sec 10(1)(b)).` };
+    }
     function autoPlaceOfSupply() {
-      const st = resolveSupplyType();
-      let pos;
-      if (st === 'EXPWP' || st === 'EXPWOP') pos = '96';
-      else if (st === 'B2C') pos = normalizeStateCode($('inv-ship-state-code').value) || normalizeStateCode($('inv-buyer-state-code').value) || state.company.stateCode;
-      else pos = normalizeStateCode($('inv-buyer-state-code').value) || state.company.stateCode;
-      if (!posManual && GST_STATES[pos]) $('inv-pos').value = pos;
+      const v = id => $(id).value;
+      const r = placeOfSupplyFor({ docType: currentDocType(), supplyType: resolveSupplyType(), buyerName: v('inv-buyer-name'), buyerGstin: v('inv-buyer-gstin'), buyerStateCode: v('inv-buyer-state-code'),
+        shipName: v('inv-ship-name'), shipGstin: v('inv-ship-gstin'), shipStateCode: v('inv-ship-state-code'), items: collectFormItems() });
+      if (!posManual && GST_STATES[r.pos]) $('inv-pos').value = r.pos;
+      const el = $('pos-reason'); if (el) el.textContent = posManual ? (GST_STATES[r.pos] && r.pos !== $('inv-pos').value ? `Set by hand. Suggested: ${GST_STATES[r.pos]} (${r.pos}) — ${r.why}` : 'Set by hand.') : r.why;
     }
 
     function onSupplyTypeChange() { posManual = false; refreshForm(); }
@@ -1565,10 +1654,17 @@
       refreshForm();
     }
 
+    const partyTypeOf = c => c.partyType || 'customer';
     function populateCustomerDropdown() {
-      $('inv-customer-select').innerHTML = '<option value="">-- Choose Saved Buyer --</option>' +
-        [...state.customers].sort((a, b) => a.name.localeCompare(b.name))
+      const sel = $('inv-customer-select'), keep = sel.value;
+      const purchase = isPurchase(currentDocType());
+      // suppliers for a purchase order, customers otherwise ("both" in each); when none are marked, everyone is offered
+      let list = state.customers.filter(c => purchase ? partyTypeOf(c) !== 'customer' : partyTypeOf(c) !== 'supplier');
+      if (purchase && !list.length) list = [...state.customers];
+      sel.innerHTML = `<option value="">-- Choose ${purchase ? 'Saved Supplier' : 'Saved Buyer'} --</option>` +
+        list.sort((a, b) => a.name.localeCompare(b.name))
           .map(c => `<option value="${esc(c.id)}">${esc(c.name)} (${esc(c.gstin || 'Unregistered')})</option>`).join('');
+      sel.value = keep;
     }
 
     function populateCustomerData() {
@@ -1577,13 +1673,17 @@
       $('inv-buyer-name').value = c.name; $('inv-buyer-gstin').value = c.gstin || '';
       $('inv-buyer-address').value = c.address || ''; $('inv-buyer-state').value = c.state || '';
       $('inv-buyer-state-code').value = c.stateCode || ''; $('inv-buyer-phone').value = c.phone || ''; $('inv-buyer-pin').value = c.pin || '';
-      const sameShip = !c.shipAddress || c.shipAddress === c.address;
-      $('sync-shipping-chk').checked = sameShip;
-      if (sameShip) syncShippingIfChecked();
+      $('inv-buyer-city').value = c.city || '';
+      const sameShip = (!c.shipAddress || c.shipAddress === c.address) && (!c.shipPin || c.shipPin === c.pin);
+      if (isPurchase(currentDocType())) { if (!$('inv-ship-name').value.trim()) fillOurDeliveryAddress(); }
+      else if (sameShip) { $('sync-shipping-chk').checked = true; syncShippingIfChecked(); }
       else {
-        $('inv-ship-name').value = c.name; $('inv-ship-gstin').value = c.gstin || ''; $('inv-ship-address').value = c.shipAddress;
-        $('inv-ship-state').value = c.state || ''; $('inv-ship-state-code').value = c.stateCode || ''; $('inv-ship-phone').value = c.phone || '';
-        $('inv-ship-pin').value = c.shipPin || c.pin || '';
+        $('sync-shipping-chk').checked = false;
+        $('inv-ship-name').value = c.name; $('inv-ship-gstin').value = c.gstin || ''; $('inv-ship-address').value = c.shipAddress || c.address || '';
+        // the delivery address has its own state (saved with the buyer, or found from its PIN) — never the billing state by default
+        $('inv-ship-state').value = c.shipState || (c.shipStateCode ? GST_STATES[c.shipStateCode] : '') || ''; $('inv-ship-state-code').value = c.shipStateCode || ''; $('inv-ship-phone').value = c.phone || '';
+        $('inv-ship-pin').value = c.shipPin || ''; $('inv-ship-city').value = c.shipCity || '';
+        if (!c.shipStateCode && window.HGI_PIN) HGI_PIN.check('ship', { quiet: true });
       }
       if (c.creditDays !== undefined && c.creditDays !== '') $('inv-credit-days').value = c.creditDays;
       showGstinStatus('buyer-gstin-status', validateGSTIN(c.gstin));
@@ -1601,14 +1701,22 @@
         name, gstin, phone: $('inv-buyer-phone').value.trim(), address: $('inv-buyer-address').value,
         shipAddress: $('sync-shipping-chk').checked ? $('inv-buyer-address').value : $('inv-ship-address').value,
         state: $('inv-buyer-state').value.trim(), stateCode: normalizeStateCode($('inv-buyer-state-code').value),
-        pin: $('inv-buyer-pin').value.trim(), shipPin: $('inv-ship-pin').value.trim(),
+        pin: $('inv-buyer-pin').value.trim(), city: $('inv-buyer-city').value.trim(),
+        ...($('sync-shipping-chk').checked ? { shipPin: '', shipState: '', shipStateCode: '', shipCity: '' } : { shipPin: $('inv-ship-pin').value.trim(), shipState: $('inv-ship-state').value.trim(),
+          shipStateCode: normalizeStateCode($('inv-ship-state-code').value), shipCity: $('inv-ship-city').value.trim() }),
         creditDays: parseInt($('inv-credit-days').value, 10) || 0
       };
+      const purchase = isPurchase(currentDocType());
+      if (purchase) { delete data.shipPin; delete data.shipState; delete data.shipStateCode; delete data.shipCity; data.shipAddress = ''; delete data.creditDays; }   // our delivery address is not the supplier's
       const existing = state.customers.find(c => (gstin && (c.gstin || '').toUpperCase() === gstin) || c.name.toLowerCase() === name.toLowerCase());
+      const who = purchase ? 'Supplier' : 'Buyer';
       if (existing) {
-        if (!confirm(`"${existing.name}" already exists in Buyer Master. Update it with these details?`)) return;
-        Object.assign(existing, data); toast('Buyer updated in master');
-      } else { state.customers.push({ id: uid('CUST'), ...data }); toast('Buyer saved to master'); }
+        if (!confirm(`"${existing.name}" already exists in the party master. Update it with these details?`)) return;
+        const pt = partyTypeOf(existing);
+        if (purchase && pt === 'customer') data.partyType = 'both'; else if (!purchase && pt === 'supplier') data.partyType = 'both';
+        if (purchase) delete data.shipAddress;
+        Object.assign(existing, data); toast(`${who} updated in master`);
+      } else { state.customers.push({ id: uid('CUST'), ...data, partyType: purchase ? 'supplier' : 'customer' }); toast(`${who} saved to master`); }
       saveState(); populateCustomerDropdown(); renderCustomerList();
     }
 
@@ -1714,10 +1822,10 @@
           distance: parseInt($('inv-ewb-dist').value, 10) || 0, transId: v('inv-ewb-transid').toUpperCase(), transDocNo: v('inv-ewb-tdoc'), transDocDate: $('inv-ewb-tdocdate').value },
         buyerName: v('inv-buyer-name'), buyerGstin: v('inv-buyer-gstin').toUpperCase(), buyerPhone: v('inv-buyer-phone'),
         buyerAddress: $('inv-buyer-address').value.trim(), buyerState: v('inv-buyer-state'),
-        buyerStateCode: normalizeStateCode(v('inv-buyer-state-code')), buyerPin: v('inv-buyer-pin'),
+        buyerStateCode: normalizeStateCode(v('inv-buyer-state-code')), buyerPin: v('inv-buyer-pin'), buyerCity: v('inv-buyer-city'),
         shipName: v('inv-ship-name'), shipGstin: v('inv-ship-gstin').toUpperCase(), shipPhone: v('inv-ship-phone'),
         shipAddress: $('inv-ship-address').value.trim(), shipState: v('inv-ship-state'),
-        shipStateCode: normalizeStateCode(v('inv-ship-state-code')), shipPin: v('inv-ship-pin'),
+        shipStateCode: normalizeStateCode(v('inv-ship-state-code')), shipPin: v('inv-ship-pin'), shipCity: v('inv-ship-city'),
         discount: parseFloat($('inv-discount').value) || 0, pfCharges: parseFloat($('inv-pf-charges').value) || 0,
         otherCharges: parseFloat($('inv-other-charges').value) || 0,
         terms: $('inv-terms').value, items: collectFormItems()
@@ -1755,11 +1863,11 @@
     function fillPartyFromDoc(d) {
       const set = (id, val) => $(id).value = val ?? '';
       set('inv-buyer-name', d.buyerName); set('inv-buyer-gstin', d.buyerGstin); set('inv-buyer-phone', d.buyerPhone);
-      set('inv-buyer-address', d.buyerAddress); set('inv-buyer-state', d.buyerState); set('inv-buyer-state-code', d.buyerStateCode); set('inv-buyer-pin', d.buyerPin);
+      set('inv-buyer-address', d.buyerAddress); set('inv-buyer-state', d.buyerState); set('inv-buyer-state-code', d.buyerStateCode); set('inv-buyer-pin', d.buyerPin); set('inv-buyer-city', d.buyerCity);
       set('inv-ship-name', d.shipName || d.buyerName); set('inv-ship-gstin', d.shipGstin ?? d.buyerGstin); set('inv-ship-phone', d.shipPhone || d.buyerPhone);
       set('inv-ship-address', d.shipAddress || d.buyerAddress); set('inv-ship-state', d.shipState || d.buyerState);
-      set('inv-ship-state-code', d.shipStateCode || d.buyerStateCode); set('inv-ship-pin', d.shipPin || d.buyerPin);
-      $('sync-shipping-chk').checked = !d.shipAddress || d.shipAddress === d.buyerAddress;
+      set('inv-ship-state-code', d.shipStateCode || d.buyerStateCode); set('inv-ship-pin', d.shipPin || d.buyerPin); set('inv-ship-city', d.shipCity || d.buyerCity);
+      $('sync-shipping-chk').checked = (!d.shipAddress || d.shipAddress === d.buyerAddress) && (!d.shipPin || d.shipPin === d.buyerPin) && (!d.shipStateCode || d.shipStateCode === d.buyerStateCode);
     }
 
     /* Live refresh: amounts, summary, compliance (debounced) */
@@ -1814,7 +1922,22 @@
     /* =====================================================================
        SMART COMPLIANCE CHECKER
        ===================================================================== */
+    // purchase order: we are the buyer — only order-level checks (the supplier issues the tax invoice)
+    function poChecks(d) {
+      const out = [], c = d.calc || computeDoc(d);
+      const E = (msg, ref) => out.push({ lvl: 'error', msg, ref }), W = (msg, ref) => out.push({ lvl: 'warn', msg, ref }), OK = msg => out.push({ lvl: 'ok', msg });
+      if (!String(d.buyerName || '').trim()) E('Supplier name is required.');
+      if (!c.items.length || c.items.every(i => !i.desc)) E('Add at least one item.');
+      c.items.forEach((it, i) => { if (it.desc && !(it.qty > 0)) E(`Item ${i + 1}: quantity is required.`); });
+      if (d.buyerGstin) { const g = validateGSTIN(d.buyerGstin); if (g.status === 'invalid') W(`Supplier GSTIN: ${g.msg}`); else if (g.code && normalizeStateCode(d.buyerStateCode) && g.code !== normalizeStateCode(d.buyerStateCode)) W('Supplier state code does not match the GSTIN.'); else OK('Supplier GSTIN looks valid.'); }
+      else out.push({ lvl: 'info', msg: 'Supplier without GSTIN: GST shown is an estimate; an unregistered supplier charges no GST.' });
+      if (!normalizeStateCode(d.shipStateCode)) W('Add the state of the delivery address — it decides IGST or CGST + SGST.');
+      out.push({ lvl: 'info', msg: c.isInter ? 'Supplier in another state → the supplier charges IGST.' : 'Supplier in the delivery state → the supplier charges CGST + SGST.' });
+      out.push({ lvl: 'info', msg: 'Purchase order: not part of your sales, GST returns or stock. Mark it "received" when the goods arrive.' });
+      return out;
+    }
     function runChecks(d) {
+      if (isPurchase(d.docType)) return poChecks(d);
       const out = [];
       const E = (msg, ref) => out.push({ lvl: 'error', msg, ref });
       const W = (msg, ref) => out.push({ lvl: 'warn', msg, ref });
@@ -1828,7 +1951,7 @@
       // --- Supplier profile
       const cg = validateGSTIN(co.gstin);
       if (!String(co.name || '').trim()) E('Your business name is not set — add it in Settings.', 'Rule 46(a)');
-      if (cg.status === 'empty' && d.docType !== 'QUO') E('Your company GSTIN is not set in Settings — a tax invoice must show the supplier GSTIN.', 'Rule 46(a)');
+      if (cg.status === 'empty' && !isNonTax(d.docType)) E('Your company GSTIN is not set in Settings — a tax invoice must show the supplier GSTIN.', 'Rule 46(a)');
       if (!GST_STATES[normalizeStateCode(co.stateCode)]) E('Your business state is not set in Settings — CGST/SGST vs IGST cannot be decided.', 'Sec 10, IGST Act');
       const ph = placeholderFields(co);
       if (ph.length) E(`Settings still contain SAMPLE values (${ph.map(k => PLACEHOLDER_LABEL[k]).join(', ')}) — replace them with your real details before issuing documents.`, 'Rule 46(a)');
@@ -1976,7 +2099,7 @@
       }
 
       // --- E-invoicing (Rule 48(4))
-      const einvApplies = d.docType !== 'QUO' && co.aato !== 'upto5' && (isRegisteredSupply(st) || st === 'EXPWP' || st === 'EXPWOP');
+      const einvApplies = !isNonTax(d.docType) && co.aato !== 'upto5' && (isRegisteredSupply(st) || st === 'EXPWP' || st === 'EXPWOP');
       if (einvApplies) {
         if (!d.irn) {
           W('E-invoicing applies to you (turnover > ₹5 cr): generate IRN on the IRP before issuing. Without IRN this is not a valid invoice.', 'Rule 48(5)');
@@ -1994,9 +2117,9 @@
         });
       }
       if (d.docType === 'INV' && st === 'B2C' && c.isInter && c.grandTotal > B2CL_LIMIT) I(`Inter-state B2C above ₹1 lakh — reported invoice-wise in GSTR-1 (B2CL).`, 'Rule 59(4)');
-      if (d.docType === 'QUO') {          // a quotation is not a tax document: GST rules are advice, not blockers
+      if (isNonTax(d.docType) && !isPurchase(d.docType)) {   // quotation / proforma / customer PO: GST rules are advice, not blockers
         out.forEach(o => { if (o.lvl === 'error' && !/required|at least one item/i.test(o.msg)) o.lvl = 'warn'; });
-        I('Quotation: not reported in GST returns. Convert it to an invoice when the order is confirmed.');
+        I(`${DOC_TYPES[d.docType].short}: not reported in GST returns. Convert it to a tax invoice when the goods are supplied.`);
       }
       return out;
     }
@@ -2104,7 +2227,7 @@
     function partyBlock(label, p) {
       return `<div class="text-[9px] font-bold uppercase tracking-wider opacity-60 mb-0.5">${label}</div>
         <div class="font-bold text-[11.5px]">${esc(p.name)}</div>
-        <div class="whitespace-pre-line text-[10px] leading-snug">${esc(withPin(p.address, p.pin))}</div>
+        <div class="whitespace-pre-line text-[10px] leading-snug">${esc(withPin(p.city && !String(p.address || '').toLowerCase().includes(String(p.city).toLowerCase()) ? `${p.address || ''}${p.address ? ', ' : ''}${p.city}` : p.address, p.pin))}</div>
         <div class="text-[10px] mt-1"><strong>GSTIN/UIN:</strong> ${esc(p.gstin || 'Unregistered')}</div>
         <div class="text-[10px]"><strong>State:</strong> ${esc(p.state || '-')}${p.code ? ` (Code: ${esc(p.code)})` : ''}${p.phone ? ` &nbsp;|&nbsp; <strong>Ph:</strong> ${esc(p.phone)}` : ''}</div>`;
     }
@@ -2113,12 +2236,20 @@
       const co = state.company, c = d.calc || computeDoc(d);
       const title = docTitle(d, c);
       const logo = co.showLogo !== false ? companyLogo() : '';
-      const buyer = { name: d.buyerName, address: d.buyerAddress, pin: d.buyerPin, gstin: d.buyerGstin, state: d.buyerState, code: d.buyerStateCode, phone: d.buyerPhone };
-      const ship = { name: d.shipName || d.buyerName, address: d.shipAddress || d.buyerAddress, pin: d.shipPin || d.buyerPin, gstin: d.shipGstin || (d.shipName && d.shipName !== d.buyerName ? '' : d.buyerGstin),
+      const buyer = { name: d.buyerName, address: d.buyerAddress, pin: d.buyerPin, city: d.buyerCity, gstin: d.buyerGstin, state: d.buyerState, code: d.buyerStateCode, phone: d.buyerPhone };
+      const ship = { name: d.shipName || d.buyerName, address: d.shipAddress || d.buyerAddress, pin: d.shipPin || d.buyerPin, city: d.shipAddress ? d.shipCity : (d.shipCity || d.buyerCity), gstin: d.shipGstin || (d.shipName && d.shipName !== d.buyerName ? '' : d.buyerGstin),
         state: d.shipState || d.buyerState, code: d.shipStateCode || d.buyerStateCode, phone: d.shipPhone || d.buyerPhone };
       const saved = d.id ? state.invoices.find(x => x.id === d.id) : null;
-      const balance = d.docType === 'INV' ? (saved ? balanceOf(saved) : c.grandTotal) : 0;
-      const upiQR = d.docType === 'INV' && co.upiId && balance > 0 ? qrDataURL(upiLink(balance, `Invoice ${d.num}`), 180, 'M') : '';
+      const balance = d.docType === 'INV' ? (saved ? balanceOf(saved) : c.grandTotal) : d.docType === 'PI' ? c.grandTotal : 0;
+      const upiQR = (d.docType === 'INV' || d.docType === 'PI') && co.upiId && balance > 0 ? qrDataURL(upiLink(balance, `${DOC_TYPES[d.docType].short} ${d.num}`), 180, 'M') : '';
+      const showBank = d.docType === 'INV' || d.docType === 'PI';
+      const PL = isPurchase(d.docType) ? ['Supplier / Vendor (Order To)', 'Deliver To'] : ['Details of Receiver (Billed To)', 'Details of Consignee (Shipped To)'];
+      const decl = d.docType === 'PO' ? `Please quote PO No. ${d.num} on your tax invoice, delivery challan and e-way bill. Goods are accepted subject to inspection.`
+        : d.docType === 'PI' ? 'This proforma invoice is issued for approval / advance payment. It is not a tax invoice and does not entitle input tax credit; the tax invoice will be issued on supply.'
+        : d.docType === 'CPO' ? `We confirm your purchase order${d.poNum ? ' No. ' + d.poNum : ''}${d.poDate ? ' dated ' + fmtDate(d.poDate) : ''}. Our tax invoice will be issued on supply.`
+        : d.docType === 'QUO' ? 'This is a quotation, not a tax invoice.' : co.declaration;
+      const dueLine = d.docType === 'INV' ? ['Due Date', fmtDate(getDueDate(d))] : (d.docType === 'QUO' || d.docType === 'PI') ? ['Valid Till', fmtDate(getDueDate(d))]
+        : d.docType === 'PO' && Number(d.creditDays) > 0 ? ['Payment', `${d.creditDays} days from invoice`] : null;
       const irnQR = d.signedQr ? qrDataURL(d.signedQr, 260, 'L') : '';
       const endorse = endorsement(d);
       const meta = docMeta(d, c);
@@ -2154,20 +2285,20 @@
             <td class="box p-1.5 align-top w-1/2">
               <div class="grid grid-cols-2 gap-x-2">
                 <div><strong>${DOC_TYPES[d.docType].short} No:</strong> ${esc(d.num)}</div><div><strong>Date:</strong> ${fmtDate(d.date)}</div>
-                ${d.docType === 'INV' ? `<div><strong>Due Date:</strong> ${fmtDate(getDueDate(d))}</div><div></div>` : d.docType === 'QUO' ? `<div><strong>Valid Till:</strong> ${fmtDate(getDueDate(d))}</div><div></div>` : ''}
+                ${dueLine ? `<div><strong>${dueLine[0]}:</strong> ${esc(dueLine[1])}</div><div></div>` : ''}
               </div>
             </td>
             <td class="box p-1.5 align-top w-1/2"><div class="grid grid-cols-2 gap-x-2">${meta.map(([k, v]) => `<div><strong>${k}:</strong> ${esc(v)}</div>`).join('')}</div></td>
           </tr><tr>
-            <td class="box p-1.5 align-top">${partyBlock('Details of Receiver (Billed To)', buyer)}</td>
-            <td class="box p-1.5 align-top">${partyBlock('Details of Consignee (Shipped To)', ship)}</td>
+            <td class="box p-1.5 align-top">${partyBlock(PL[0], buyer)}</td>
+            <td class="box p-1.5 align-top">${partyBlock(PL[1], ship)}</td>
           </tr></table>
           <table class="inv-table text-[10px]">${ITEM_HEAD}<tbody>${itemsRowsHTML(c)}</tbody></table>
           ${hsnSummaryHTML(c)}
           <table class="w-full border-collapse box text-[10px] mt-auto page-break-avoid"><tr>
             <td class="box p-1.5 w-3/5 align-top space-y-1.5">
-              <div><strong>Amount Chargeable (in words):</strong><div class="font-bold text-[11px]">${esc(words)}</div></div>
-              ${d.docType === 'INV' ? `<div class="border-t border-black pt-1 flex gap-3"><div class="flex-1"><strong>Bank Details</strong>${bank}</div>
+              <div><strong>${isPurchase(d.docType) ? 'Order Value' : isNonTax(d.docType) ? 'Amount' : 'Amount Chargeable'} (in words):</strong><div class="font-bold text-[11px]">${esc(words)}</div></div>
+              ${showBank ? `<div class="border-t border-black pt-1 flex gap-3"><div class="flex-1"><strong>Bank Details</strong>${bank}</div>
                 ${upiQR ? `<div class="text-center shrink-0"><${IMG} src="${upiQR}" style="width:78px;height:78px"><div class="text-[8px] font-bold">SCAN TO PAY ${money(balance)}</div></div>` : ''}</div>` : ''}
             </td>
             <td class="box p-0 w-2/5 align-top"><table class="w-full text-[10.5px]">
@@ -2180,7 +2311,7 @@
             <div class="grid grid-cols-2 gap-3">
               <div>
                 ${d.terms ? `<strong>Terms & Conditions:</strong><div class="whitespace-pre-line text-[9px]">${esc(d.terms)}</div>` : ''}
-                <div class="text-[9px] mt-1 italic"><strong>Declaration:</strong> ${esc(co.declaration)}</div>
+                ${decl ? `<div class="text-[9px] mt-1 italic"><strong>${isPurchase(d.docType) ? 'Note' : 'Declaration'}:</strong> ${esc(decl)}</div>` : ''}
               </div>
               <div class="text-center flex flex-col justify-between">
                 <div class="font-bold">For, ${esc(co.name)}</div><div class="h-10"></div>
@@ -2211,13 +2342,13 @@
             <span class="text-white font-extrabold px-3 py-1 rounded text-[11px] uppercase tracking-widest inline-block mb-1" style="background:var(--brand-orange)">${title}</span>
             <div><strong>No:</strong> <span class="font-bold" style="color:#ffb066">${esc(d.num)}</span></div>
             <div class="text-blue-100"><strong>Date:</strong> ${fmtDate(d.date)}</div>
-            ${d.docType === 'INV' ? `<div class="text-blue-100"><strong>Due:</strong> ${fmtDate(getDueDate(d))}</div>` : d.docType === 'QUO' ? `<div class="text-blue-100"><strong>Valid till:</strong> ${fmtDate(getDueDate(d))}</div>` : ''}
+            ${dueLine ? `<div class="text-blue-100"><strong>${dueLine[0]}:</strong> ${esc(dueLine[1])}</div>` : ''}
           </div>
         </div>
         ${d.irn ? `<div class="modern-card flex gap-3 items-center">${irnQR ? `<${IMG} src="${irnQR}" style="width:72px;height:72px">` : ''}<div class="flex-1">${irnBlock}</div></div>` : ''}
         <div class="grid grid-cols-2 gap-2">
-          <div class="modern-card">${partyBlock('Details of Receiver (Billed To)', buyer)}</div>
-          <div class="modern-card">${partyBlock('Details of Consignee (Shipped To)', ship)}</div>
+          <div class="modern-card">${partyBlock(PL[0], buyer)}</div>
+          <div class="modern-card">${partyBlock(PL[1], ship)}</div>
         </div>
         <div class="modern-card grid grid-cols-4 gap-x-3 gap-y-0.5 text-[9.5px]">
           ${meta.map(([k, v]) => `<div><span class="font-bold text-slate-500 uppercase text-[8.5px]">${k}</span><div class="font-semibold text-slate-800">${esc(v)}</div></div>`).join('')}
@@ -2227,7 +2358,7 @@
         <div class="grid grid-cols-2 gap-2 mt-auto pt-2 border-t border-slate-200 page-break-avoid">
           <div class="space-y-2">
             <div class="modern-card bg-slate-100"><div class="text-[9px] font-bold text-slate-500 uppercase">Amount in Words</div><div class="font-bold text-[11px] text-slate-900">${esc(words)}</div></div>
-            ${d.docType === 'INV' ? `<div class="modern-card flex gap-3 text-[9.5px]"><div class="flex-1"><div class="text-[9px] font-bold text-slate-500 uppercase border-b mb-1">Bank Details</div>${bank}</div>
+            ${showBank ? `<div class="modern-card flex gap-3 text-[9.5px]"><div class="flex-1"><div class="text-[9px] font-bold text-slate-500 uppercase border-b mb-1">Bank Details</div>${bank}</div>
               ${upiQR ? `<div class="text-center shrink-0"><${IMG} src="${upiQR}" style="width:76px;height:76px" class="bg-white p-0.5 border rounded"><div class="text-[7.5px] font-bold text-slate-500 mt-0.5">SCAN TO PAY ${money(balance)}</div></div>` : ''}</div>` : ''}
           </div>
           <div class="modern-card space-y-0.5 text-[10.5px]">
@@ -2240,7 +2371,7 @@
           <div class="grid grid-cols-2 gap-4">
             <div class="text-[9px] text-slate-500">
               ${d.terms ? `<strong class="text-slate-700">Terms & Conditions:</strong><div class="whitespace-pre-line">${esc(d.terms)}</div>` : ''}
-              <div class="mt-1 italic"><strong class="text-slate-700">Declaration:</strong> ${esc(co.declaration)}</div>
+              ${decl ? `<div class="mt-1 italic"><strong class="text-slate-700">${isPurchase(d.docType) ? 'Note' : 'Declaration'}:</strong> ${esc(decl)}</div>` : ''}
             </div>
             <div class="text-center flex flex-col justify-between">
               <div class="font-bold text-[11px] uppercase text-slate-800">For, ${esc(co.name)}</div><div class="h-10"></div>
@@ -2253,7 +2384,7 @@
     }
 
     function selectedCopies() {
-      if (previewDoc && previewDoc.docType === 'QUO') return ['THIS IS A QUOTATION — NOT A TAX INVOICE'];
+      if (previewDoc && isNonTax(previewDoc.docType)) return [copyLabelFor(previewDoc)];
       return [...document.querySelectorAll('.copy-chk:checked')].map(x => x.value);
     }
     function renderPreviewPages(labels) {
@@ -2359,7 +2490,7 @@
       setEditMode(doc.id);
       onDocTypeChange(true);
       if (previewDoc) { previewDoc = { ...doc, calc: computeDoc(doc) }; renderPreviewPages([selectedCopies()[0] || 'ORIGINAL FOR RECIPIENT']); }
-      if (window.__convertFrom && doc.docType === 'INV') {
+      if (window.__convertFrom && doc.docType === 'INV' && !old) {
         const q = state.invoices.find(x => x.id === window.__convertFrom);
         if (q) { q.convertedTo = doc.num; q.convertedId = doc.id; q.convertedAt = new Date().toISOString(); saveState(); }
         window.__convertFrom = null;
@@ -2369,21 +2500,40 @@
       return true;
     }
 
-    function convertQuote(id) {
+    // quotation / proforma invoice / customer PO → GST invoice (opens the form filled in; saving links the two)
+    function convertToInvoice(id) {
       const q = state.invoices.find(x => x.id === id);
-      if (!q || q.docType !== 'QUO') return;
+      if (!q || !convertsToInvoice(q.docType)) return;
+      if (q.cancelled) return toast(`${q.num} is cancelled.`, 'error');
       if (q.convertedTo && !confirm(`${q.num} was already converted to ${q.convertedTo}. Create another invoice from it?`)) return;
       setEditMode(null);
-      loadDocIntoForm({ ...q, docType: 'INV', ewbNo: '', ewbDate: '', irn: '', ackNo: '', ackDate: '', signedQr: '', creditDays: state.company.defaultCreditDays, terms: state.company.terms });
+      const cust = state.customers.find(c => c.name.toLowerCase() === String(q.buyerName || '').toLowerCase());
+      const carry = q.docType === 'CPO' ? { poNum: q.poNum || q.num, poDate: q.poDate || q.date } : {};
+      loadDocIntoForm({ ...q, ...carry, docType: 'INV', ewbNo: '', ewbDate: '', irn: '', ackNo: '', ackDate: '', signedQr: '', edoc: undefined,
+        creditDays: cust && cust.creditDays !== undefined && cust.creditDays !== '' ? cust.creditDays : state.company.defaultCreditDays, terms: state.company.terms });
       $('inv-doc-type').value = 'INV';
       const today = todayISO();
       $('inv-date').value = today;
       $('inv-num').value = generateNextNumber('INV', today);
       onDocTypeChange(true);
       window.__convertFrom = q.id;
+      posManual = false;
       switchTab('create-invoice');
       window.scrollTo({ top: 0, behavior: 'smooth' });
-      toast(`Quotation ${q.num} loaded as invoice ${$('inv-num').value} — review and save`, 'info');
+      toast(`${DOC_TYPES[q.docType].short} ${q.num} loaded as invoice ${$('inv-num').value} — review and save`, 'info');
+    }
+    const convertQuote = convertToInvoice;
+    // purchase order: goods arrived — optionally add the quantities to stock of tracked products
+    function markPoReceived(id) {
+      const d = state.invoices.find(x => x.id === id);
+      if (!d || d.docType !== 'PO' || d.cancelled) return;
+      if (d.receivedAt) return toast(`${d.num} is already marked received (${fmtDate(d.receivedAt.slice(0, 10))}).`, 'info');
+      const tracked = (d.items || []).map(it => ({ it, p: typeof productByName === 'function' ? productByName(it.desc) : null })).filter(x => x.p && x.p.trackStock);
+      const addStock = tracked.length && confirm(`Mark ${d.num} as received?\n\nAlso add the received quantities to stock?\n${tracked.map(x => `• ${x.p.name}: +${x.it.qty} ${x.p.unit || ''}`).join('\n')}\n\nOK = add to stock, Cancel = only mark received`);
+      d.receivedAt = new Date().toISOString(); d.updatedAt = d.receivedAt;
+      if (addStock) tracked.forEach(({ it, p }) => { p.stockIns = [...(p.stockIns || []), { id: uid('STK'), date: todayISO(), qty: Number(it.qty) || 0, note: `PO ${d.num} — ${d.buyerName}` }]; p.updatedAt = d.receivedAt; });
+      d.stockAdded = !!addStock;
+      saveState(); renderAll(); toast(`${d.num} marked received${addStock ? ' — stock updated' : ''}`, 'success');
     }
 
     function editInvoice(id) {
@@ -2521,8 +2671,18 @@
     function whatsAppText(d, attached) {
       const saved = state.invoices.find(x => x.id === d.id);
       const bal = d.docType === 'INV' ? (saved ? balanceOf(saved) : d.grandTotal) : 0;
-      const co = state.company, kind = { INV: 'Tax Invoice', CRN: 'Credit Note', DBN: 'Debit Note', QUO: 'Quotation' }[d.docType] || DOC_TYPES[d.docType].short;
+      const co = state.company, kind = { INV: 'Tax Invoice', CRN: 'Credit Note', DBN: 'Debit Note', QUO: 'Quotation', PI: 'Proforma Invoice', CPO: 'Order Confirmation', PO: 'Purchase Order' }[d.docType] || DOC_TYPES[d.docType].short;
       let msg = `Dear ${d.buyerName || 'Sir/Madam'},\n\nGreetings from *${co.name}*.\n\n`;
+      if (d.docType === 'PO') {
+        msg += attached ? `Please find attached our *Purchase Order No. ${d.num}* dated ${fmtDate(d.date)}.\n\n` : `Please accept our *Purchase Order No. ${d.num}* dated ${fmtDate(d.date)}.\n\n`;
+        msg += `*Order value:* ${money(d.grandTotal)}\n*Items:* ${(d.items || []).length}\n`;
+        const dl = [d.shipName, d.shipAddress, d.shipPin].filter(Boolean).join(', ');
+        if (dl) msg += `*Deliver to:* ${dl}\n`;
+        if (d.deliveryTerms) msg += `*Delivery terms:* ${d.deliveryTerms}\n`;
+        msg += `\nKindly confirm the order and quote our PO number on your tax invoice and e-way bill.\n`;
+        if (!attached) msg += `\nThe PDF copy will be shared separately.\n`;
+        return msg + `\nRegards,\n*${co.name}*${co.gstin ? `\nGSTIN: ${co.gstin}` : ''}${co.phone ? `\nPh: ${co.phone}` : ''}`;
+      }
       msg += attached ? `Please find attached our *${kind} No. ${d.num}* dated ${fmtDate(d.date)}.\n\n` : `Here are the details of our *${kind} No. ${d.num}* dated ${fmtDate(d.date)}.\n\n`;
       msg += `*Amount:* ${money(d.grandTotal)}\n`;
       const ed = d.edoc || {}, testEnv = ed.env && ed.env !== 'production' ? ' (TEST — not valid)' : '';
@@ -2530,6 +2690,11 @@
       if (d.ewbNo && !(ed.ewb && ed.ewb.status === 'CNL')) msg += `*E-Way Bill:* ${d.ewbNo}${ed.ewb && ed.ewb.validUpto ? ` (valid till ${ed.ewb.validUpto})` : ''}${testEnv}\n`;
       if (d.docType === 'CRN' || d.docType === 'DBN') msg += `*Against Invoice:* ${d.refNum}${d.noteReason ? ` (${d.noteReason})` : ''}\n`;
       else if (d.docType === 'QUO') msg += `*Valid till:* ${fmtDate(getDueDate(d))}\n`;
+      else if (d.docType === 'CPO') msg += `${d.poNum ? `*Your PO:* ${d.poNum}${d.poDate ? ' dt. ' + fmtDate(d.poDate) : ''}\n` : ''}Thank you for your order — our tax invoice will follow on dispatch.\n`;
+      else if (d.docType === 'PI') {
+        msg += `*Valid till:* ${fmtDate(getDueDate(d))}\n_This is a proforma invoice (not a tax invoice)._\n`;
+        if (co.bankAcc || co.upiId) msg += `\n*Payment details*\n${co.bankName ? `Bank: ${co.bankName}\n` : ''}${co.bankAcc ? `A/c No.: ${co.bankAcc}\n` : ''}${co.bankIfsc ? `IFSC: ${co.bankIfsc}\n` : ''}${co.upiId ? `UPI: ${co.upiId}\n` : ''}`;
+      }
       else if (bal > 0) {
         msg += `*Balance due:* ${money(bal)}\n*Due date:* ${fmtDate(getDueDate(d))}\n`;
         if (saved && isOverdue(saved)) msg += `_Payment is overdue by ${daysBetween(getDueDate(saved), todayISO())} days._\n`;
@@ -2721,7 +2886,8 @@
             ${!d.cancelled ? `<button onclick="editInvoice('${id}')" class="text-blue-600 hover:text-blue-800 p-1" title="Edit"><i class="fa-solid fa-pen-to-square"></i></button>` : ''}
             ${inv && !d.cancelled ? `<button onclick="createNoteFor('${id}','CRN')" class="text-blue-500 hover:text-blue-800 p-1 text-[11px] font-bold" title="Issue Credit Note">CN</button>
               <button onclick="createNoteFor('${id}','DBN')" class="text-purple-500 hover:text-purple-800 p-1 text-[11px] font-bold" title="Issue Debit Note">DN</button>` : ''}
-            ${d.docType === 'QUO' && !d.cancelled ? `<button onclick="convertQuote('${id}')" class="text-teal-600 hover:text-teal-800 p-1 text-[11px] font-bold" title="Convert to Invoice"><i class="fa-solid fa-file-export mr-0.5"></i>Invoice</button>` : ''}
+            ${convertsToInvoice(d.docType) && !d.cancelled ? `<button onclick="convertToInvoice('${id}')" class="text-teal-600 hover:text-teal-800 p-1 text-[11px] font-bold" title="Convert to GST Invoice"><i class="fa-solid fa-file-export mr-0.5"></i>Invoice</button>` : ''}
+            ${d.docType === 'PO' && !d.cancelled && !d.receivedAt ? `<button onclick="markPoReceived('${id}')" class="text-emerald-600 hover:text-emerald-800 p-1 text-[11px] font-bold" title="Goods received"><i class="fa-solid fa-box-open mr-0.5"></i>Received</button>` : ''}
             <button onclick="duplicateInvoice('${id}')" class="text-slate-500 hover:text-slate-800 p-1" title="Duplicate"><i class="fa-solid fa-copy"></i></button>
             ${!d.cancelled ? `<button onclick="cancelInvoice('${id}')" class="text-amber-600 hover:text-amber-800 p-1" title="Cancel (keeps number)"><i class="fa-solid fa-ban"></i></button>` : ''}
             <button onclick="deleteInvoice('${id}')" class="text-rose-600 hover:text-rose-800 p-1" title="Delete"><i class="fa-solid fa-trash"></i></button>
@@ -2746,7 +2912,7 @@
     /* =====================================================================
        GST RETURNS (GSTR-1 & GSTR-3B outward)
        ===================================================================== */
-    function docsForMonth(mk) { return state.invoices.filter(d => monthKey(d.date) === mk && d.docType !== 'QUO'); }
+    function docsForMonth(mk) { return state.invoices.filter(d => monthKey(d.date) === mk && !isNonTax(d.docType)); }
     function gstSummaryFor(mk) {
       let taxable = 0, tax = 0;
       docsForMonth(mk).filter(d => !d.cancelled).forEach(d => {
@@ -2912,7 +3078,7 @@
     function renderItemList() {
       const q = ($('item-search').value || '').toLowerCase(), digits = state.company.aato === 'upto5' ? 4 : 6;
       const usage = {}, stocks = stockMap();
-      state.invoices.forEach(d => d.items.forEach(it => { const k = (it.desc || '').trim().toLowerCase(); usage[k] = (usage[k] || 0) + 1; }));
+      state.invoices.forEach(d => { if (!isPurchase(d.docType)) d.items.forEach(it => { const k = (it.desc || '').trim().toLowerCase(); usage[k] = (usage[k] || 0) + 1; }); });
       $('items-list-tbody').innerHTML = state.products.filter(p => !q || `${p.name} ${p.hsn} ${p.category || ''} ${p.sku || ''} ${p.specs || ''}`.toLowerCase().includes(q)).map(p => {
         const issues = [];
         if (!p.hsn) issues.push('No HSN'); else if (p.hsn.length < digits) issues.push(`HSN < ${digits} digits`);
@@ -3086,6 +3252,11 @@
       $('modal-cust-state').value = c ? (c.state || '') : (state.company.state || '');
       $('modal-cust-state-code').value = c ? (c.stateCode || '') : state.company.stateCode;
       $('modal-cust-pin').value = c ? (c.pin || '') : '';
+      $('modal-cust-city').value = c ? (c.city || '') : '';
+      $('modal-cust-ship-state').value = c ? (c.shipState || '') : ''; $('modal-cust-ship-state-code').value = c ? (c.shipStateCode || '') : '';
+      $('modal-cust-ship-pin').value = c ? (c.shipPin || '') : ''; $('modal-cust-ship-city').value = c ? (c.shipCity || '') : '';
+      $('modal-cust-type').value = c && c.partyType ? c.partyType : (window.__newPartyType || 'customer'); window.__newPartyType = '';
+      ['cust-pin-status', 'custship-pin-status'].forEach(id => { const p = $(id); if (p) { p.className = 'pin-status hidden'; p.innerHTML = ''; } });
       $('modal-cust-credit').value = c && c.creditDays !== undefined ? c.creditDays : (state.company.defaultCreditDays ?? 30);
       $('modal-cust-limit').value = c ? (c.creditLimit || '') : '';
       showGstinStatus('modal-gstin-status', validateGSTIN($('modal-cust-gstin').value));
@@ -3104,9 +3275,13 @@
       if (gstin && (g.status === 'invalid' || g.status === 'typing') && !confirm(`GSTIN looks invalid (${g.msg}). Save anyway?`)) return;
       const pin = $('modal-cust-pin').value.trim();
       if (pin && !/^[1-9]\d{5}$/.test(pin)) return toast('PIN must be 6 digits', 'error');
+      const shipPin = $('modal-cust-ship-pin').value.trim();
+      if (shipPin && !/^[1-9]\d{5}$/.test(shipPin)) return toast('Ship PIN must be 6 digits', 'error');
       const data = {
         name, gstin, phone: $('modal-cust-phone').value.trim(), address: $('modal-cust-address').value, shipAddress: $('modal-cust-ship-address').value,
-        state: $('modal-cust-state').value.trim(), stateCode: normalizeStateCode($('modal-cust-state-code').value), pin,
+        state: $('modal-cust-state').value.trim(), stateCode: normalizeStateCode($('modal-cust-state-code').value), pin, city: $('modal-cust-city').value.trim(),
+        shipPin, shipState: $('modal-cust-ship-state').value.trim(), shipStateCode: normalizeStateCode($('modal-cust-ship-state-code').value), shipCity: $('modal-cust-ship-city').value.trim(),
+        partyType: $('modal-cust-type').value || 'customer',
         creditDays: parseInt($('modal-cust-credit').value, 10) || 0, creditLimit: parseFloat($('modal-cust-limit').value) || 0
       };
       const id = $('modal-cust-id').value;
@@ -3126,7 +3301,8 @@
       s('set-comp-phone', c.phone); s('set-comp-email', c.email); s('set-aato', c.aato);
       s('set-prefix-inv', c.prefixes.INV); s('set-prefix-crn', c.prefixes.CRN); s('set-prefix-dbn', c.prefixes.DBN); s('set-prefix-quo', c.prefixes.QUO);
       s('set-lut-arn', c.lutArn); s('set-lut-fy', c.lutFy); s('set-ewb-limit', c.ewbLimit); s('set-interest', c.interestRate);
-      s('set-credit-days', c.defaultCreditDays); s('set-declaration', c.declaration); s('set-comp-terms', c.terms);
+      s('set-credit-days', c.defaultCreditDays); s('set-declaration', c.declaration); s('set-comp-terms', c.terms); s('set-pi-terms', c.piTerms); s('set-po-terms', c.poTerms);
+      const px = c.prefixes || {}; s('set-prefix-pi', px.PI ?? 'PI/'); s('set-prefix-po', px.PO ?? 'PO/'); s('set-prefix-cpo', px.CPO ?? 'SO/');
       s('set-bank-name', c.bankName); s('set-bank-acc', c.bankAcc); s('set-bank-ifsc', c.bankIfsc); s('set-bank-branch', c.bankBranch);
       s('set-upi-id', c.upiId); s('set-tagline', c.tagline);
       $('set-show-logo').checked = c.showLogo !== false;
@@ -3149,7 +3325,8 @@
       const upi = upiR.value, ifsc = ifscR.value;
       const pan = v('set-comp-pan').toUpperCase();
       if (pan && !/^[A-Z]{5}\d{4}[A-Z]$/.test(pan)) return toast('PAN should look like ABCDE1234F', 'error');
-      const prefixes = { INV: v('set-prefix-inv'), CRN: v('set-prefix-crn') || 'CN/', DBN: v('set-prefix-dbn') || 'DN/', QUO: v('set-prefix-quo') || 'QT/' };
+      const prefixes = { INV: v('set-prefix-inv'), CRN: v('set-prefix-crn') || 'CN/', DBN: v('set-prefix-dbn') || 'DN/', QUO: v('set-prefix-quo') || 'QT/',
+        PI: v('set-prefix-pi') || 'PI/', PO: v('set-prefix-po') || 'PO/', CPO: v('set-prefix-cpo') || 'SO/' };
       if (Object.values(prefixes).some(p => !/^[A-Za-z0-9\/-]*$/.test(p))) return toast('Prefixes may only use letters, digits, / and -', 'error');
       if (prefixes.CRN === prefixes.INV || prefixes.DBN === prefixes.INV || prefixes.QUO === prefixes.INV) return toast('Credit/debit note prefix must differ from invoice prefix (separate series)', 'error');
       Object.assign(state.company, {
@@ -3158,7 +3335,7 @@
         phone: v('set-comp-phone'), email: v('set-comp-email'), aato: $('set-aato').value, prefixes,
         lutArn: v('set-lut-arn').toUpperCase(), lutFy: v('set-lut-fy'), ewbLimit: parseFloat(v('set-ewb-limit')) || 50000,
         interestRate: parseFloat(v('set-interest')) || 0, defaultCreditDays: parseInt(v('set-credit-days'), 10) || 0,
-        declaration: v('set-declaration'), terms: $('set-comp-terms').value,
+        declaration: v('set-declaration'), terms: $('set-comp-terms').value, piTerms: $('set-pi-terms').value, poTerms: $('set-po-terms').value,
         bankName: v('set-bank-name'), bankAcc: accR.value, bankIfsc: ifsc, bankBranch: v('set-bank-branch'),
         upiId: upi, tagline: v('set-tagline'), showLogo: $('set-show-logo').checked
       });
@@ -3262,5 +3439,6 @@
   <script src="picker.js"></script>
   <script src="gstin.js"></script>
   <script src="edoc.js"></script>
+  <script src="pincode.js"></script>
 </body>
 </html>

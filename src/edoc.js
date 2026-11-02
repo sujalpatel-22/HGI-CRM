@@ -151,7 +151,7 @@
     const lockManual = !!(r && (r.irn || r.ewb));
     ['inv-ewb-no', 'inv-ewb-date', 'inv-irn', 'inv-ack-no', 'inv-ack-date', 'inv-signed-qr'].forEach(id => { const i = $(id); if (i) { i.readOnly = lockManual; i.classList.toggle('ed-ro', lockManual); } });
     if (!sd) { el.innerHTML = `<p class="ed-note">${esc(t('Save the document first. The e-invoice and e-way bill are made from the saved invoice — no data is typed twice.'))}</p>`; return; }
-    if (sd.docType === 'QUO') { el.innerHTML = ''; return; }
+    if (['QUO', 'PI', 'CPO', 'PO'].includes(sd.docType)) { el.innerHTML = `<p class="ed-note">${esc(t('Not a tax document — no IRN or e-way bill. Convert it to a GST invoice first.'))}</p>`; return; }
     if (!signedIn()) { el.innerHTML = statusHtml(r) + `<p class="ed-note">${esc(t(ERR.not_signed_in))}</p>`; return; }
     const f = feats();
     if (!f) { el.innerHTML = `<p class="ed-note">${esc(t('Checking e-invoice set-up…'))}</p>`; if (!featTried) { featTried = true; S().refreshFeatures().then(render); } return; }

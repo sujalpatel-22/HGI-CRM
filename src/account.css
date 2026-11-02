@@ -132,3 +132,21 @@ html.dark .ed-btn { background: #1e293b; color: #e2e8f0; border-color: #334155; 
 .ewb-t { width: 100%; border-collapse: collapse; } .ewb-t th, .ewb-t td { border: 1px solid #000; padding: 4px 6px; text-align: left; vertical-align: top; }
 .ewb-t th { width: 32%; background: #f3f4f6; font-weight: 700; } .ewb-veh th { width: auto; }
 .ewb-foot { font-size: 9px; margin-top: 10px; color: #333; }
+
+/* ---------------------------------------------------------------- v9.1 PIN code look-up */
+.pin-status { font-size: 11px; line-height: 1.5; margin: 2px 0 0; border-radius: 6px; padding: 4px 8px; }
+.pin-status.ok { color: #065f46; background: #ecfdf5; }
+.pin-status.warn { color: #92400e; background: #fffbeb; border: 1px solid #fde68a; }
+.pin-status.bad { color: #9f1239; background: #fff1f2; }
+.pin-status .pin-src { color: #64748b; margin-left: 4px; }
+.pin-pick { display: inline-block; margin: 3px 4px 0 0; padding: 3px 8px; border: 1px solid #f59e0b; border-radius: 99px; background: #fff; color: #92400e; font-weight: 700; font-size: 11px; min-height: 28px; }
+html.dark .pin-status.ok { background: rgba(16,185,129,.12); color: #6ee7b7; } html.dark .pin-status.warn { background: rgba(245,158,11,.12); color: #fcd34d; border-color: rgba(245,158,11,.4); }
+html.dark .pin-pick { background: #1e293b; color: #fcd34d; }
+
+/* ---------------------------------------------------------------- v9.1 seven document types: two rows instead of a sliding indicator */
+#app-container #doc-seg { display: grid !important; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+#app-container #doc-seg .seg-ind { display: none !important; }
+#app-container #doc-seg button { line-height: 1.15; padding: 4px 6px !important; border-radius: 12px; }
+#app-container #doc-seg button.on { background: var(--surface, #fff) !important; box-shadow: 0 1px 2px rgba(11, 20, 48, .1), 0 6px 14px -6px rgba(11, 20, 48, .25) !important; }
+html.dark #app-container #doc-seg button.on { background: #222c49 !important; }
+html.doc-nontax #edoc-block { display: none !important; }

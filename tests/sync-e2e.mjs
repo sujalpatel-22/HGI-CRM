@@ -266,6 +266,17 @@ await U3.click('.acct-dlg .acct-btn-primary'); await navU3; await afterReload(U3
 const merged = (await st(A1)).nums;
 check(merged.includes('OLD/1') && merged.includes('HGI/1') && (await st(U3)).co === 'Test Co', `added: account now has both (${merged.length} documents), the account's business profile kept`);
 
+/* ---------------------------------------------------------------- 9b. proforma / purchase orders sync like invoices */
+console.log('\n▶ Proforma invoice and purchase order on another phone');
+await addDoc(A1, 'PI/01/26-27', 'Mehta Agro', { docType: 'PI' });
+await addDoc(A1, 'PO/01/26-27', 'Kirloskar Castings', { docType: 'PO' });
+await syncNow(A1); await syncNow(B1);
+const onB = await B1.evaluate(() => state.invoices.filter(d => d.docType === 'PI' || d.docType === 'PO').map(d => d.docType + ' ' + d.num).sort());
+check(onB.join() === 'PI PI/01/26-27,PO PO/01/26-27', `proforma and purchase order synced to the second phone (${onB.join(', ')})`);
+await B1.evaluate(() => { const po = state.invoices.find(d => d.docType === 'PO'); markPoReceived(po.id); });
+await syncNow(B1); await syncNow(A1);
+check(await A1.evaluate(() => !!state.invoices.find(d => d.docType === 'PO').receivedAt), '"received" on one phone shows on the other');
+
 /* ---------------------------------------------------------------- 10. Demo Mode never syncs; delete account */
 console.log('\n▶ Demo Mode and account deletion');
 await B1.evaluate(() => HGI_M.enterDemo({ confirmed: true })); await B1.waitForFunction(() => window.HGI_READY === true && typeof DEMO_MODE !== 'undefined' && DEMO_MODE, null, { timeout: 20000 });

@@ -55,7 +55,7 @@ jobs:
         run: node backend/test/run-tests.js 2>&1 | tee logs/02-backend-tests.log
 
       - name: Web tests (Chromium — phone, tablet, desktop)
-        timeout-minutes: 25
+        timeout-minutes: 35
         run: |
           # apt mirrors occasionally hang: bound the system-deps install, fall back to browser-only install (runner images ship the libs)
           timeout 420 npx playwright install --with-deps chromium > logs/03-playwright-install.log 2>&1 \
@@ -64,6 +64,8 @@ jobs:
           node tests/sync-e2e.mjs 2>&1 | tee logs/03-sync-e2e.log
           node tests/v82-web.mjs 2>&1 | tee logs/03-v82-web.log
           node tests/picker-web.mjs 2>&1 | tee logs/03-picker-web.log
+          node tests/v91-web.mjs 2>&1 | tee logs/03-v91-web.log
+          node tests/edoc-e2e.mjs 2>&1 | tee logs/03-edoc-e2e.log
 
       - uses: actions/setup-java@v4
         with:

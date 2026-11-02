@@ -395,6 +395,24 @@ if (Number(sdk) >= 29 && bulk) {
 check(await page.evaluate(() => !document.getElementById('bulk-progress') && document.getElementById('preview-section').classList.contains('hidden') && !document.getElementById('app-container').classList.contains('hidden')),
   'screen restored after the export (preview hidden again)');
 
+// v9.1: PIN directory inside the APK; purchase order → native PDF → e-mail (share sheet when no e-mail app)
+check(await page.evaluate(() => HGI_PIN.lookup('411026').then(r => r && r.states[0].code === '27' && r.states[0].districts[0] === 'Pune')), 'PIN directory works offline in the app (411026 → Maharashtra, Pune)');
+await page.evaluate(() => {
+  const now = new Date().toISOString();
+  state.invoices.unshift({ id: 'PO-T1', docType: 'PO', num: 'PO/01/26-27', date: todayISO(), supplyType: 'B2B', pos: '24', buyerName: 'Kirloskar Castings', buyerGstin: '27AABCK1234M1ZT', buyerStateCode: '27', buyerState: 'Maharashtra', buyerAddress: 'MIDC, Kolhapur', buyerPin: '416234',
+    shipName: state.company.name, shipAddress: state.company.address || 'Our factory', shipStateCode: '24', shipState: 'Gujarat', items: [{ desc: 'Casting', hsn: '7325', gst: 18, qty: 10, unit: 'NOS', rate: 3000 }], payments: [], createdAt: now, updatedAt: now });
+  const d = state.invoices[0]; Object.assign(d, totalsOf(computeDoc(d))); saveState();
+});
+await device.shell(`run-as ${PKG} sh -c 'rm -f cache/pdf/*'`).catch(() => null);
+await page.evaluate(() => HGI_M.emailPdf('PO-T1'));
+await page.waitForTimeout(3000);
+const poLs = (await device.shell(`run-as ${PKG} sh -c 'ls -l cache/pdf'`)).toString();
+const acts2 = (await device.shell('dumpsys activity activities | grep -E "mResumedActivity|topResumedActivity|ResumedActivity" | head -3')).toString();
+check(/PurchaseOrder_PO-01-26-27_Kirloskar_Castings\.pdf/.test(poLs) && /Chooser|Resolver|intentresolver|mail/i.test(acts2), `purchase order PDF made on the phone and handed to e-mail / sharing (${(poLs.match(/PurchaseOrder\S*/) || [''])[0]})`);
+await shot('08b-po-email');
+await device.shell('input keyevent 4'); await page.waitForTimeout(1000);
+await page.evaluate(() => { state.invoices = state.invoices.filter(d => d.id !== 'PO-T1'); saveState(); renderAll(); });
+
 // WhatsApp: PDF + message (the emulator has no WhatsApp → Android share sheet with the same PDF + text)
 await device.shell(`run-as ${PKG} sh -c 'rm -f cache/pdf/*'`).catch(() => null);
 const waRes = await page.evaluate(() => HGI_M.whatsAppPdf('LM3').then(() => document.getElementById('toast-container').innerText));
