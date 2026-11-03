@@ -48,10 +48,14 @@ if (!device) { console.error('no device'); process.exit(1); }
 const sdk = (await device.shell('getprop ro.build.version.sdk')).toString().trim();
 const wv = (await device.shell('dumpsys package com.google.android.webview | grep versionName | head -1')).toString().trim();
 console.log(`▶ ${label}: ${device.model()} · Android SDK ${sdk} · WebView ${wv}`);
+// CI emulators sometimes show "Pixel Launcher isn't responding" over the app (seen on API 35): it dims the screen and eats
+// the back key. Those system dialogs are switched off for the test run; they have nothing to do with this app.
+await device.shell('settings put global hide_error_dialogs 1').catch(() => null);
+await device.shell('am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS').catch(() => null);
 const shot = async n => fs.writeFileSync(path.join(OUT, `${label}-${n}.png`), await device.screenshot());
 
 // watchdog: a hung adb/WebView call must fail this run (so the CI retry can start), not eat the whole job timeout
-setTimeout(() => { console.log('✗ watchdog: smoke test exceeded 20 minutes'); process.exit(3); }, 20 * 60 * 1000);
+setTimeout(() => { console.log('✗ watchdog: smoke test exceeded 30 minutes'); process.exit(3); }, 30 * 60 * 1000);
 const within = (p, ms, what) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(`${what} timed out after ${ms / 1000}s`)), ms))]);
 let lastLaunchAttempts = 1;
 // after an in-app reload (Demo Mode switch) the DevTools page target can be replaced: re-attach until cond() holds
@@ -455,6 +459,8 @@ const firstNum = await page.evaluate(() => state.invoices[0].num);
 await page.fill('#gs-input', firstNum); await page.waitForTimeout(400);
 check(await page.isVisible('#gsearch.open') && (await page.$eval('#gs-list .gs-r.on b', e => e.textContent)) === firstNum, `global search on the phone finds ${firstNum}`);
 await shot('12-search');
+// the first back press on Android closes the on-screen keyboard (system behaviour); the next one is the app's
+await page.evaluate(() => document.activeElement && document.activeElement.blur()); await page.waitForTimeout(600);
 await device.shell('input keyevent 4'); await page.waitForTimeout(800);
 check(!(await page.isVisible('#gsearch.open')) && await page.evaluate(() => !document.getElementById('tab-dashboard').classList.contains('hidden')), 'Android back closes the search (and stays on the screen)');
 // rotation: the activity keeps its WebView (no reload, nothing typed is lost) and the layout follows the new width
@@ -484,6 +490,7 @@ fs.writeFileSync(path.join(OUT, `${label}-perf.json`), JSON.stringify({ ...big, 
 check(back.n === 3000 && big.render < 6000, `3,000 invoices (${(big.bytes / 1e6).toFixed(1)} MB): render ${big.render} ms, save ${big.save} ms, restart ${boot} ms, all back`);
 check(Object.values(sw).every(v => v < 2500), `tab switches with 3,000 invoices: ${JSON.stringify(sw)} ms`);
 await page.locator('#gs-btn').click(); await page.waitForTimeout(400);
+await page.evaluate(() => { document.activeElement && document.activeElement.blur(); });
 const t3 = Date.now(); await page.fill('#gs-input', 'monoblock pump'); await page.waitForFunction(() => document.querySelectorAll('#gs-list .gs-r').length > 0, null, { timeout: 5000 }).catch(() => {}); const sMs = Date.now() - t3;
 check(await page.evaluate(() => document.querySelectorAll('#gs-list .gs-r').length > 0) && sMs < 3000, `search over the big book answers in ${sMs} ms`);
 await shot('14-search-big');

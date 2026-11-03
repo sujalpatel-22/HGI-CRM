@@ -69,7 +69,9 @@
   // and fields that only had a placeholder (search boxes) get it as their name
   let fieldSeq = 0;
   function linkLabels(root) {
-    (root || document).querySelectorAll('label:not([for])').forEach(l => {
+    // incremental: each label / field is looked at once (data-lk), so re-renders of long lists cost nothing here
+    (root || document).querySelectorAll('label:not([for]):not([data-lk])').forEach(l => {
+      l.setAttribute('data-lk', '');
       if (l.querySelector('input, select, textarea')) return;
       let c = l.nextElementSibling;
       while (c && !c.matches('input, select, textarea') && !c.querySelector('input:not([type=hidden]), select, textarea')) c = c.nextElementSibling;
@@ -80,12 +82,11 @@
       l.htmlFor = c.id;
     });
     const named = i => i.labels && Array.from(i.labels).some(l => l.textContent.trim());
-    (root || document).querySelectorAll('input[placeholder]:not([aria-label]), textarea[placeholder]:not([aria-label])').forEach(i => { if (!named(i)) i.setAttribute('aria-label', i.getAttribute('placeholder').replace(/\.{3}$/, '')); });
-    (root || document).querySelectorAll('select:not([aria-label])').forEach(sel => { if (!sel.labels || !sel.labels.length) { const prev = sel.previousElementSibling; const txt = prev && /^(LABEL|SPAN|P|DIV)$/.test(prev.tagName) ? prev.textContent.trim() : ''; if (txt) sel.setAttribute('aria-label', txt.slice(0, 60)); } });
+    (root || document).querySelectorAll('input[placeholder]:not([aria-label]):not([data-lk]), textarea[placeholder]:not([aria-label]):not([data-lk])').forEach(i => { i.setAttribute('data-lk', ''); if (!named(i)) i.setAttribute('aria-label', i.getAttribute('placeholder').replace(/\.{3}$/, '')); });
+    (root || document).querySelectorAll('select:not([aria-label]):not([data-lk])').forEach(sel => { sel.setAttribute('data-lk', ''); if (!sel.labels || !sel.labels.length) { const prev = sel.previousElementSibling; const txt = prev && /^(LABEL|SPAN|P|DIV)$/.test(prev.tagName) ? prev.textContent.trim() : ''; if (txt) sel.setAttribute('aria-label', txt.slice(0, 60)); } });
   }
   window.HGI_linkLabels = linkLabels;
   function labelAll() {
-    linkLabels(document);
     ariaIcons(document.querySelector('main'));
     ['invoices-list-tbody', 'items-list-tbody', 'customers-list-tbody', 'dash-recent-table'].forEach(id => { const tb = document.getElementById(id); if (tb) labelTable(tb.closest('table')); });
     const items = document.getElementById('invoice-items-body');

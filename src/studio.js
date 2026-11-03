@@ -98,11 +98,13 @@
     'fa-rotate-right': 'refresh', 'fa-list': 'list', 'fa-percent': 'percent', 'fa-truck': 'truck', 'fa-note-sticky': 'note', 'fa-link': 'link',
     'fa-scale-balanced': 'tag', 'fa-receipt': 'invoice', 'fa-user': 'user', 'fa-building': 'building', 'fa-palette': 'palette', 'fa-building-columns': 'returns',
     'fa-key': 'key', 'fa-cloud-arrow-down': 'backup', 'fa-qrcode': 'qr', 'fa-file-csv': 'pdf', 'fa-flask': 'flask', 'fa-right-from-bracket': 'logout', 'fa-sliders': 'filter' };
+  // v9.2: one parsed <svg> per icon name, cloned for each use (parsing HTML per icon cost ~1 s per list render on slow phones)
+  const svgTpl = new Map();
+  function svgOf(name) { let t = svgTpl.get(name); if (!t) { const tmp = document.createElement('span'); tmp.innerHTML = ic(name); t = tmp.firstChild; svgTpl.set(name, t); } return t.cloneNode(true); }
   function swapIcons(root) {
     (root || document).querySelectorAll('i.fa-solid, i.fa-regular').forEach(i => {
       const k = Array.from(i.classList).find(c => FA_MAP[c]); if (!k) return;
-      const tmp = document.createElement('span'); tmp.innerHTML = ic(FA_MAP[k]);
-      const svg = tmp.firstChild; svg.dataset.fa = Array.from(i.classList).filter(c => /^fa-/.test(c)).join(' ');
+      const svg = svgOf(FA_MAP[k]); svg.dataset.fa = Array.from(i.classList).filter(c => /^fa-/.test(c)).join(' ');
       i.classList.forEach(c => { if (!/^fa-|^fa$/.test(c)) svg.classList.add(c); });
       i.replaceWith(svg);
     });
@@ -163,8 +165,8 @@
     r.querySelectorAll('.rail-btn[data-tab]').forEach(b => { const a = b.dataset.tab === tab; b.classList.toggle('on', a); if (a) { on = b; b.setAttribute('aria-current', 'page'); } else b.removeAttribute('aria-current'); });
     r.querySelector('#rail-new').classList.toggle('on', tab === 'create-invoice');
     const ind = r.querySelector('.rail-ind'), nav = r.querySelector('.rail-nav');
-    if (on && nav.contains(on)) { ind.style.opacity = 1; ind.style.transform = `translateY(${on.offsetTop}px)`; ind.style.height = on.offsetHeight + 'px'; }
-    else ind.style.opacity = 0;
+    // measured in the next frame: reading offsetTop here forced a layout of the whole new screen during the tap
+    requestAnimationFrame(() => { if (on && nav.contains(on)) { ind.style.opacity = 1; ind.style.transform = `translateY(${on.offsetTop}px)`; ind.style.height = on.offsetHeight + 'px'; } else ind.style.opacity = 0; });
   }
 
   /* ------------------------------------------------------------------ shell: phone app bar + dock icons */

@@ -232,7 +232,7 @@ jobs:
     name: Emulator API ${{ matrix.api }} (${{ matrix.profile }})
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90          # two attempts; the AOSP API 33 image (WebView 101) needs ~25 min for the full v9.2 suite
     strategy:
       fail-fast: false
       matrix:
