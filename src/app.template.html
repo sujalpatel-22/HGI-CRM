@@ -2973,7 +2973,7 @@
       }
       const noEwb = liveDocs().filter(d => d.docType === 'INV' && !d.ewbNo && (d.grandTotal || 0) > (Number(co.ewbLimit) || 50000) && d.items.some(i => i.hsn && !String(i.hsn).startsWith('99')) && daysBetween(d.date, today) <= 15);
       const ga = state.gstAudit;
-      if (ga && ga.flagged) add('error', `<strong>${ga.flagged}</strong> saved document(s) need GST review (audit ${fmtDate(String(ga.at).slice(0, 10))}).`, "switchTab('returns'); setTimeout(() => { const e = document.getElementById('gst-audit'); if (e) e.scrollIntoView(); }, 200)");
+      if (ga && ga.flagged) add('error', `<strong>${ga.flagged}</strong> saved document(s) need GST review (audit ${fmtDate(ga.day || String(ga.at).slice(0, 10))}).`, "switchTab('returns'); setTimeout(() => { const e = document.getElementById('gst-audit'); if (e) e.scrollIntoView(); }, 200)");
       else if (!ga && liveDocs().length) add('info', 'Run the GST audit of saved documents once after this update (GST Returns screen).', "switchTab('returns')");
       if (noEwb.length) add('warn', `<strong>${noEwb.length}</strong> recent invoice(s) above ₹${(Number(co.ewbLimit) || 50000).toLocaleString('en-IN')} without an e-way bill number.`, "switchTab('invoices')");
       if (co.aato !== 'upto5') {
@@ -3242,7 +3242,7 @@
     async function runGstAudit() {
       const docs = state.invoices.filter(d => TAX_DOCS.includes(d.docType) && !d.cancelled);
       const before = JSON.stringify(state.invoices);
-      const res = { at: new Date().toISOString(), rules: GSTR.VERSION, total: docs.length, flagged: 0, block: 0, docs: {} };
+      const res = { at: new Date().toISOString(), day: todayISO(), rules: GSTR.VERSION, total: docs.length, flagged: 0, block: 0, docs: {} };
       const t0 = performance.now();
       for (let i = 0; i < docs.length; i++) {
         const d = docs[i], f = auditDoc(d);
@@ -3264,7 +3264,7 @@
       if (!r) { o.innerHTML = '<p class="ga-none">Not run yet on this device.</p>'; return; }
       const rows = Object.entries(r.docs).sort((a, b) => (b[1].block - a[1].block) || String(b[1].date).localeCompare(String(a[1].date)));
       const stale = r.rules !== GSTR.VERSION ? ' — the rule book has changed since; run it again' : '';
-      o.innerHTML = `<p class="ga-sum"><strong>${r.flagged}</strong> of ${r.total} saved document(s) need review · ${r.block} with tax-treatment issues · checked ${fmtDate(r.at.slice(0, 10))} with rules v${esc(r.rules)}${stale}</p>`
+      o.innerHTML = `<p class="ga-sum"><strong>${r.flagged}</strong> of ${r.total} saved document(s) need review · ${r.block} with tax-treatment issues · checked ${fmtDate(r.day || r.at.slice(0, 10))} with rules v${esc(r.rules)}${stale}</p>`
         + (rows.length ? `<ul class="ga-list">${rows.slice(0, 60).map(([id, x]) => `<li class="${x.block ? 'ga-b' : 'ga-e'}"><div class="ga-top"><span><strong>${esc(DOC_TYPES[x.type] ? DOC_TYPES[x.type].short : x.type)} ${esc(x.num)}</strong> · ${fmtDate(x.date)} · ${esc(x.party || '')}</span>
             <button type="button" class="ga-open" onclick="viewInvoiceDetail('${esc(id)}')">Open</button></div><ul>${x.msgs.map(m => `<li>${esc(m.msg)}${m.ref ? ` <em>${esc(m.ref)}</em>` : ''}</li>`).join('')}</ul></li>`).join('')}</ul>${rows.length > 60 ? `<p class="ga-none">…and ${rows.length - 60} more.</p>` : ''}` : '');
     }
