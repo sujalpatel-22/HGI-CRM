@@ -252,8 +252,25 @@
     animateAmount($('hero-amount'));
     renderKpis(); renderRing(); renderFlow(); polishAlerts(); toneAvatars($('tab-dashboard'));
     i18n().translateTree($('bento'));
+    fitAll($('bento'));
   }
   S.renderDash = renderDash;
+
+  // v9.2: amounts never overflow their box. Crore amounts (₹3,75,92,607) ran into the ageing cards and the legend values
+  // ran into each other on wide screens. Each .fit element shrinks its own font until it fits (down to 55 %).
+  const FIT_SEL = '#hero .hero-amount, #hero .hero-legend b, #hero .age b, .kpi-v, #ring-card .rc-row b';
+  function fitText(el) {
+    if (!el || !el.offsetParent) return;
+    el.style.fontSize = '';
+    const base = parseFloat(getComputedStyle(el).fontSize) || 16;
+    let size = base, guard = 0;
+    while (el.scrollWidth > el.clientWidth + 1 && size > base * 0.55 && guard++ < 30) { size -= Math.max(0.5, base * 0.04); el.style.setProperty('font-size', size + 'px', 'important'); }
+  }
+  function fitAll(root) { (root || document).querySelectorAll(FIT_SEL).forEach(fitText); }
+  S.fitAll = fitAll;
+  let fitTimer = null;
+  window.addEventListener('resize', () => { clearTimeout(fitTimer); fitTimer = setTimeout(() => fitAll($('bento')), 120); });
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => fitAll($('bento')));
 
   // hero amount: characters rise in sequence (text content stays exactly the amount)
   function animateAmount(el) {
@@ -370,7 +387,7 @@
       if (i <= upto) { hot.setAttribute('cx', x(i)); hot.setAttribute('cy', y(received[i])); hot.classList.add('on'); } else hot.classList.remove('on');
       svg.querySelectorAll('.bar').forEach((b, j) => b.classList.toggle('sel', j === i));
       const pct = billed[i] > 0 ? Math.round(received[i] / billed[i] * 100) : null;
-      $('flow-read').innerHTML = `<b>${esc2(monthLong(keys[i]))}</b><span class="fr-b"><i></i><span data-i18n>Billed</span> <strong>${esc2(fmt(billed[i]))}</strong></span><span class="fr-r"><i></i><span data-i18n>Received</span> <strong>${esc2(fmt(received[i]))}</strong></span>${pct !== null ? `<span class="fr-p">${pct}% <span data-i18n>collected</span></span>` : ''}`;
+      $('flow-read').innerHTML = `<b>${esc2(monthLong(keys[i]))}</b><span class="fr-b"><i></i><span data-i18n>Billed</span> <strong>${esc2(fmt(billed[i]))}</strong></span><span class="fr-r"><i></i><span data-i18n>Received</span> <strong>${esc2(fmt(received[i]))}</strong></span>${pct === null ? '' : pct <= 100 ? `<span class="fr-p">${pct}% <span data-i18n>of billing received</span></span>` : `<span class="fr-p fr-more" title="${esc2(t('Payments this month include bills from earlier months'))}"><span data-i18n>incl. earlier bills</span></span>`}`;
       i18n().translateTree($('flow-read'));
     };
     const at = ev => { const r = svg.getBoundingClientRect(); const px = (ev.clientX - r.left) * (W / r.width); return Math.floor((px - padL) / slot); };

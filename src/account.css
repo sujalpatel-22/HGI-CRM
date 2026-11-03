@@ -144,9 +144,24 @@ html.dark .pin-status.ok { background: rgba(16,185,129,.12); color: #6ee7b7; } h
 html.dark .pin-pick { background: #1e293b; color: #fcd34d; }
 
 /* ---------------------------------------------------------------- v9.1 seven document types: two rows instead of a sliding indicator */
-#app-container #doc-seg { display: grid !important; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+/* v9.2 document type chips: one row, scrolls sideways on phones, grouped Sales · Notes · Purchase */
+#app-container #doc-seg.doc-chips { display: flex !important; flex-wrap: nowrap; align-items: center; gap: 6px !important; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none;
+  padding: 4px 2px 8px !important; margin: 0 0 14px !important; background: transparent !important; border: 0 !important; border-radius: 0 !important; scroll-padding: 0 16px; }
+#app-container #doc-seg.doc-chips::-webkit-scrollbar { display: none; }
 #app-container #doc-seg .seg-ind { display: none !important; }
-#app-container #doc-seg button { line-height: 1.15; padding: 4px 6px !important; border-radius: 12px; }
-#app-container #doc-seg button.on { background: var(--surface, #fff) !important; box-shadow: 0 1px 2px rgba(11, 20, 48, .1), 0 6px 14px -6px rgba(11, 20, 48, .25) !important; }
-html.dark #app-container #doc-seg button.on { background: #222c49 !important; }
+#app-container #doc-seg .dc-group { flex: none; font: 600 10.5px var(--f-ui, inherit); letter-spacing: .12em; text-transform: uppercase; color: var(--muted, #64748b); padding: 0 2px 0 8px; }
+#app-container #doc-seg span.dc-group:first-of-type { padding-left: 2px; }
+#app-container #doc-seg button { flex: none; display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; min-height: 40px !important; padding: 0 14px !important; border-radius: 999px !important;
+  border: 1px solid var(--line, #e2e8f0) !important; background: var(--surface, #fff) !important; color: var(--text-2, #334155) !important; font-size: 13.5px; font-weight: 600; box-shadow: none !important; transition: background .2s, color .2s, border-color .2s; }
+#app-container #doc-seg button:hover { border-color: var(--text-3, #94a3b8) !important; }
+#app-container #doc-seg button.on { background: var(--ink, #0f1a3d) !important; border-color: var(--ink, #0f1a3d) !important; color: #fff !important; }
+#app-container #doc-seg button:focus-visible { outline: 2px solid var(--saffron, #f58220); outline-offset: 2px; }
+#app-container #doc-seg .dc-dot { width: 7px; height: 7px; border-radius: 50%; background: #64748b; flex: none; }
+#app-container #doc-seg .dc-inv .dc-dot { background: #0f1a3d; } #app-container #doc-seg .dc-quo .dc-dot { background: #0d9488; } #app-container #doc-seg .dc-pi .dc-dot { background: #d97706; }
+#app-container #doc-seg .dc-cpo .dc-dot { background: #0284c7; } #app-container #doc-seg .dc-crn .dc-dot { background: #2563eb; } #app-container #doc-seg .dc-dbn .dc-dot { background: #7c3aed; } #app-container #doc-seg .dc-po .dc-dot { background: #4f46e5; }
+#app-container #doc-seg button.on .dc-dot { background: #fff !important; }
+html.dark #app-container #doc-seg button { background: #18213b !important; border-color: #2a3555 !important; color: #cbd5e1 !important; }
+html.dark #app-container #doc-seg button.on { background: #f1f5f9 !important; border-color: #f1f5f9 !important; color: #0b1430 !important; }
+html.dark #app-container #doc-seg button.on .dc-dot { background: #0b1430 !important; }
+html.dark #app-container #doc-seg .dc-inv .dc-dot { background: #cbd5e1; }
 html.doc-nontax #edoc-block { display: none !important; }

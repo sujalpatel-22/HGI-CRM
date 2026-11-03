@@ -6,7 +6,7 @@
    ===================================================================== */
 (function () {
   'use strict';
-  const APP_VERSION = '9.1.0';
+  const APP_VERSION = '9.2.0';
   const cap = window.Capacitor;
   const isNative = !!(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform());
   // Without a bundler the native bridge exposes registered plugins on Capacitor.Plugins
@@ -65,13 +65,34 @@
       if (name) b.setAttribute('aria-label', name);
     });
   }
+  // v9.2: every visible label belongs to its field (screen readers announce "Buyer GSTIN, edit text" instead of nothing),
+  // and fields that only had a placeholder (search boxes) get it as their name
+  let fieldSeq = 0;
+  function linkLabels(root) {
+    (root || document).querySelectorAll('label:not([for])').forEach(l => {
+      if (l.querySelector('input, select, textarea')) return;
+      let c = l.nextElementSibling;
+      while (c && !c.matches('input, select, textarea') && !c.querySelector('input:not([type=hidden]), select, textarea')) c = c.nextElementSibling;
+      if (c && !c.matches('input, select, textarea')) c = c.querySelector('input:not([type=hidden]), select, textarea');
+      if (!c) { const p = l.parentElement; c = p && Array.from(p.querySelectorAll('input:not([type=hidden]), select, textarea')).find(x => !x.labels || !x.labels.length); }
+      if (!c || (c.labels && c.labels.length)) return;
+      if (!c.id) c.id = 'fld-' + (++fieldSeq);
+      l.htmlFor = c.id;
+    });
+    const named = i => i.labels && Array.from(i.labels).some(l => l.textContent.trim());
+    (root || document).querySelectorAll('input[placeholder]:not([aria-label]), textarea[placeholder]:not([aria-label])').forEach(i => { if (!named(i)) i.setAttribute('aria-label', i.getAttribute('placeholder').replace(/\.{3}$/, '')); });
+    (root || document).querySelectorAll('select:not([aria-label])').forEach(sel => { if (!sel.labels || !sel.labels.length) { const prev = sel.previousElementSibling; const txt = prev && /^(LABEL|SPAN|P|DIV)$/.test(prev.tagName) ? prev.textContent.trim() : ''; if (txt) sel.setAttribute('aria-label', txt.slice(0, 60)); } });
+  }
+  window.HGI_linkLabels = linkLabels;
   function labelAll() {
+    linkLabels(document);
     ariaIcons(document.querySelector('main'));
     ['invoices-list-tbody', 'items-list-tbody', 'customers-list-tbody', 'dash-recent-table'].forEach(id => { const tb = document.getElementById(id); if (tb) labelTable(tb.closest('table')); });
     const items = document.getElementById('invoice-items-body');
     if (items) {
       const heads = Array.from(items.closest('table').tHead.rows[0].cells).map(th => th.textContent.trim());
-      Array.from(items.rows).forEach(tr => Array.from(tr.cells).forEach((td, i) => td.setAttribute('data-label', heads[i] || '')));
+      Array.from(items.rows).forEach((tr, r) => Array.from(tr.cells).forEach((td, i) => { td.setAttribute('data-label', heads[i] || '');
+        td.querySelectorAll('input, select, textarea').forEach(c => { if (!c.getAttribute('aria-label') && heads[i]) c.setAttribute('aria-label', `${heads[i]}, row ${r + 1}`); }); }));
     }
   }
 
@@ -195,7 +216,14 @@
   }
   function setActiveNav(tab) {
     document.querySelectorAll('#bottom-nav button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab || (tab === 'items' || tab === 'returns' || tab === 'settings') && b.dataset.tab === 'more'));
-    const el = document.getElementById('mobile-page-title'); if (el) el.textContent = t(TAB_TITLES[tab] || '');
+    const el = document.getElementById('mobile-page-title');
+    // the editor's own title says what is open ("Edit Invoice", "New Proforma Invoice"), not always "New Invoice"
+    const ft = tab === 'create-invoice' && document.getElementById('form-title');
+    if (el) el.textContent = ft && ft.textContent.trim() ? ft.textContent.trim() : t(TAB_TITLES[tab] || '');
+    if (ft && !ft.__hgiObserved && window.MutationObserver) {
+      ft.__hgiObserved = true;
+      new MutationObserver(() => { if (currentTab === 'create-invoice') setActiveNav('create-invoice'); }).observe(ft, { childList: true, characterData: true, subtree: true });
+    }
   }
 
   /* ------------------------------------------------------------------ native print / PDF / share */
@@ -256,14 +284,24 @@
   const ACCT = window.HGI_ACCOUNT;
   const MIRROR_KEY = DEMO_MODE ? 'state-demo' : ACCT ? 'state-u-' + ACCT.key : 'state';
   const SNAP_PREFIX = DEMO_MODE ? 'demo-' : ACCT ? 'u-' + ACCT.key + '-' : '';
+  // the second copy: app file on Android; IndexedDB in a browser (v9.2: localStorage alone stopped at ~5 MB)
+  const WS = window.HGI_WEBSTORE && window.HGI_WEBSTORE.available() ? window.HGI_WEBSTORE : null;
+  const mirrorWrite = (key, data) => Native ? Native.writeState({ key, data }) : WS ? WS.set(key, data) : Promise.resolve();
+  const mirrorRead = key => Native ? Native.readState({ key }) : WS ? WS.get(key).then(data => ({ data })) : Promise.resolve(null);
   function mirrorState() {
-    if (!Native) return;
+    if (!Native && !WS) return;
     clearTimeout(mirrorTimer);
-    mirrorTimer = setTimeout(() => { Native.writeState({ key: MIRROR_KEY, data: JSON.stringify(state) }).catch(() => {}); }, 800);
+    mirrorTimer = setTimeout(() => { mirrorTimer = null; mirrorWrite(MIRROR_KEY, JSON.stringify(state)).catch(() => {}); }, 800);
+  }
+  if (!Native && WS) {
+    // a browser tab can be closed at any moment: write the pending copy right away when it is hidden
+    const flushNow = () => { if (mirrorTimer) { clearTimeout(mirrorTimer); mirrorTimer = null; WS.set(MIRROR_KEY, JSON.stringify(state)); } };
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushNow(); });
+    window.addEventListener('pagehide', flushNow);
   }
   async function flushMirror() {
-    clearTimeout(mirrorTimer);
-    if (Native) { try { await Promise.race([Native.writeState({ key: MIRROR_KEY, data: JSON.stringify(state) }), new Promise(res => setTimeout(res, 3000))]); } catch (e) { /* localStorage copy still exists */ } }
+    clearTimeout(mirrorTimer); mirrorTimer = null;
+    if (Native || WS) { try { await Promise.race([mirrorWrite(MIRROR_KEY, JSON.stringify(state)), new Promise(res => setTimeout(res, 3000))]); } catch (e) { /* localStorage copy still exists */ } }
   }
 
   /* ------------------------------------------------------------------ demo mode (explicit opt-in only) */
@@ -280,7 +318,7 @@
     if (!(opts && opts.confirmed) && !confirm(t('Leave Demo Mode?') + '\n\n' + t('The sample data will be deleted and your own data will open.'))) return;
     clearTimeout(mirrorTimer);
     try { localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(HGI_MODE_KEY); } catch (e) { /* ignore */ }
-    if (Native) { try { await Promise.race([Native.writeState({ key: 'state-demo', data: '' }), new Promise(res => setTimeout(res, 3000))]); } catch (e) { /* ignore */ } }
+    if (Native || WS) { try { await Promise.race([mirrorWrite('state-demo', ''), new Promise(res => setTimeout(res, 3000))]); } catch (e) { /* ignore */ } }
     location.reload();
   }
   function demoBanner() {
@@ -295,20 +333,22 @@
   // Covers WebView storage being wiped, and WebView storage being full so its copy fell behind.
   const revOf = json => { try { const s = typeof json === 'string' ? JSON.parse(json) : json; return Number(s && s.ui && s.ui.rev) || 0; } catch (e) { return -1; } };
   async function restoreFromMirror() {
-    if (!Native) return;
+    if (!Native && !WS) return;
     try {
       const local = storeGet('local', STORAGE_KEY);
       // Right after an in-app reload (Demo Mode switch) the first bridge reply can be lost on some WebViews (seen on
       // Android 11/13 emulators): never let start-up wait forever — time out, retry once, then go on with WebView storage.
       let r = null;
       for (let attempt = 0; attempt < 2 && !r; attempt++) {
-        r = await Promise.race([Native.readState({ key: MIRROR_KEY }), new Promise(res => setTimeout(() => res(null), 2500))]);
+        r = await Promise.race([mirrorRead(MIRROR_KEY), new Promise(res => setTimeout(() => res(null), 2500))]);
         if (!r && attempt === 0) console.warn('[HGI] mirror read timed out — retrying');
       }
       if (!r || !r.data) return;
       const lr = local ? revOf(local) : -1, mr = revOf(r.data);
       if (mr < 0) return;                                   // unreadable mirror: keep what we have
       if (!local || mr > lr) {
+        // an unreadable copy in WebView storage is kept for recovery (as the core app does) before the good copy replaces it
+        if (local && lr < 0) storeSet('local', `${STORAGE_KEY}_unreadable_${Date.now()}`, local);
         window.__HGI_BOOT_DATA = r.data;                    // used by initApp even if WebView storage cannot take it
         storeSet('local', STORAGE_KEY, r.data);
         window.__restoredFromMirror = true;
@@ -720,7 +760,8 @@
   function syncDocChips() {
     const bar = document.getElementById('doc-chips'); if (!bar) return;
     const ty = document.getElementById('inv-filter-type').value, st = document.getElementById('inv-filter-status').value;
-    const counts = DOC_CHIPS.map(([, t, s]) => state.invoices.filter(d => (!t || d.docType === t) && (!s || displayStatus(d) === s)).length);
+    const stats = state.invoices.map(d => [d.docType, displayStatus(d)]);   // one status per document (was once per chip)
+    const counts = DOC_CHIPS.map(([, t, s]) => stats.reduce((n, [dt, ds]) => n + ((!t || dt === t) && (!s || ds === s) ? 1 : 0), 0));
     let active = DOC_CHIPS.findIndex(([, t, s]) => t === ty && s === st);
     if (active < 0 && !ty) active = DOC_CHIPS.findIndex(([, t, s]) => s && s === st);
     bar.querySelectorAll('button[data-i]').forEach(b => { const i = Number(b.dataset.i); b.classList.toggle('on', i === active); b.querySelector('b').textContent = counts[i] || ''; b.setAttribute('aria-pressed', i === active); });
@@ -729,11 +770,12 @@
   }
 
   // Document type as a segmented control (the select stays as the source of truth for the core logic)
-  const DOC_SEG = [['INV', 'Invoice'], ['QUO', 'Quotation'], ['PI', 'Proforma'], ['CPO', 'Customer PO'], ['PO', 'Purchase order'], ['CRN', 'Credit note'], ['DBN', 'Debit note']];
+  // v9.2: one scrollable row of chips grouped as Sales · Notes · Purchase (was a 4 × 2 grid with two-line labels)
+  const DOC_SEG = [['Sales', [['INV', 'Invoice'], ['QUO', 'Quotation'], ['PI', 'Proforma'], ['CPO', 'Customer PO']]], ['Notes', [['CRN', 'Credit note'], ['DBN', 'Debit note']]], ['Purchase', [['PO', 'Purchase order']]]];
   function buildDocTypeSeg() {
     const sel = document.getElementById('inv-doc-type'); if (!sel || document.getElementById('doc-seg')) return;
-    const seg = document.createElement('div'); seg.id = 'doc-seg'; seg.className = 'seg'; seg.setAttribute('role', 'tablist');
-    seg.innerHTML = DOC_SEG.map(([v, l]) => `<button type="button" role="tab" data-v="${v}"><span data-i18n>${l}</span></button>`).join('');
+    const seg = document.createElement('div'); seg.id = 'doc-seg'; seg.className = 'seg doc-chips'; seg.setAttribute('role', 'tablist'); seg.setAttribute('aria-label', 'Document type');
+    seg.innerHTML = DOC_SEG.map(([g, items]) => `<span class="dc-group" aria-hidden="true" data-i18n>${g}</span>` + items.map(([v, l]) => `<button type="button" role="tab" data-v="${v}" class="dc-${v.toLowerCase()}"><i class="dc-dot" aria-hidden="true"></i><span data-i18n>${l}</span></button>`).join('')).join('');
     seg.addEventListener('click', e => {
       const b = e.target.closest('button'); if (!b || sel.value === b.dataset.v) return;
       if (b.dataset.v === 'CRN' || b.dataset.v === 'DBN') { newDocument(b.dataset.v); } else { sel.value = b.dataset.v; onDocTypeChange(); }
@@ -748,11 +790,13 @@
   function syncSeg() {
     const sel = document.getElementById('inv-doc-type'), seg = document.getElementById('doc-seg'); if (!sel || !seg) return;
     seg.querySelectorAll('button').forEach(b => { const on = b.dataset.v === sel.value; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
+    const on = seg.querySelector('button.on');
+    if (on && seg.scrollWidth > seg.clientWidth) { const l = on.offsetLeft - 16, r = on.offsetLeft + on.offsetWidth - seg.clientWidth + 16; if (seg.scrollLeft > l) seg.scrollLeft = l; else if (seg.scrollLeft < r) seg.scrollLeft = r; }
   }
 
   // Phones: a list row is one tap target; its actions open in a labelled bottom sheet instead of 9 tiny icons.
   const ACTION_NAMES = { 'fa-pen-to-square': 'Edit', 'fa-trash': 'Delete', 'fa-eye': 'View / Print', 'fa-copy': 'Duplicate', 'fa-ban': 'Cancel document',
-    'fa-indian-rupee-sign': 'Record receipt', 'fa-whatsapp': 'Share on WhatsApp', 'fa-file-export': 'Convert to GST invoice', 'fa-box-open': 'Goods received' };
+    'fa-indian-rupee-sign': 'Record receipt', 'fa-whatsapp': 'Share on WhatsApp', 'fa-file-export': 'Convert to GST invoice', 'fa-box-open': 'Goods received', 'fa-file-circle-plus': 'New invoice for this buyer', 'fa-cart-plus': 'New purchase order' };
   function actionLabel(btn) {
     const ic = iconOf(btn); const cls = faOf(ic).find(c => ACTION_NAMES[c]);
     const title = btn.getAttribute('title');
@@ -1077,7 +1121,7 @@
     about() { closeMore(); toast(`HGI Billing ${APP_VERSION} ${isNative ? '(Android)' : '(Web)'}`, 'info'); },
     enterDemo, exitDemo, undoRestore, runRowAction,
     restoreAndClose(ev) { const el = document.getElementById('onboarding'); ui().onboarded = true; if (el) el.remove(); importJSONBackup(ev); },
-    sharePdf, savePdf, flushMirror, renderPrefs, logout, bulkExport, bulkMatches, whatsAppPdf, emailPdf, withRendered, docFileName
+    sharePdf, savePdf, flushMirror, renderPrefs, logout, bulkExport, bulkMatches, whatsAppPdf, emailPdf, withRendered, docFileName, runBulk, busy, openSheet: typeof openSheet === 'function' ? openSheet : null
   };
 
   /* ------------------------------------------------------------------ hook into the core app */
@@ -1087,7 +1131,8 @@
       currentTab = tab; setActiveNav(tab); closeMore(); if (mq.matches) window.scrollTo(0, 0);
       // answer the tap: the new screen fades in (opacity only, so sticky/fixed children are unaffected)
       const sec = document.getElementById(`tab-${tab}`);
-      if (sec) { sec.classList.remove('tab-in'); void sec.offsetWidth; sec.classList.add('tab-in'); }
+      // v9.2: restart the fade in the next frame (reading offsetWidth forced a full layout of the new screen: ~50 ms with 5,000 documents)
+      if (sec) { sec.classList.remove('tab-in'); requestAnimationFrame(() => sec.classList.add('tab-in')); }
     });
     ['renderInvoiceList', 'renderItemList', 'renderCustomerList', 'renderDashboard', 'addInvoiceRow'].forEach(n => wrap(n, () => labelAll()));
     wrap('renderDashboard', () => renderHero());
@@ -1168,6 +1213,8 @@
     AppPlugin.addListener('backButton', () => {
       if (document.getElementById('lock-screen') && !document.getElementById('lock-screen').classList.contains('hidden')) return AppPlugin.minimizeApp && AppPlugin.minimizeApp();
       if (window.HGI_PICKER && HGI_PICKER.back()) return;
+      if (document.getElementById('gsearch') && document.getElementById('gsearch').classList.contains('open')) return window.HGI_FLOW.close();
+      if (document.documentElement.classList.contains('doc-selecting') && window.HGI_FLOW) return HGI_FLOW.setSelecting(false);
       if (!document.getElementById('login-overlay').classList.contains('hidden') && !document.querySelector('#reset-password-modal:not(.hidden)')) return AppPlugin.minimizeApp && AppPlugin.minimizeApp();
       if (document.querySelector('.acct-dlg') || document.getElementById('bulk-progress')) return;
       const open = Array.from(document.querySelectorAll('.fixed.inset-0.z-50.flex')).filter(m => !m.classList.contains('hidden') && m.id !== 'login-overlay');
@@ -1218,6 +1265,7 @@
     if (window.HGI_SYNC) HGI_SYNC.start();       // automatic cloud sync + Settings → Account card
     if (window.HGI_GSTIN) HGI_GSTIN.install();   // GSTIN → buyer details from GST records
     if (window.HGI_EDOC) HGI_EDOC.install();     // e-invoice (IRN) + e-way bill through the HGI server
+    if (window.HGI_FLOW) HGI_FLOW.install();     // v9.2: global search, recents, quick invoice, dashboard widgets, register filters + bulk
     if (window.HGI_PIN) HGI_PIN.install();       // PIN code → state / state code / district (India Post directory, offline)
     applyTheme();                                // system bar colours from the final page colour
     document.documentElement.classList.toggle('is-native', isNative);
@@ -1225,6 +1273,9 @@
       const ro = document.getElementById('login-overlay');
       if (ro && !ro.classList.contains('hidden') && !ui().pinHash) { storeSet('session', 'hgi_auth_session', 'true'); showMainApp(); }
     }
+    // labels for fields added later (dialogs, settings cards, item rows)
+    if (window.MutationObserver) { let lt = null; new MutationObserver(() => { clearTimeout(lt); lt = setTimeout(() => linkLabels(document), 250); }).observe(document.body, { childList: true, subtree: true }); }
+    linkLabels(document);
     window.HGI_READY = true;
     document.documentElement.classList.add('booted');   // the start-up cover goes away only now: no login flash
   };

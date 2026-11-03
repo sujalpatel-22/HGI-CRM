@@ -137,7 +137,7 @@ html.dark #app-container .page-ic { background: var(--surface-3); border: 1px so
 @media screen and (max-width: 767px) {
   :root { --nav-h: 80px; }
   html.studio #app-container > header { position: sticky; top: 0; z-index: 32; color: var(--text) !important; border-bottom: 1px solid transparent !important;
-    background: color-mix(in srgb, var(--paper) 84%, transparent) !important; -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5);
+    background: color-mix(in srgb, var(--paper) 96%, transparent) !important; -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5);
     transition: border-color .25s, box-shadow .25s; }
   html.studio #app-container > header.scrolled { border-bottom-color: var(--line) !important; box-shadow: 0 10px 24px -20px rgba(11, 20, 48, .5) !important; }
   html.studio #app-container > header > div { flex-wrap: nowrap !important; padding: 10px 16px !important; }
@@ -259,9 +259,12 @@ html.dark #app-container .panel-link { color: var(--saffron-2) !important; }
 #hero.b-hero .ledger { height: 10px; gap: 4px; margin: 22px 0 14px; }
 #hero.b-hero .ledger .seg { border-radius: 6px; }
 #hero.b-hero .seg.rec { background: linear-gradient(90deg, #26c88a, #4fe3a8); } #hero.b-hero .seg.due { background: linear-gradient(90deg, #f0a93a, #ffc55c); } #hero.b-hero .seg.ovd { background: linear-gradient(90deg, #ff5a7e, #ff8aa3); }
-#hero.b-hero .hero-legend { gap: 14px; }
-#hero.b-hero .hero-legend > div { font-size: 12px; color: rgba(255, 255, 255, .6); }
-#hero.b-hero .hero-legend b { font: 700 18px var(--f-display); letter-spacing: -.015em; margin-top: 4px; }
+#hero.b-hero .hero-legend { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+#hero.b-hero .hero-legend > div { font-size: 12px; color: rgba(255, 255, 255, .6); min-width: 0; }
+#hero.b-hero .hero-legend b { display: block; font: 700 18px var(--f-display); letter-spacing: -.015em; margin-top: 4px; white-space: nowrap; overflow: hidden; max-width: 100%; }
+/* v9.2: amounts are fitted to their box by JS (studio.js fitText) — they must be width-bounded for that */
+#hero.b-hero .hero-amount { max-width: 100%; overflow: hidden; }
+#hero.b-hero .age b, #app-container .kpi-v { display: block; white-space: nowrap; overflow: hidden; max-width: 100%; }
 #hero.b-hero .hero-aging { grid-column: 2; grid-row: 2 / span 4; margin: 18px 0 0 !important; padding: 0 !important; border: 0 !important; align-self: stretch; display: flex; flex-direction: column; }
 #hero.b-hero .aging-cap { font-size: 12px; color: rgba(255, 255, 255, .58); margin-bottom: 10px; display: flex; justify-content: space-between; gap: 10px; }
 #hero.b-hero .aging-cap > span:first-child { font: 600 11px var(--f-ui); letter-spacing: .14em; text-transform: uppercase; }

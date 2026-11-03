@@ -47,8 +47,10 @@
     }
     return LOST;
   }
-  const nativeWrite = async (key, data) => { const N = Native(); if (!N) return; await bridge(() => N.writeState({ key, data }), 2, 5000); };
-  const nativeRead = async key => { const N = Native(); if (!N) return null; const r = await bridge(() => N.readState({ key })); return r && r !== LOST && !r.error && r.data ? r.data : null; };
+  // the second, size-unlimited copy: an app file on Android, IndexedDB in a browser (webstore.js)
+  const WS = () => window.HGI_WEBSTORE;
+  const nativeWrite = async (key, data) => { const N = Native(); if (!N) { if (WS()) await WS().set(key, data); return; } await bridge(() => N.writeState({ key, data }), 2, 5000); };
+  const nativeRead = async key => { const N = Native(); if (!N) return WS() ? WS().get(key) : null; const r = await bridge(() => N.readState({ key })); return r && r !== LOST && !r.error && r.data ? r.data : null; };
   const device = () => { const m = /Android [\d.]+; ([^;)]+)/.exec(navigator.userAgent || ''); return (m ? m[1].replace(/ Build.*/, '') : (isNative ? 'Android' : 'Browser')).slice(0, 60); };
 
   let config = { auth: 'off' };

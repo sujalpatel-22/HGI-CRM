@@ -51,7 +51,7 @@ console.log(`▶ ${label}: ${device.model()} · Android SDK ${sdk} · WebView ${
 const shot = async n => fs.writeFileSync(path.join(OUT, `${label}-${n}.png`), await device.screenshot());
 
 // watchdog: a hung adb/WebView call must fail this run (so the CI retry can start), not eat the whole job timeout
-setTimeout(() => { console.log('✗ watchdog: smoke test exceeded 15 minutes'); process.exit(3); }, 15 * 60 * 1000);
+setTimeout(() => { console.log('✗ watchdog: smoke test exceeded 20 minutes'); process.exit(3); }, 20 * 60 * 1000);
 const within = (p, ms, what) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(`${what} timed out after ${ms / 1000}s`)), ms))]);
 let lastLaunchAttempts = 1;
 // after an in-app reload (Demo Mode switch) the DevTools page target can be replaced: re-attach until cond() holds
@@ -445,6 +445,49 @@ check(await page.evaluate(() => !document.getElementById('app-container').classL
 await page.waitForTimeout(3000);
 page = await launch();
 check(await page.evaluate(() => window.__hgiLoginShown === false && !document.getElementById('app-container').classList.contains('hidden')), 'after logging back in, restarts go straight to the dashboard again');
+
+// ---------------------------------------------------------------- v9.2: global search, rotation, a large book on the phone
+const BIG = fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), 'lib', 'big-book.js'), 'utf8');
+await page.evaluate(() => switchTab('dashboard'));
+await page.locator('#gs-btn').click();
+await page.waitForTimeout(500);
+const firstNum = await page.evaluate(() => state.invoices[0].num);
+await page.fill('#gs-input', firstNum); await page.waitForTimeout(400);
+check(await page.isVisible('#gsearch.open') && (await page.$eval('#gs-list .gs-r.on b', e => e.textContent)) === firstNum, `global search on the phone finds ${firstNum}`);
+await shot('12-search');
+await device.shell('input keyevent 4'); await page.waitForTimeout(800);
+check(!(await page.isVisible('#gsearch.open')) && await page.evaluate(() => !document.getElementById('tab-dashboard').classList.contains('hidden')), 'Android back closes the search (and stays on the screen)');
+// rotation: the activity keeps its WebView (no reload, nothing typed is lost) and the layout follows the new width
+await page.evaluate(() => { newDocument('INV'); document.getElementById('inv-buyer-name').value = 'Typed before rotating'; window.__rotMark = 'r' + Date.now(); });
+const nBefore = await page.evaluate(() => state.invoices.length);
+await device.shell('settings put system accelerometer_rotation 0'); await device.shell('settings put system user_rotation 1');
+await page.waitForTimeout(3500);
+let rot = null;
+try { rot = await page.evaluate(() => ({ mark: window.__rotMark, w: innerWidth, h: innerHeight, typed: document.getElementById('inv-buyer-name').value, over: document.scrollingElement.scrollWidth - innerWidth, n: state.invoices.length })); }
+catch (e) { page = await launch(); rot = await page.evaluate(() => ({ mark: window.__rotMark, w: innerWidth, h: innerHeight, typed: document.getElementById('inv-buyer-name').value, over: document.scrollingElement.scrollWidth - innerWidth, n: state.invoices.length, reloaded: true })); }
+await shot('13-landscape');
+check(rot.w > rot.h, `landscape: ${rot.w}×${rot.h}`);
+check(!rot.reloaded && rot.mark && rot.typed === 'Typed before rotating', 'rotating keeps the screen as it was (no restart, the half-typed invoice is still there)');
+check(rot.n === nBefore && rot.over <= 1, `data intact after rotating, no horizontal scrolling (${rot.over}px)`);
+await device.shell('settings put system user_rotation 0'); await page.waitForTimeout(3000);
+check(await page.evaluate(() => innerHeight > innerWidth && document.getElementById('inv-buyer-name').value === 'Typed before rotating'), 'back to portrait, still intact');
+await page.evaluate(() => newDocument('INV'));
+// a 3,000-invoice book: stored in the app file (WebView storage holds only ~5 MB), fast enough, back after a restart
+const big = await page.evaluate(src => { (0, eval)(src); window.__bigBook({ invoices: 3000, buyers: 300, products: 400 }); const t0 = performance.now(); saveState(); const save = performance.now() - t0;
+  const t1 = performance.now(); renderAll(); const render = performance.now() - t1; return { save: Math.round(save), render: Math.round(render), bytes: JSON.stringify(state).length, n: state.invoices.length }; }, BIG);
+await page.evaluate(() => HGI_M.flushMirror());
+const t2 = Date.now(); page = await launch(); const boot = Date.now() - t2;
+const back = await page.evaluate(() => ({ n: state.invoices.length, first: state.invoices[0] && state.invoices[0].num }));
+const sw = await page.evaluate(async () => { const r = {}; for (const tb of ['invoices', 'items', 'customers', 'dashboard']) { const a = performance.now(); switchTab(tb); await new Promise(x => requestAnimationFrame(() => setTimeout(x))); r[tb] = Math.round(performance.now() - a); } return r; });
+console.log(`    perf ${label}: ${JSON.stringify({ ...big, boot, switchTab: sw })}`);
+fs.writeFileSync(path.join(OUT, `${label}-perf.json`), JSON.stringify({ ...big, boot, switchTab: sw }, null, 1));
+check(back.n === 3000 && big.render < 6000, `3,000 invoices (${(big.bytes / 1e6).toFixed(1)} MB): render ${big.render} ms, save ${big.save} ms, restart ${boot} ms, all back`);
+check(Object.values(sw).every(v => v < 2500), `tab switches with 3,000 invoices: ${JSON.stringify(sw)} ms`);
+await page.locator('#gs-btn').click(); await page.waitForTimeout(400);
+const t3 = Date.now(); await page.fill('#gs-input', 'monoblock pump'); await page.waitForFunction(() => document.querySelectorAll('#gs-list .gs-r').length > 0, null, { timeout: 5000 }).catch(() => {}); const sMs = Date.now() - t3;
+check(await page.evaluate(() => document.querySelectorAll('#gs-list .gs-r').length > 0) && sMs < 3000, `search over the big book answers in ${sMs} ms`);
+await shot('14-search-big');
+await device.shell('input keyevent 4');
 
 check(errors.length === 0, `no JavaScript errors${errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''}`);
 console.log(`\n${label}: ${pass} passed, ${fail} failed`);

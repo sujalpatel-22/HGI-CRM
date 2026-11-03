@@ -85,7 +85,8 @@ for (const vp of VIEWPORTS) {
   }
   if (!vp.mobile) check(await page.evaluate(() => { const r = document.getElementById('rail'); return !!r && getComputedStyle(r).display !== 'none' && r.querySelectorAll('.rail-btn[data-tab]').length === 6; }), 'tablet/desktop: side rail navigation shown');
   check(await page.evaluate(() => document.querySelectorAll('#hgi-icons symbol').length > 40 && !!document.querySelector('#bottom-nav svg.ic, #rail svg.ic')), 'custom icon set in use');
-  check(await page.evaluate(() => { switchTab('items'); const ok = document.getElementById('tab-items').classList.contains('tab-in'); switchTab('dashboard'); return ok; }), 'screen change answers with a fade-in');
+  // v9.2: the fade starts on the next frame (no forced layout on the tap)
+  check(await page.evaluate(async () => { switchTab('items'); await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); const ok = document.getElementById('tab-items').classList.contains('tab-in'); switchTab('dashboard'); return ok; }), 'screen change answers with a fade-in');
   check((await page.isVisible('#quick-actions')) === vp.width < 768, `dashboard quick actions ${vp.width < 768 ? 'shown' : 'hidden'} at ${vp.width}px`);
   // editor: segmented document type drives the real select; consignee collapses when same as billing
   await page.evaluate(() => { newDocument('INV'); switchTab('create-invoice'); }); await page.waitForTimeout(150);

@@ -23,6 +23,7 @@
   <link rel="stylesheet" href="studio.css">
   <link rel="stylesheet" href="account.css">
   <link rel="stylesheet" href="picker.css">
+  <link rel="stylesheet" href="design.css">
 
   <style>
     body { font-family: 'Inter', sans-serif; }
@@ -296,11 +297,8 @@
               <span id="edit-mode-badge" class="hidden text-xs font-bold bg-blue-100 text-blue-800 px-2 py-1 rounded"></span>
             </div>
             <div class="flex gap-2">
-              <button type="button" onclick="newDocument('CRN')" class="bg-slate-100 text-slate-700 px-3 py-1 rounded text-xs font-bold hover:bg-slate-200">+ Credit Note</button>
-              <button type="button" onclick="newDocument('DBN')" class="bg-slate-100 text-slate-700 px-3 py-1 rounded text-xs font-bold hover:bg-slate-200">+ Debit Note</button>
-              <button type="button" onclick="newDocument('PI')" class="bg-amber-50 text-amber-800 px-3 py-1 rounded text-xs font-bold hover:bg-amber-100">+ Proforma</button>
-              <button type="button" onclick="newDocument('PO')" class="bg-indigo-50 text-indigo-800 px-3 py-1 rounded text-xs font-bold hover:bg-indigo-100">+ Purchase Order</button>
-              <button type="button" onclick="newDocument(currentDocType())" class="bg-slate-200 text-slate-700 px-3 py-1 rounded text-xs font-bold hover:bg-slate-300"><i class="fa-solid fa-rotate-right mr-1"></i> Clear Form</button>
+              <!-- v9.2: document types are chosen in the chip row below (Sales · Notes · Purchase); only "Clear form" stays here -->
+              <button type="button" id="btn-clear-form" onclick="newDocument(currentDocType())" class="bg-slate-200 text-slate-700 px-3 py-1 rounded text-xs font-bold hover:bg-slate-300"><i class="fa-solid fa-rotate-right mr-1"></i> Clear Form</button>
             </div>
           </div>
 
@@ -872,6 +870,7 @@
   </div>
 
   <script src="config.js"></script>
+  <script src="webstore.js"></script>
   <script src="account.js"></script>
   <script>
     /* =====================================================================
@@ -972,6 +971,7 @@
     }
 
     let state = defaultState();
+    let stockCache = null;                       // see stockOf()
     let currentEditId = null;
     let posManual = false;
     let paymentInvId = null;
@@ -1139,6 +1139,7 @@
     // Every save gets a higher revision number, so at start-up the newest copy (WebView storage or the
     // Android app-file mirror) is the one that is loaded — never an older one.
     function saveState() {
+      stockCache = null;
       state.ui = state.ui || {};
       state.ui.rev = (Number(state.ui.rev) || 0) + 1;
       state.ui.savedAt = new Date().toISOString();
@@ -1148,6 +1149,7 @@
         const native = window.HGI_APP && window.HGI_APP.isNative;
         toast(quota
           ? (native ? 'Quick storage is full. Your data is still saved in the app\'s own file storage — take a backup and remove a large logo if you can.'
+                    : window.HGI_WEBSTORE && HGI_WEBSTORE.available() ? 'Quick browser storage is full. Your data is kept in the browser\'s database instead — export a backup from Settings regularly.'
                     : 'Browser storage is full — your latest changes may not be kept. Export a backup from Settings now.')
           : 'Browser storage is blocked (private window or cookie setting) — your data will be lost when this tab closes. Export a backup from Settings.', 'error');
       }
@@ -2841,18 +2843,43 @@
     /* =====================================================================
        REGISTER
        ===================================================================== */
+    // v9.2: every word of the search must match (number, buyer, GSTIN, PO, e-way bill, IRN, amount, item names);
+    // advanced filters (window.__docAdv, set by the Filters sheet): buyer, amount range, supply kind, sort order
+    const normQ = s => String(s || '').toLowerCase().replace(/[₹,]/g, '');
+    const hayCache = new WeakMap();
+    function docHaystack(d) {
+      const stamp = `${d.updatedAt}|${d.num}|${d.buyerName}|${d.grandTotal}|${d.ewbNo}|${d.irn}`;
+      const c = hayCache.get(d); if (c && c.stamp === stamp) return c.h;
+      const h = docHaystackRaw(d); hayCache.set(d, { stamp, h }); return h;
+    }
+    function docHaystackRaw(d) {
+      return normQ(`${d.num} ${d.buyerName} ${d.buyerGstin || ''} ${d.poNum || ''} ${d.ewbNo || ''} ${d.irn ? d.irn.slice(0, 12) : ''} ${d.grandTotal || ''} ${Math.round(d.grandTotal || 0)} ${d.buyerPhone || ''} ${(d.items || []).map(i => i.desc).join(' ')}`);
+    }
     function getFilteredInvoices() {
-      const q = ($('inv-search').value || '').toLowerCase().trim();
+      const words = normQ($('inv-search').value).split(/\s+/).filter(Boolean);
       const ty = $('inv-filter-type').value, st = $('inv-filter-status').value;
       const from = $('inv-filter-from').value, to = $('inv-filter-to').value;
-      return state.invoices.filter(d => {
-        if (q && !(`${d.num} ${d.buyerName} ${d.buyerGstin || ''} ${d.poNum || ''} ${d.ewbNo || ''}`.toLowerCase().includes(q))) return false;
+      const adv = window.__docAdv || {};
+      const buyer = String(adv.buyer || '').trim().toLowerCase(), min = adv.min === '' || adv.min == null ? null : Number(adv.min), max = adv.max === '' || adv.max == null ? null : Number(adv.max);
+      const out = state.invoices.filter(d => {
+        if (words.length) { const h = docHaystack(d); if (!words.every(w => h.includes(w))) return false; }
         if (ty && d.docType !== ty) return false;
         if (st && displayStatus(d) !== st) return false;
         if (from && d.date < from) return false;
         if (to && d.date > to) return false;
+        if (buyer && String(d.buyerName || '').trim().toLowerCase() !== buyer) return false;
+        if (min !== null && !((d.grandTotal || 0) >= min)) return false;
+        if (max !== null && !((d.grandTotal || 0) <= max)) return false;
+        if (adv.kind === 'intra' && (d.isInter || isExportish(d.supplyType))) return false;
+        if (adv.kind === 'inter' && !(d.isInter && !isExportish(d.supplyType))) return false;
+        if (adv.kind === 'export' && !isExportish(d.supplyType)) return false;
+        if (adv.kind === 'b2c' && d.supplyType !== 'B2C') return false;
+        if (adv.kind === 'b2b' && d.supplyType !== 'B2B') return false;
         return true;
       });
+      const by = { oldest: (a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : seqOf(a) - seqOf(b)), high: (a, b) => (b.grandTotal || 0) - (a.grandTotal || 0),
+        low: (a, b) => (a.grandTotal || 0) - (b.grandTotal || 0), balance: (a, b) => balanceOf(b) - balanceOf(a) }[adv.sort];
+      return by ? out.sort(by) : out;
     }
     // long registers render in pages of 150 rows ("Show more"); totals always cover the whole filtered list
     const LIST_PAGE = 150;
@@ -2860,7 +2887,7 @@
     function showMoreDocs() { listLimit += LIST_PAGE; renderInvoiceList(true); }
     function renderInvoiceList(keepLimit) {
       const list = getFilteredInvoices();
-      const key = ['inv-search', 'inv-filter-type', 'inv-filter-status', 'inv-filter-from', 'inv-filter-to'].map(id => ($(id) || {}).value || '').join('|');
+      const key = ['inv-search', 'inv-filter-type', 'inv-filter-status', 'inv-filter-from', 'inv-filter-to'].map(id => ($(id) || {}).value || '').join('|') + JSON.stringify(window.__docAdv || {});
       if (key !== listKey && !keepLimit) { listLimit = LIST_PAGE; listKey = key; }
       let tTax = 0, tGst = 0, tGrand = 0, tBal = 0;
       list.forEach(d => { const s = d.cancelled ? 0 : signed(d); tTax += s * (d.taxable || 0); tGst += s * ((d.cgst || 0) + (d.sgst || 0) + (d.igst || 0)); tGrand += s * (d.grandTotal || 0); tBal += balanceOf(d); });
@@ -2868,7 +2895,7 @@
       $('invoices-list-tbody').innerHTML = list.slice(0, listLimit).map(d => {
         const id = d.id, inv = d.docType === 'INV';
         return `
-        <tr class="hover:bg-slate-50 ${d.cancelled ? 'opacity-50' : ''}">
+        <tr class="hover:bg-slate-50 ${d.cancelled ? 'opacity-50' : ''}" data-id="${id}">
           <td class="p-3"><span class="text-[10px] font-bold px-1.5 py-0.5 rounded ${DOC_TYPES[d.docType].badge}">${d.docType}</span>${d.issues ? ` <i class="fa-solid fa-triangle-exclamation text-amber-500" title="${d.issues} compliance issue(s)"></i>` : ''}</td>
           <td class="p-3 font-bold text-orange-800 whitespace-nowrap">${esc(d.num)}${d.refNum ? `<div class="text-[10px] text-slate-500 font-normal">ag. ${esc(d.refNum)}</div>` : ''}</td>
           <td class="p-3 text-xs whitespace-nowrap">${fmtDate(d.date)}</td>
@@ -3177,8 +3204,15 @@
     const productNames = p => [p.name, ...(p.aliases || [])].map(n => String(n || '').trim().toLowerCase()).filter(Boolean);
     const productByName = name => { const k = String(name || '').trim().toLowerCase(); return state.products.find(p => p.name.trim().toLowerCase() === k) || state.products.find(p => productNames(p).includes(k)); };
     // stock = opening + stock-in − invoiced + credit-note returns (cancelled documents and quotations ignored)
+    // v9.2: stock of every product comes from one cached pass over the documents (was one pass per product: 2 s with
+    // 5,000 invoices × 600 products). The cache is keyed on the saved revision and the list sizes; saveState() clears it.
     function stockOf(p, excludeDocId) {
       if (!p) return 0;
+      if (p.trackStock && p.id) {
+        const key = `${Number(state.ui && state.ui.rev) || 0}|${state.invoices.length}|${state.products.length}|${excludeDocId || ''}`;
+        if (!stockCache || stockCache.key !== key || stockCache.inv !== state.invoices || stockCache.prod !== state.products) stockCache = { key, inv: state.invoices, prod: state.products, map: stockMap(excludeDocId) };
+        if (stockCache.map.has(p.id)) return stockCache.map.get(p.id);
+      }
       const keys = productNames(p);
       let qty = (Number(p.openingStock) || 0) + (p.stockIns || []).reduce((a, x) => a + (Number(x.qty) || 0), 0);
       state.invoices.forEach(d => {
@@ -3230,7 +3264,8 @@
             <td class="p-3 text-xs">${c.creditDays ?? '-'} days${Number(c.creditLimit) ? `<div>${money(c.creditLimit)}</div>` : ''}</td>
             <td class="p-3 font-bold ${over ? 'text-rose-700' : due > 0 ? 'text-rose-600' : 'text-slate-400'}">${money(due)}${over ? '<div class="text-[10px]">over limit</div>' : ''}</td>
             <td class="p-3 text-right whitespace-nowrap">
-              <button onclick="openCustomerModal('${esc(c.id)}')" class="text-blue-600 hover:text-blue-800 mr-3"><i class="fa-solid fa-pen-to-square"></i></button>
+              ${c.partyType !== 'supplier' ? `<button onclick="HGI_FLOW.quickInvoice('${esc(c.id)}')" class="text-emerald-600 hover:text-emerald-800 mr-3" title="New invoice for this buyer"><i class="fa-solid fa-file-circle-plus"></i></button>` : `<button onclick="HGI_FLOW.quickInvoice('${esc(c.id)}', 'PO')" class="text-indigo-600 hover:text-indigo-800 mr-3" title="New purchase order"><i class="fa-solid fa-cart-plus"></i></button>`}
+                            <button onclick="openCustomerModal('${esc(c.id)}')" class="text-blue-600 hover:text-blue-800 mr-3"><i class="fa-solid fa-pen-to-square"></i></button>
               <button onclick="deleteCustomer('${esc(c.id)}')" class="text-rose-600 hover:text-rose-800"><i class="fa-solid fa-trash"></i></button>
             </td></tr>`;
         }).join('') || '<tr><td colspan="8" class="p-6 text-center text-slate-400">No buyers found</td></tr>';
@@ -3439,6 +3474,7 @@
   <script src="picker.js"></script>
   <script src="gstin.js"></script>
   <script src="edoc.js"></script>
+  <script src="workflow.js"></script>
   <script src="pincode.js"></script>
 </body>
 </html>

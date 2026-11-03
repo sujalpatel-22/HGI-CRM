@@ -1,0 +1,194 @@
+/* =====================================================================
+   HGI Billing v9.2 — design system layer (loaded last)
+   One set of tokens for every module, including the parts added after the v8 interface (proforma / purchase orders,
+   e-invoice panel, PIN look-up, account and dialogs), with WCAG AA contrast:
+     text ≥ 4.5 : 1, large text ≥ 3 : 1, in light and dark. Measured by tests/lib/a11y.js on every screen.
+   ===================================================================== */
+:root {
+  --faint: #6f6b61;                 /* was #a29e93 (2.7 : 1 on white) → 5.2 : 1 */
+  --saffron-ink: #a84d06;           /* saffron-coloured text on white: 5.3 : 1 */
+  --on-saffron: #1c1003;            /* text / icons on saffron fills: 8.4 : 1 (white was 2.6 : 1) */
+  --mint-ink: #0a7a57;              /* green amounts on white: 5.3 : 1 */
+  --rose-ink: #b4233f;              /* red amounts / badges: 6.0 : 1 */
+  --amber-ink: #a16207;             /* warnings on white: 5.0 : 1 */
+  --focus: 0 0 0 3px var(--surface, #fff), 0 0 0 5px #f58220;
+}
+html.dark {
+  --faint: #8790a8;                 /* was #5b647b (3.1 : 1 on #0f1527) → 5.7 : 1 */
+  --saffron-ink: #ffb067;
+  --mint-ink: #4ade9b; --rose-ink: #fb8fa3; --amber-ink: #fbbf24;
+  --focus: 0 0 0 3px var(--surface, #0f1527), 0 0 0 5px #ff9a3d;
+}
+
+/* ---------- muted text that was below 4.5 : 1 ---------- */
+#app-container .text-slate-400, #app-container .text-gray-400, .acct-dlg .text-slate-400 { color: var(--muted) !important; }
+html:not(.dark) #app-container .text-slate-300 { color: var(--muted) !important; }
+#app-container small, #app-container .kpi-s small, #app-container em { color: var(--faint); }
+
+/* ---------- status colours: readable in both themes ---------- */
+html:not(.dark) #app-container .text-amber-600, html:not(.dark) #app-container .text-amber-500, html:not(.dark) #app-container .text-orange-500 { color: var(--amber-ink) !important; }
+html:not(.dark) #app-container .text-orange-600, html:not(.dark) #app-container .text-orange-700 { color: var(--saffron-ink) !important; }
+html:not(.dark) #app-container dd.pos, html:not(.dark) #app-container .text-emerald-500 { color: var(--mint-ink) !important; }
+html:not(.dark) #app-container .delta.down { color: var(--rose-ink) !important; }
+html:not(.dark) #app-container .panel-link { color: var(--saffron-ink) !important; }
+html.dark #app-container .text-rose-600, html.dark #app-container .text-rose-700, html.dark #app-container .text-red-600, html.dark .acct-dlg .text-rose-600 { color: var(--rose-ink) !important; }
+html.dark #app-container .text-emerald-600, html.dark #app-container .text-emerald-700, html.dark #app-container .text-green-600, html.dark #app-container .text-green-700 { color: var(--mint-ink) !important; }
+html.dark #app-container .text-blue-600, html.dark #app-container .text-blue-700, html.dark #app-container .text-sky-700, html.dark #app-container .text-indigo-700 { color: #8fb4ff !important; }
+html.dark #app-container .text-amber-600, html.dark #app-container .text-amber-700, html.dark #app-container .text-amber-800 { color: var(--amber-ink) !important; }
+html.dark #app-container .text-orange-600, html.dark #app-container .text-orange-700, html.dark #app-container [style*="--brand-orange"].text-orange-700 { color: var(--saffron-ink) !important; }
+html.dark #app-container .panel-link, html.dark #app-container .delta.up, html.dark #app-container .delta.new { color: var(--saffron-ink) !important; }
+/* product / buyer initials: the tones were tuned for light mode only */
+html.dark #app-container .item-glyph, html.dark #app-container .avatar { color: #e8ecf7 !important; }
+
+/* ---------- saffron fills carry dark text (brand colour kept, contrast fixed) ---------- */
+#app-container .btn-primary, #app-container .ed-savebar button[type=submit], #preview-section .pv-actions #btn-share-pdf,
+#app-container .studio-list > .bg-white > .flex:first-child button[onclick^="open"], #app-container #settings-form > .flex.justify-end button[type=submit],
+.dlg-actions button:last-child:not(.bg-emerald-600), #login-overlay button[type=submit], #onboarding #ob-next, .pk-btn, #btn-pick-items, .rail-new,
+#app-container .bg-orange-600, #app-container .bg-orange-500 {
+  color: var(--on-saffron) !important; --ic-ac: var(--on-saffron) !important; }
+#app-container .btn-primary svg.ic, #app-container .ed-savebar button[type=submit] svg.ic, #btn-pick-items svg.ic, .rail-new svg.ic,
+#app-container #quick-actions.b-qa button.qa-primary svg.ic, #bottom-nav.dock .fab span.fab-circle svg.ic { color: var(--on-saffron) !important; --ic-ac: var(--on-saffron) !important; }
+.pk-v.on .pk-tick { color: var(--on-saffron); }
+#btn-pick-items { background: linear-gradient(180deg, var(--saffron-2, #ff9a3d), var(--saffron, #f58220)) !important; }
+/* emerald fills: deeper green so white text passes */
+#app-container .bg-emerald-600, .acct-dlg .bg-emerald-600, .dlg-actions .bg-emerald-600 { background-color: #047857 !important; }
+
+/* ---------- buttons with an icon: icon and text on one line ---------- */
+#app-container button.w-full:has(> svg.ic), #app-container button.w-full:has(> i.fa-solid) { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+#app-prefs button.w-full { display: inline-flex !important; align-items: center; justify-content: center; gap: 8px; min-height: 44px; }
+#app-prefs button.w-full > svg.ic, #app-prefs button.w-full > i { margin: 0 !important; }
+
+/* ---------- tap targets ≥ 40 px for text buttons that were 17–28 px tall ---------- */
+#app-container .panel-link, #save-party-btn, #app-container button.text-\[11px\], #app-container .sec-head button.text-xs {
+  min-height: 40px !important; display: inline-flex; align-items: center; padding-top: 0; padding-bottom: 0; }
+#app-container .panel-h .panel-link { margin: -10px 0; padding: 0 6px !important; }
+#save-party-btn { margin: -10px 0; }
+
+/* ---------- focus: always visible for keyboard / switch-access users ---------- */
+#app-container button:focus-visible, #app-container a:focus-visible, #app-container [role="tab"]:focus-visible, .acct-dlg button:focus-visible,
+#bottom-nav button:focus-visible, .rail-btn:focus-visible { outline: none !important; box-shadow: var(--focus) !important; border-radius: 12px; }
+#app-container .inp:focus-visible, #app-container input:focus-visible, #app-container select:focus-visible, #app-container textarea:focus-visible { outline: none !important; box-shadow: var(--focus) !important; }
+
+/* ---------- reduced motion: no drifting guilloche, no count-up ---------- */
+@media (prefers-reduced-motion: reduce) {
+  #hero.b-hero::before { animation: none !important; }
+  #hero.b-hero .hero-amount .ch { animation: none !important; }
+  *, *::before, *::after { transition-duration: .01ms !important; animation-iteration-count: 1 !important; }
+}
+/* initials tone 1 (saffron) was 4.4 : 1 */
+html:not(.dark) #app-container .avatar[data-tone="1"], html:not(.dark) .item-glyph[data-tone="1"] { color: #92400e !important; }
+/* item row numbers in the editor (the first cell of each row) */
+#invoice-items-body td:first-child { color: var(--muted) !important; }
+
+/* =====================================================================  v9.2 global search */
+.gs-btn { width: 44px; height: 44px; border-radius: 14px; display: inline-flex; align-items: center; justify-content: center; margin-right: 8px; flex: none;
+  background: var(--surface); border: 1px solid var(--line); color: var(--text); font-size: 20px; }
+.gs-btn svg.ic { width: 21px; height: 21px; }
+.gs-rail { display: flex; align-items: center; gap: 10px; width: calc(100% - 28px); margin: 10px 14px 4px; height: 44px; padding: 0 12px; border-radius: 13px;
+  background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .12); color: rgba(255, 255, 255, .78); font: 500 14px var(--f-ui); }
+.gs-rail:hover { background: rgba(255, 255, 255, .1); color: #fff; }
+.gs-rail kbd { margin-left: auto; font: 600 11px var(--f-ui); padding: 2px 6px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, .2); color: rgba(255, 255, 255, .7); }
+@media screen and (min-width: 768px) and (max-width: 1179px) { .gs-rail span, .gs-rail kbd { display: none; } .gs-rail { justify-content: center; width: 52px; margin: 10px auto 4px; } }
+@media screen and (min-width: 768px) { .gs-btn { display: none; } }
+.gs { position: fixed; inset: 0; z-index: 80; display: none; background: rgba(8, 12, 28, .46); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
+.gs.open { display: flex; align-items: flex-start; justify-content: center; padding: 9vh 16px 16px; animation: gsIn .16s ease-out both; }
+@keyframes gsIn { from { opacity: 0; } to { opacity: 1; } }
+.gs-card { width: min(680px, 100%); max-height: min(640px, 82vh); display: flex; flex-direction: column; overflow: hidden; border-radius: 20px; background: var(--surface); color: var(--text);
+  border: 1px solid var(--line); box-shadow: 0 40px 80px -30px rgba(8, 14, 32, .6), 0 2px 8px rgba(8, 14, 32, .12); animation: gsUp .2s var(--ease, ease-out) both; }
+@keyframes gsUp { from { transform: translateY(8px) scale(.985); } to { transform: none; } }
+.gs-bar { display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 18px; border-bottom: 1px solid var(--line); font-size: 20px; color: var(--muted); }
+.gs-bar input { flex: 1; min-width: 0; height: 46px; border: 0; outline: none; background: transparent; color: var(--text); font: 500 17px var(--f-ui); }
+.gs-bar input::-webkit-search-cancel-button { display: none; }
+.gs-close { width: 40px; height: 40px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); }
+.gs-close:hover { background: var(--surface-3); }
+.gs-list { overflow-y: auto; overscroll-behavior: contain; padding: 6px 8px 10px; }
+.gs-g { font: 600 11px var(--f-ui); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); padding: 12px 10px 6px; display: flex; justify-content: space-between; }
+.gs-g span { letter-spacing: 0; text-transform: none; font-weight: 500; }
+.gs-r { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; grid-template-areas: "ic t m" "ic s s"; column-gap: 12px; align-items: center; padding: 9px 10px; border-radius: 13px; cursor: pointer; }
+.gs-r.on { background: var(--surface-3); }
+.gs-ic { grid-area: ic; width: 38px; height: 38px; border-radius: 11px; display: inline-flex; align-items: center; justify-content: center; background: var(--surface-2); border: 1px solid var(--line); color: var(--text-2); font-size: 18px; align-self: start; }
+.gs-t { grid-area: t; min-width: 0; display: flex; flex-direction: column; }
+.gs-t b { font: 600 15px var(--f-ui); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gs-t small { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gs-m { grid-area: m; text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.gs-m b { font: 600 14px var(--f-display); font-variant-numeric: tabular-nums; }
+.gs-tag { font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 99px; background: var(--surface-2); color: var(--text-2); border: 1px solid var(--line); }
+.gs-tag.t-paid { background: var(--mint-soft); color: var(--mint-ink); border-color: transparent; } .gs-tag.t-overdue { background: var(--rose-soft); color: var(--rose-ink); border-color: transparent; }
+.gs-tag.t-unpaid, .gs-tag.t-partial, .gs-tag.t-open { background: var(--amber-soft); color: var(--amber-ink); border-color: transparent; }
+.gs-subs { grid-area: s; display: none; gap: 6px; flex-wrap: wrap; padding-top: 8px; }
+.gs-r.on .gs-subs { display: flex; }
+.gs-subs button { height: 34px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line-2); background: var(--surface); color: var(--text); font: 600 12.5px var(--f-ui); }
+.gs-subs button.p { background: var(--ink); border-color: var(--ink); color: #fff; }
+html.dark .gs-subs button.p { background: #f1f5f9; border-color: #f1f5f9; color: #0b1430; }
+.gs-r.low .gs-t small { color: var(--rose-ink); }
+.gs-empty { padding: 34px 16px; text-align: center; color: var(--muted); } .gs-empty b { display: block; color: var(--text); font-size: 15px; margin-bottom: 4px; }
+.gs-foot { display: flex; gap: 16px; padding: 9px 16px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+.gs-foot kbd { font: 600 11px var(--f-ui); padding: 1px 5px; border-radius: 5px; border: 1px solid var(--line-2); margin-right: 3px; background: var(--surface-2); }
+@media screen and (max-width: 767px) {
+  .gs.open { padding: 0; align-items: stretch; background: var(--surface); }
+  .gs-card { width: 100%; max-height: none; height: 100%; border-radius: 0; border: 0; box-shadow: none; padding-top: var(--sat, 0px); }
+  .gs-foot { display: none; }
+  .gs-r { padding: 11px 8px; }
+  .gs-subs button { height: 40px; }
+}
+html.gs-open, html.gs-open body { overflow: hidden; }
+
+/* =====================================================================  dashboard widgets */
+#bento.custom { grid-auto-flow: row dense; }
+#bento > .w-hidden { display: none !important; }
+.dash-customize svg.ic, .dash-customize-m svg.ic { font-size: 17px; }
+.dash-customize-m { display: none; }
+@media screen and (max-width: 767px) {
+  .dash-customize-m { display: inline-flex; align-items: center; gap: 7px; margin-top: 10px; height: 40px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--text); font: 600 13px var(--f-ui); }
+}
+.wd-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.wd-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 6px 6px 12px; border: 1px solid var(--line, #e2e8f0); border-radius: 12px; background: var(--surface-2, #f8fafc); }
+.wd-ck { display: flex; align-items: center; gap: 10px; min-height: 40px; flex: 1; font-weight: 600; font-size: 14px; }
+.wd-ck input { width: 20px; height: 20px; accent-color: #0b1430; }
+.wd-mv { display: flex; gap: 4px; }
+.wd-mv button { width: 40px; height: 40px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line, #e2e8f0); background: var(--surface, #fff); color: var(--text, #0b1430); }
+.wd-mv button:disabled { opacity: .3; }
+.wd-mv svg.up { transform: rotate(90deg); } .wd-mv svg.dn { transform: rotate(90deg); }
+
+/* =====================================================================  document register tools */
+.doc-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 4px 0 12px; }
+.dt-btn { display: inline-flex; align-items: center; gap: 7px; height: 40px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--text); font: 600 13px var(--f-ui); }
+.dt-btn[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: #fff; }
+html.dark .dt-btn[aria-pressed="true"] { background: #f1f5f9; border-color: #f1f5f9; color: #0b1430; }
+.adv-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.adv-pill { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 8px 0 12px; border-radius: 99px; background: var(--saffron-soft); color: var(--saffron-ink); border: 1px solid transparent; font: 600 12.5px var(--f-ui); }
+.adv-pill svg.ic { width: 15px; height: 15px; }
+.adv-pill.clear { background: transparent; border-color: var(--line); color: var(--text-2); padding-right: 12px; }
+.adv-grid { display: flex; flex-direction: column; gap: 2px; }
+.adv-two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+html.doc-selecting #invoices-list-tbody tr[data-id] { cursor: pointer; }
+html.doc-selecting #invoices-list-tbody tr[data-id] td:first-child { position: relative; padding-left: 38px !important; }
+html.doc-selecting #invoices-list-tbody tr[data-id] td:first-child::before { content: ''; position: absolute; left: 10px; top: 50%; width: 20px; height: 20px; margin-top: -10px; border-radius: 6px; border: 2px solid var(--line-2); background: var(--surface); }
+html.doc-selecting #invoices-list-tbody tr.row-sel { background: var(--saffron-soft) !important; }
+html.doc-selecting #invoices-list-tbody tr.row-sel td:first-child::before { background: var(--ink) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12.5 4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / 14px no-repeat; border-color: var(--ink); }
+html.dark.doc-selecting #invoices-list-tbody tr.row-sel td:first-child::before { background-color: #f58220; border-color: #f58220; }
+/* phone cards: the checkbox sits at the card's top-left corner */
+@media screen and (max-width: 767px) {
+  html.doc-selecting #invoices-list-tbody tr[data-id] { position: relative; padding-left: 40px !important; }
+  html.doc-selecting #invoices-list-tbody tr[data-id] td:first-child { position: static; padding-left: 0 !important; }
+  html.doc-selecting #invoices-list-tbody tr[data-id] td:first-child::before { left: 12px; top: 22px; margin-top: 0; }
+}
+.bulk-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(96px + var(--sab, 0px)); z-index: 60; display: flex; align-items: center; gap: 4px; max-width: calc(100vw - 24px); overflow-x: auto;
+  padding: 6px; border-radius: 18px; background: var(--ink, #0b1430); color: #fff; box-shadow: 0 24px 48px -20px rgba(8, 14, 32, .7); scrollbar-width: none; }
+.bulk-bar::-webkit-scrollbar { display: none; }
+.bulk-bar .bb-n { padding: 0 10px 0 8px; font: 700 13.5px var(--f-ui); white-space: nowrap; }
+.bulk-bar button { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 42px; padding: 0 12px; border-radius: 12px; color: #fff; font: 600 13px var(--f-ui); background: rgba(255, 255, 255, .08); white-space: nowrap; }
+.bulk-bar button:disabled { opacity: .38; }
+.bulk-bar .bb-x { width: 42px; padding: 0; justify-content: center; }
+@media screen and (min-width: 768px) { .bulk-bar { bottom: 28px; left: calc(50% + var(--rail-w, 0px) / 2); } }
+html.dark .bulk-bar { background: #1c2747; border: 1px solid #2a3555; }
+/* contrast fixes for the search sheet and dialog fields (found by tests/v92-web.mjs) */
+.gs-r.on { background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line-2); }
+.gs-r.on .gs-t small { color: var(--text-2); }
+.gs-tag.t-unpaid, .gs-tag.t-partial, .gs-tag.t-open { color: #8a4b05; }
+html.dark .gs-tag.t-unpaid, html.dark .gs-tag.t-partial, html.dark .gs-tag.t-open { color: var(--amber-ink); }
+html.dark .ed-f > span, html.dark .acct-dlg .field-label, html.dark .acct-dlg label > span { color: #c3c9d9 !important; }
+/* long lists: rows below the screen are not laid out until scrolled to (phones show rows as cards) */
+@media screen and (max-width: 767px) {
+  #invoices-list-tbody > tr[data-id], #items-list-tbody > tr, #customers-list-tbody > tr { content-visibility: auto; contain-intrinsic-size: auto 132px; }
+}
