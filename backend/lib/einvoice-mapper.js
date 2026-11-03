@@ -1,4 +1,5 @@
 'use strict';
+const GST_RULES = (() => { try { return require('./gst-rules.js'); } catch (e) { return null; } })();
 /**
  * Maps a billing-app document to:
  *   - e-Invoice JSON (FORM GST INV-01, schema version 1.1) for the IRP
@@ -71,6 +72,17 @@ function baseChecks(doc, company, c, errors, warnings) {
     if (!it.desc) E(`items[${i}].desc`, `${n}: description is required.`);
     if (!normUQC(it.unit)) warnings.push({ field: `items[${i}].unit`, message: `${n}: "${it.unit}" is not a GST UQC; OTH will be sent.` });
   });
+  // place of supply must follow the FACTS recorded with the document (IGST Act s.10(1)(a)/(b)) — the server re-derives it
+  const exportish = ['EXPWP', 'EXPWOP', 'SEZWP', 'SEZWOP'].includes(doc.supplyType);
+  const goods = c.items.some(it => !String(it.hsn || '').startsWith('99'));
+  const bSC = normState(doc.buyerStateCode), sSC = normState(doc.shipStateCode || doc.buyerStateCode);
+  if (GST_RULES && goods && !exportish && bSC && sSC && bSC !== sSC) {
+    const r = GST_RULES.posForGoods({ supplierSC: company.stateCode, buyerSC: bSC, shipSC: sSC, shipMode: doc.shipMode });
+    if (r.need === 'shipMode') E('shipMode', 'Delivery state differs from the buyer\'s state, but the document does not record who receives the goods (buyer itself or a third person on its instruction). Open it in the app, answer that question and save.');
+    else if (r.pos && normState(doc.pos) !== r.pos && !String(doc.posReason || '').trim())
+      E('pos', `Place of supply ${normState(doc.pos)} contradicts Sec ${r.rule} of the IGST Act (${r.pos}).`);
+    else if (r.pos && normState(doc.pos) !== r.pos) warnings.push({ field: 'pos', message: `Place of supply set by hand (${normState(doc.pos)}; the rule gives ${r.pos}): ${doc.posReason}` });
+  }
   // the browser's totals must match our own calculation
   if (doc.grandTotal !== undefined && Math.abs(Number(doc.grandTotal) - c.grandTotal) > 0.009)
     E('grandTotal', `Totals mismatch: app shows ${doc.grandTotal}, server calculates ${c.grandTotal}. Re-save the document.`);
@@ -283,7 +295,14 @@ function buildEwbPayload(doc, company, { cfgGstin } = {}) {
   if (!STATES[actTo] && !exportSupply) E('shipStateCode', 'Delivery state code is required.');
   const t = transportOf(doc);
   transportChecks(t, errors, warnings, { needPartB: false });
-  const sameParty = p.ship.same;
+  const sameParty = doc.shipMode === 'third' ? false : p.ship.same;   // recorded bill-to / ship-to (Sec 10(1)(b)) → transaction type 2
+  // GSTN advisory 18-12-2024: from 01-01-2025 no e-way bill for a document older than 180 days
+  const maxAge = GST_RULES ? GST_RULES.at('ewbMaxDocAgeDays', new Date().toISOString().slice(0, 10)) : 180;
+  if (maxAge && doc.date && /^\d{4}-\d{2}-\d{2}$/.test(doc.date)) {
+    const todayIst = new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);
+    const age = Math.round((Date.parse(todayIst) - Date.parse(doc.date)) / 86400e3);
+    if (age > maxAge) E('date', `The document is ${age} days old: the e-way bill system does not accept documents older than ${maxAge} days.`);
+  }
   const transactionType = sameParty ? 1 : 2;      // 1 Regular, 2 Bill To - Ship To
   const opt = (o) => { Object.keys(o).forEach(k => (o[k] === undefined || o[k] === '' || o[k] === null) && delete o[k]); return o; };
   const payload = opt({

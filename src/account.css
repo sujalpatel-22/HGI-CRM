@@ -34,6 +34,7 @@ html.signed-out #app-container, html.signed-out #login-overlay { display: none !
 .acct-dlg-body { font-size: 14px; line-height: 1.55; color: var(--text-2, #39405a); }
 .acct-dlg-body p { margin: 0 0 10px; } .acct-dlg-body ul { margin: 0 0 10px; padding-left: 18px; list-style: disc; } .acct-dlg-body li { margin: 4px 0; }
 .acct-dlg-body .inp { width: 100%; }
+.acct-dlg-body .dlg-pre { white-space: pre-line; max-height: 55vh; overflow-y: auto; }
 .acct-note { font-size: 12px; color: var(--muted, #6c7084); }
 .acct-check { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; }
 .acct-check input { margin-top: 3px; width: 18px; height: 18px; }

@@ -54,6 +54,9 @@ jobs:
       - name: Sync service tests (Google sign-in verification, per-user Sheets storage, deletion)
         run: node backend/test/run-tests.js 2>&1 | tee logs/02-backend-tests.log
 
+      - name: GST rule book + tax engine golden cases (release blocker)
+        run: node tests/gst-rules.test.mjs 2>&1 | tee logs/02-gst-rules.log
+
       - name: Web tests (Chromium — phone, tablet, desktop)
         timeout-minutes: 50
         run: |
@@ -66,6 +69,7 @@ jobs:
           node tests/picker-web.mjs 2>&1 | tee logs/03-picker-web.log
           node tests/v91-web.mjs 2>&1 | tee logs/03-v91-web.log
           node tests/edoc-e2e.mjs 2>&1 | tee logs/03-edoc-e2e.log
+          node tests/gst-compliance-web.mjs 2>&1 | tee logs/03-gst-compliance-web.log
           node tests/v92-web.mjs 2>&1 | tee logs/03-v92-web.log
 
       - uses: actions/setup-java@v4

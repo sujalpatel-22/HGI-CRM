@@ -192,3 +192,22 @@ html.dark .ed-f > span, html.dark .acct-dlg .field-label, html.dark .acct-dlg la
 @media screen and (max-width: 767px) {
   #invoices-list-tbody > tr[data-id], #items-list-tbody > tr, #customers-list-tbody > tr { content-visibility: auto; contain-intrinsic-size: auto 132px; }
 }
+
+/* v9.3 GST audit card (Returns) + blocking findings + delivery-fact question */
+.gst-audit { background: var(--surface, #fff); border: 1px solid var(--line, #e5e2da); border-radius: var(--r-group, 16px); padding: 14px 16px; color: var(--text-2, #39405a); }
+.gst-audit .ga-head { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+.gst-audit h3 { font-size: 15px; font-weight: 700; color: var(--text, #14182b); margin: 0 0 2px; }
+.gst-audit p { font-size: 12.5px; margin: 0; }
+.gst-audit .ga-run { min-height: 40px; padding: 8px 14px; border-radius: 10px; font-weight: 600; }
+.gst-audit .ga-sum { margin-top: 10px; }
+.gst-audit .ga-none { margin-top: 8px; color: var(--muted, #5e6275); }
+.gst-audit .ga-list { margin: 10px 0 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.gst-audit .ga-list > li { border: 1px solid var(--line, #e5e2da); border-left: 4px solid var(--amber-ink, #a16207); border-radius: 10px; padding: 8px 10px; font-size: 12.5px; }
+.gst-audit .ga-list > li.ga-b { border-left-color: var(--rose-ink, #b4233f); }
+.gst-audit .ga-top { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.gst-audit .ga-open { min-height: 36px; min-width: 64px; padding: 4px 12px; border-radius: 8px; border: 1px solid var(--line, #e5e2da); font-weight: 600; color: var(--saffron-ink, #a84d06); background: transparent; }
+.gst-audit .ga-list ul { margin: 4px 0 0 18px; list-style: disc; }
+.gst-audit em { font-style: normal; font-size: 11px; color: var(--muted, #5e6275); }
+.ship-mode legend { color: var(--amber-ink, #a16207); }
+.ship-mode label { min-height: 36px; }
+.ship-mode input[type=radio] { width: 18px; height: 18px; flex: none; }

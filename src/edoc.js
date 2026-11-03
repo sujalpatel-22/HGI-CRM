@@ -69,6 +69,7 @@
       // an empty ship-to means "same as the buyer" (the form shows it that way)
       shipName: d.shipName || d.buyerName, shipGstin: d.shipName && d.shipName !== d.buyerName ? (d.shipGstin || '') : d.buyerGstin, shipAddress: d.shipAddress || d.buyerAddress,
       shipState: d.shipState || d.buyerState, shipStateCode: d.shipStateCode || d.buyerStateCode, shipPin: d.shipPin || d.buyerPin,
+      shipMode: d.shipMode || '', posReason: d.posReason || '',
       items: (d.items || []).map(i => ({ desc: i.desc, hsn: String(i.hsn || '').trim(), gst: Number(i.gst) || 0, qty: Number(i.qty) || 0, unit: i.unit, rate: Number(i.rate) || 0 })),
       discount: Number(d.discount) || 0, pfCharges: Number(d.pfCharges) || 0, otherCharges: Number(d.otherCharges) || 0, grandTotal: c.grandTotal,
       transport: { transName: d.transport || '', transId: String(tr.transId || '').toUpperCase(), transMode: tr.transMode || '1', distance: Number(tr.distance) || 0, vehicleNo, vehicleType: tr.vehicleType || 'R',
@@ -208,6 +209,15 @@
   async function generate(mode) {
     const sd = saved(); if (!sd) return;
     if (unsavedChanges(sd)) return toast(t('Save the document first'), 'error');
+    // never report a document whose GST treatment is unresolved (same rule book as the editor and the server)
+    const blocks = typeof runChecks === 'function' ? runChecks(sd, { audit: true }).filter(x => x.lvl === 'block') : [];
+    if (blocks.length) {
+      await dlg({ title: t('Fix these before reporting'), body: `<ul class="ed-list">${blocks.slice(0, 8).map(e => `<li>${esc(e.msg)}</li>`).join('')}</ul><p class="ed-small">${esc(t('Nothing was sent to the GST system.'))}</p>`, buttons: [{ label: t('OK'), value: true, primary: true }] });
+      return;
+    }
+    const maxAge = window.HGI_GST ? HGI_GST.at('ewbMaxDocAgeDays', todayISO()) : 180;
+    if (mode !== 'irn' && maxAge && daysBetween(sd.date, todayISO()) > maxAge)
+      return toast(t(`The e-way bill system does not accept documents older than ${maxAge} days.`), 'error');
     const f = feats() || {};
     const body = { doc: docForApi(sd), company: companyForApi(), mode };
     await run('Checking the document…', async () => {

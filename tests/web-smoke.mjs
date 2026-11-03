@@ -368,7 +368,7 @@ for (const vp of VIEWPORTS) {
   await page.evaluate(() => cancelInvoice('C'));
   check(await page.evaluate(() => state.invoices.find(d => d.id === 'C').cancelled && balanceOf(state.invoices.find(d => d.id === 'B')) === state.invoices.find(d => d.id === 'B').grandTotal), 'cancelling the credit note restores the balance');
   // discount larger than value
-  check(await page.evaluate(() => runChecks({ ...state.invoices[0], discount: 5000, items: [{ desc: 'Widget', hsn: '847130', gst: 18, qty: 1, unit: 'NOS', rate: 1000 }] }).some(x => x.lvl === 'error' && /Discount/.test(x.msg))), 'discount above item value is a compliance error');
+  check(await page.evaluate(() => runChecks({ ...state.invoices[0], discount: 5000, items: [{ desc: 'Widget', hsn: '847130', gst: 18, qty: 1, unit: 'NOS', rate: 1000 }] }).some(x => x.lvl === 'block' && /Discount/.test(x.msg))), 'discount above item value blocks the document (v9.3: not overridable)');
   // products: duplicate name blocked, rename keeps stock history
   const stock0 = await page.evaluate(() => stockOf(state.products[0]));
   await page.evaluate(() => { openItemModal(); $('modal-item-name').value = 'widget'; $('modal-item-hsn').value = '847130'; $('modal-item-unit').value = 'NOS'; saveItemFromModal(); });
