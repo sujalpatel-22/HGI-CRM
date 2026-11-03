@@ -192,7 +192,7 @@ await page.evaluate(() => saveBuyerFromInvoice());
 check(await page.evaluate(() => (state.customers.find(c => c.name === 'Naroda Steel') || {}).partyType) === 'supplier', '"Save to Supplier Master" stores a supplier');
 // list + filters
 await page.evaluate(() => { switchTab('invoices'); $('inv-filter-type').value = 'PO'; renderInvoiceList(); });
-const rows = await page.$$eval('#invoices-list-tbody tr', r => r.filter(x => x.querySelector('td:last-child button')).map(x => x.innerText.replace(/\s+/g, ' ').slice(0, 60)));
+const rows = await page.$$eval('#invoices-list-tbody tr', r => r.filter(x => x.querySelector('td:last-child button')).map(x => x.textContent.replace(/\s+/g, ' ').trim().slice(0, 60)));   // textContent: v9.2 skips painting off-screen rows (innerText is empty until scrolled to)
 check(rows.length === 1 && /PO\/01/.test(rows[0]), 'document register filters purchase orders ' + JSON.stringify(rows));
 await page.evaluate(() => { $('inv-filter-type').value = ''; renderInvoiceList(); });
 
