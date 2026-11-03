@@ -27,7 +27,7 @@ html:not(.dark) #app-container .text-slate-300 { color: var(--muted) !important;
 
 /* ---------- status colours: readable in both themes ---------- */
 html:not(.dark) #app-container .text-amber-600, html:not(.dark) #app-container .text-amber-500, html:not(.dark) #app-container .text-orange-500 { color: var(--amber-ink) !important; }
-html:not(.dark) #app-container .text-orange-600, html:not(.dark) #app-container .text-orange-700 { color: var(--saffron-ink) !important; }
+html:not(.dark) #app-container .text-orange-600 { color: var(--saffron-ink) !important; }   /* orange-700 already passes (5.2 : 1) */
 html:not(.dark) #app-container dd.pos, html:not(.dark) #app-container .text-emerald-500 { color: var(--mint-ink) !important; }
 html:not(.dark) #app-container .delta.down { color: var(--rose-ink) !important; }
 html:not(.dark) #app-container .panel-link { color: var(--saffron-ink) !important; }
