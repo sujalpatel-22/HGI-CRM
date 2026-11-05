@@ -93,6 +93,10 @@ async function launch() {
 // test sign-in on the device; returns the page after the app reloaded into the account
 async function signIn(email, choose) {
   await fillSignIn(page, email);
+  // as a person does: close the keyboard, then tap the button (scrolled into view)
+  await page.evaluate(() => { if (document.activeElement) document.activeElement.blur(); });
+  await page.waitForTimeout(600);
+  await page.locator('#si-go').scrollIntoViewIfNeeded();
   await page.click('#si-go');
   if (choose) { await page.waitForSelector('.acct-dlg', { timeout: 30000 }); await page.click(choose); }
   return afterReload(() => window.HGI_READY === true && !!window.HGI_ACCOUNT && !document.getElementById('signin-screen'));

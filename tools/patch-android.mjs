@@ -40,6 +40,9 @@ let manifest = fs.readFileSync(manifestPath, 'utf8');
 if (!manifest.includes('android.permission.INTERNET')) throw new Error('Capacitor template changed: INTERNET permission missing (needed for cloud sync)');
 if (!manifest.includes('androidx.core.content.FileProvider')) throw new Error('Capacitor template changed: FileProvider missing from AndroidManifest.xml');
 manifest = manifest.replace(/android:configChanges="([^"]*)"/, (m, v) => `android:configChanges="${v.includes('density') ? v : v + '|density'}"`);
+// the on-screen keyboard shrinks the app instead of covering it, so forms (log in / create account) stay scrollable
+manifest = manifest.replace(/<activity\b([^>]*android:name="[^"]*MainActivity"[^>]*)>/, (m, attrs) => /windowSoftInputMode/.test(attrs) ? m : `<activity${attrs} android:windowSoftInputMode="adjustResize">`);
+if (!/MainActivity"[^>]*windowSoftInputMode="adjustResize"|windowSoftInputMode="adjustResize"[^>]*MainActivity"/.test(manifest)) throw new Error('could not set adjustResize on MainActivity (Capacitor template changed?)');
 // Backups: invoices are financial records. No silent Google cloud backup of the app's data; phone-to-phone
 // transfer (Android 12+ device transfer) is still allowed. Users back up explicitly with "Share Backup".
 fs.writeFileSync(path.join(main, 'res', 'xml', 'data_extraction_rules.xml'), `<?xml version="1.0" encoding="utf-8"?>

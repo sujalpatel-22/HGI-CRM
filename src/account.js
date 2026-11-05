@@ -215,6 +215,8 @@
     const f = el.querySelector('#si-form');
     if (f) {
       f.onsubmit = e => { e.preventDefault(); signInFlow(el.querySelector('#si-go')); };
+      // a field that gets the keyboard is moved into view (small phones: the keyboard covers half the screen)
+      f.addEventListener('focusin', e => { const x = e.target; setTimeout(() => { try { if (document.activeElement === x) x.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e2) { /* ignore */ } }, 350); });
       el.querySelector('#si-tab-login').onclick = () => { siMode = 'login'; signInScreen('', { username: el.querySelector('#si-user').value }); };
       el.querySelector('#si-tab-signup').onclick = () => { siMode = 'signup'; signInScreen('', {}); };
       el.querySelector('#si-show').onchange = e => el.querySelectorAll('#si-pass, #si-pass2').forEach(i => { i.type = e.target.checked ? 'text' : 'password'; });
