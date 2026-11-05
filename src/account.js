@@ -40,6 +40,15 @@
   const AppPlugin = () => isNative && cap.Plugins ? cap.Plugins.App : null;
   const t = s => (window.HGI_I18N ? window.HGI_I18N.t(s) : s);
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  // Some WebViews (Android 11 emulator, 5" phone) make a position:fixed full-screen layer taller than the visible screen,
+  // so its lower part (the sign-in button, dialog buttons) can neither be seen nor scrolled to. Size such layers to the
+  // visible viewport instead and keep that up to date (rotation, on-screen keyboard).
+  function fitToScreen(el) {
+    const fit = () => { if (!el.isConnected) return off(); const h = Math.round(window.visualViewport ? window.visualViewport.height : window.innerHeight); el.style.bottom = 'auto'; el.style.height = h + 'px'; };
+    const off = () => { window.removeEventListener('resize', fit); if (window.visualViewport) window.visualViewport.removeEventListener('resize', fit); };
+    window.addEventListener('resize', fit); if (window.visualViewport) window.visualViewport.addEventListener('resize', fit);
+    fit();
+  }
   const timeout = (p, ms, v = null) => Promise.race([p, new Promise(res => setTimeout(() => res(v), ms))]);
   // Bridge calls can go unanswered on a slow cold start or right after an in-app reload (seen on Android 11/13/15
   // emulators): wait generously and retry instead of acting on a missing answer.
@@ -170,6 +179,7 @@
         dialog.last = { text: inp ? inp.value : '', checked: !!(chk && chk.checked), values }; el.remove(); resolve(v); });
       el.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.tagName === 'INPUT' && e.target.type !== 'checkbox') { const p = el.querySelector('.acct-btn-primary, .acct-btn-danger'); if (p) { e.preventDefault(); p.click(); } } });
       document.body.appendChild(el);
+      fitToScreen(el);
       const first = el.querySelector('input, .acct-btn-primary'); if (first) first.focus();
     });
   }
@@ -182,7 +192,7 @@
   function signInScreen(note, opts) {
     opts = opts || {};
     let el = document.getElementById('signin-screen');
-    if (!el) { el = document.createElement('div'); el.id = 'signin-screen'; el.className = 'brand-bg no-print'; document.body.appendChild(el); }
+    if (!el) { el = document.createElement('div'); el.id = 'signin-screen'; el.className = 'brand-bg no-print'; document.body.appendChild(el); fitToScreen(el); }
     const lo = document.getElementById('login-overlay'); if (lo) lo.classList.add('hidden');
     if (opts.mode) siMode = opts.mode;
     const test = config.auth === 'test', su = siMode === 'signup';
