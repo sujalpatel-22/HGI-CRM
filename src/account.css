@@ -1,5 +1,5 @@
 /* HGI Billing v8.1 — sign-in screen, account dialogs, Settings → Account card */
-#signin-screen { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; padding: 20px;
+#signin-screen { position: fixed; inset: 0; z-index: 80; display: flex; align-items: flex-start; justify-content: center; padding: 20px;
   padding-top: max(20px, env(safe-area-inset-top)); padding-bottom: max(20px, env(safe-area-inset-bottom)); overflow-y: auto;
   background: var(--ink-grad, #0b1433); font-family: var(--f-ui, system-ui, sans-serif); }
 #signin-screen::before { content: ''; position: absolute; inset: -10%; background: var(--guilloche) center / contain no-repeat; opacity: .07; pointer-events: none; }
@@ -194,3 +194,13 @@ html.dark #signin-screen .si-tabs { background: rgba(255, 255, 255, .06); }
 @media (prefers-reduced-motion: reduce) { #sync-pill.busy::before { animation: none; } }
 @media (max-width: 479px) { #sync-pill { font-size: 0; gap: 0; padding: 9px; } #sync-pill::before { width: 9px; height: 9px; } }
 @media print { #sync-pill { display: none; } }
+
+/* the card is centred with auto margins, so on a short screen (or with the keyboard open) it scrolls instead of being cut off */
+#signin-screen .si-card { margin: auto 0; flex: none; }
+@media (max-height: 760px) {
+  #signin-screen .si-card { padding: 22px 20px 18px; border-radius: 24px; }
+  #signin-screen .si-logo { height: 52px; margin-bottom: 6px; }
+  #signin-screen h1 { font-size: 22px; margin-bottom: 4px; }
+  #signin-screen .si-sub { font-size: 13px; margin-bottom: 14px; }
+  #signin-screen .si-help { margin-bottom: 8px; }
+}

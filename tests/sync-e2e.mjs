@@ -326,6 +326,17 @@ const c2 = await syncNow(C2);
 check(c2.status === 'signin' && await C2.evaluate(() => !!document.getElementById('acct-relogin') || /Log in again/.test(document.body.innerText)), `the other phone is logged out and asked to log in again (status "${c2.status}")`);
 check(await C2.evaluate(() => state.invoices.length >= 0 && !!localStorage.getItem('hgi_billing_u_' + HGI_ACCOUNT.key)), 'its data stays on that phone meanwhile');
 
+// a small phone (or the keyboard taking half the screen): the whole form must still be reachable
+{
+  const ctx = await browser.newContext({ viewport: { width: 320, height: 480 }, isMobile: true, hasTouch: true });
+  const P = await ctx.newPage(); P.label = 'tiny'; P.on('pageerror', e => errors.push('tiny: ' + e));
+  await open(P); await fillSignIn(P, 'tiny@example.com');
+  const nav = P.waitForEvent('load', { timeout: 20000 });
+  let ok = true; try { await P.click('#si-go', { timeout: 8000 }); await nav; } catch (e) { ok = false; }
+  check(ok, 'on a 320×480 screen the Create account button can be reached and works');
+  await ctx.close();
+}
+
 /* ---------------------------------------------------------------- 10. Demo Mode never syncs; delete account */
 console.log('\n▶ Demo Mode and account deletion');
 await B1.evaluate(() => HGI_M.enterDemo({ confirmed: true })); await B1.waitForFunction(() => window.HGI_READY === true && typeof DEMO_MODE !== 'undefined' && DEMO_MODE, null, { timeout: 20000 });
