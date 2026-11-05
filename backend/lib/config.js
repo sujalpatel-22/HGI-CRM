@@ -26,7 +26,7 @@ function load(env = process.env) {
     spreadsheetId: env.SHEETS_SPREADSHEET_ID || '',
     sheetsReloadMinutes: env.SHEETS_RELOAD_MINUTES === undefined ? 10 : Number(env.SHEETS_RELOAD_MINUTES),
     // an unknown session / user name re-reads the spreadsheet at most this often (another writer may have just added it)
-    sheetsMissReloadMs: env.SHEETS_MISS_RELOAD_MS === undefined ? 5000 : Number(env.SHEETS_MISS_RELOAD_MS),
+    sheetsMissReloadMs: env.SHEETS_MISS_RELOAD_MS === undefined ? 60000 : Number(env.SHEETS_MISS_RELOAD_MS),
     // secrets (Secret Manager): session-ID signing key and the password pepper
     sessionSecret: env.SESSION_SECRET || '',
     passwordPepper: env.PASSWORD_PEPPER || '',

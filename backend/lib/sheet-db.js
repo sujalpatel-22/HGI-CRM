@@ -64,7 +64,7 @@ class SheetDB {
     this.client = o.client;
     this.log = o.log || (() => {});
     this.reloadMs = o.reloadMs == null ? 10 * 60e3 : o.reloadMs;
-    this.missReloadMs = o.missReloadMs == null ? 5000 : o.missReloadMs;
+    this.missReloadMs = o.missReloadMs == null ? 60000 : o.missReloadMs;
     this.tables = new Map();
     for (const def of [...o.tables, META, BLOBS]) this.tables.set(def.name, new Table(def));
     this.queue = Promise.resolve();
