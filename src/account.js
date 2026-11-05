@@ -1,15 +1,19 @@
 /* =====================================================================
-   HGI Billing — account (Sign in with Google) + automatic cloud sync
+   HGI Billing — accounts (username + password) + automatic cloud sync
    Loaded BEFORE the core app script: it decides whose data slot is opened.
 
-   - Every signed-in Google account has its own data slot on the phone
+   - Sign up / log in with a username and password (checked by the HGI server;
+     the password is never stored on the phone). Log out ends the session on
+     the server too.
+   - Every account has its own data slot on the phone
      (localStorage "hgi_billing_u_<key>" + app-file mirror "state-u-<key>"),
      so two people using one phone never see each other's data.
-   - Each account's data is synced to the HGI sync service, which keeps it in
-     the account's own spreadsheet in the HGI company Drive. The app holds no
-     Google API key — only the public service URL and OAuth client ID.
-   - Data saved by versions before 8.1 (no account) is offered to the first
-     account that signs in on the phone, so nothing is lost on upgrade.
+   - Each account's data is synced to the HGI server, which keeps it in Google
+     Sheets (every row marked with the account's ID). The app holds no Google
+     key — only the public server URL. Billing keeps working offline; changes
+     upload as soon as there is internet.
+   - Data saved on the phone before accounts existed is offered to the first
+     account that logs in on the phone (a safety copy stays on the phone).
    ===================================================================== */
 (function () {
   'use strict';
@@ -25,7 +29,7 @@
   try { account = JSON.parse(ls.get(ACCOUNT_KEY) || 'null'); } catch (e) { account = null; }
   if (!account || !/^[a-f0-9]{24}$/.test(String(account.key || ''))) account = null;
   // read by the core app (STORAGE_KEY) and the Android shell (mirror file name)
-  window.HGI_ACCOUNT = account ? { key: account.key, email: account.email } : null;
+  window.HGI_ACCOUNT = account ? { key: account.key, username: account.username || '', email: account.email || '' } : null;
   const slotKey = key => 'hgi_billing_u_' + key;
   const mirrorKey = key => 'state-u-' + key;
 
@@ -64,9 +68,11 @@
       // automated tests of the debug APK may switch to the no-sign-in mode; ignored by release builds (debug === false)
       if (c.debug === true) { try { const o = localStorage.getItem('hgi_test_auth'); if (o === 'off') c = Object.assign({}, c, { auth: 'off' }); } catch (e) { /* ignore */ } }
     }
-    config = { auth: c.auth || 'off', syncUrl: String(c.syncUrl || '').replace(/\/$/, ''), webClientId: c.webClientId || '' };
+    // 'password' — username + password accounts; 'test' — the same against the automatic test server (debug builds);
+    // 'google' (builds before 9.4) is served by the same password sign-in now
+    let auth = c.auth || 'off'; if (auth === 'google') auth = 'password';
+    config = { auth, syncUrl: String(c.syncUrl || '').replace(/\/$/, '') };
     if (config.auth !== 'off' && config.auth !== 'unavailable' && !config.syncUrl) config.auth = 'misconfigured';
-    if (config.auth === 'google' && !config.webClientId) config.auth = 'misconfigured';
     return config;
   }
 
@@ -160,7 +166,9 @@
       el.innerHTML = `<div class="acct-dlg-card"><h3>${esc(title)}</h3><div class="acct-dlg-body">${body}</div><div class="acct-dlg-actions">${buttons.map((b, i) =>
         `<button type="button" data-i="${i}" class="${b.primary ? 'acct-btn-primary' : b.danger ? 'acct-btn-danger' : 'acct-btn'}">${esc(b.label)}</button>`).join('')}</div></div>`;
       el.addEventListener('click', e => { const b = e.target.closest('button[data-i]'); if (!b) return; const v = buttons[Number(b.dataset.i)].value; const inp = el.querySelector('input[type=text]'); const chk = el.querySelector('input[type=checkbox]');
-        dialog.last = { text: inp ? inp.value : '', checked: !!(chk && chk.checked) }; el.remove(); resolve(v); });
+        const values = {}; el.querySelectorAll('input[id]').forEach(i => { values[i.id] = i.type === 'checkbox' ? i.checked : i.value; });
+        dialog.last = { text: inp ? inp.value : '', checked: !!(chk && chk.checked), values }; el.remove(); resolve(v); });
+      el.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.tagName === 'INPUT' && e.target.type !== 'checkbox') { const p = el.querySelector('.acct-btn-primary, .acct-btn-danger'); if (p) { e.preventDefault(); p.click(); } } });
       document.body.appendChild(el);
       const first = el.querySelector('input, .acct-btn-primary'); if (first) first.focus();
     });
@@ -168,65 +176,100 @@
 
   window.HGI_DIALOG = dialog;   // shared with the Android shell (logout, bulk export)
 
-  /* ------------------------------------------------------------------ sign-in screen */
-  const G_LOGO = '<svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59A14.5 14.5 0 0 1 9.5 24c0-1.59.28-3.14.76-4.59l-7.98-6.19A23.99 23.99 0 0 0 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>';
-  function signInScreen(note) {
+  /* ------------------------------------------------------------------ sign-in screen: log in / create account */
+  const USERNAME_RE = /^[a-z0-9](?:[a-z0-9._-]{1,28})[a-z0-9]$/;
+  let siMode = 'login';
+  function signInScreen(note, opts) {
+    opts = opts || {};
     let el = document.getElementById('signin-screen');
     if (!el) { el = document.createElement('div'); el.id = 'signin-screen'; el.className = 'brand-bg no-print'; document.body.appendChild(el); }
     const lo = document.getElementById('login-overlay'); if (lo) lo.classList.add('hidden');
-    const test = config.auth === 'test';
+    if (opts.mode) siMode = opts.mode;
+    const test = config.auth === 'test', su = siMode === 'signup';
+    const blocked = config.auth === 'unavailable' || config.auth === 'misconfigured';
     el.innerHTML = `<div class="si-card">
       <img src="${esc((document.getElementById('login-logo') || {}).src || '')}" alt="" class="si-logo">
       <h1>HGI Billing</h1>
-      <p class="si-sub">${esc(t('Sign in to open your business data. It is saved on this phone and synced automatically to your HGI cloud account, so a reinstall or a new phone brings everything back.'))}</p>
-      ${config.auth === 'unavailable' ? `<button type="button" id="si-retry" class="si-google">${esc(t('Try again'))}</button>` : config.auth === 'misconfigured' ? `<p class="si-err">${esc(t('This build is not set up for sign-in (sync service address or Google client ID missing). Please install the official app from Google Play.'))}</p>` : test
-        ? `<p class="si-test">TEST BUILD — test accounts only</p><input id="si-email" type="email" class="inp" placeholder="name@example.com" value="qa@example.com" autocomplete="off"><button type="button" id="si-go" class="si-google">${esc(t('Test sign-in'))}</button>`
-        : `<button type="button" id="si-go" class="si-google">${G_LOGO}<span>${esc(t('Continue with Google'))}</span></button>`}
-      <p id="si-msg" class="si-msg" role="status">${note ? esc(note) : ''}</p>
+      <p class="si-sub">${esc(t(su ? 'Create your account. Your business data is saved on this phone and in your HGI cloud account, so a new phone or a reinstall brings everything back.' : 'Log in to open your business data. It is saved on this phone and synced automatically to your HGI cloud account.'))}</p>
+      ${config.auth === 'unavailable' ? `<button type="button" id="si-retry" class="si-google">${esc(t('Try again'))}</button>`
+        : config.auth === 'misconfigured' ? `<p class="si-err">${esc(t('This build is not set up for accounts (server address missing). Please install the official app from Google Play.'))}</p>` : ''}
+      ${blocked ? '' : `${test ? '<p class="si-test">TEST BUILD — automatic test server only</p>' : ''}
+      <div class="si-tabs" role="tablist" aria-label="${esc(t('Account'))}">
+        <button type="button" role="tab" id="si-tab-login" aria-selected="${!su}" class="${!su ? 'on' : ''}">${esc(t('Log in'))}</button>
+        <button type="button" role="tab" id="si-tab-signup" aria-selected="${su}" class="${su ? 'on' : ''}">${esc(t('Create account'))}</button>
+      </div>
+      <form id="si-form" class="si-form" novalidate autocomplete="on">
+        <label for="si-user">${esc(t('Username'))}</label>
+        <input id="si-user" name="username" type="text" class="inp" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="30" required value="${esc(opts.username || '')}" ${opts.lockUser && !su ? 'readonly' : ''} aria-describedby="si-user-help">
+        <p id="si-user-help" class="si-help">${su ? esc(t('3–30 characters: letters, digits, dot, underscore or hyphen.')) : ''}</p>
+        <label for="si-pass">${esc(t('Password'))}</label>
+        <input id="si-pass" name="password" type="password" class="inp" autocomplete="${su ? 'new-password' : 'current-password'}" maxlength="256" required aria-describedby="si-pass-help">
+        <p id="si-pass-help" class="si-help">${su ? esc(t('At least 8 characters. Avoid common passwords and your username.')) : ''}</p>
+        ${su ? `<label for="si-pass2">${esc(t('Repeat password'))}</label><input id="si-pass2" name="password2" type="password" class="inp" autocomplete="new-password" maxlength="256" required>` : ''}
+        <label class="si-show"><input type="checkbox" id="si-show"> ${esc(t('Show password'))}</label>
+        <button type="submit" id="si-go" class="si-google si-submit">${esc(t(su ? 'Create account' : 'Log in'))}</button>
+      </form>`}
+      <p id="si-msg" class="si-msg" role="status" aria-live="polite">${note ? esc(note) : ''}</p>
       <p class="si-foot">${esc(t('Your data is visible only to you and authorised HGI support staff.'))} ${config.syncUrl ? `<a href="#" id="si-privacy">${esc(t('Privacy policy'))}</a>` : ''}</p>
     </div>`;
-    const go = el.querySelector('#si-go'); if (go) go.onclick = () => signInFlow(go);
+    const f = el.querySelector('#si-form');
+    if (f) {
+      f.onsubmit = e => { e.preventDefault(); signInFlow(el.querySelector('#si-go')); };
+      el.querySelector('#si-tab-login').onclick = () => { siMode = 'login'; signInScreen('', { username: el.querySelector('#si-user').value }); };
+      el.querySelector('#si-tab-signup').onclick = () => { siMode = 'signup'; signInScreen('', {}); };
+      el.querySelector('#si-show').onchange = e => el.querySelectorAll('#si-pass, #si-pass2').forEach(i => { i.type = e.target.checked ? 'text' : 'password'; });
+      // focus the first empty field — unless the user (or a password manager) is already typing somewhere in the form
+      const first = el.querySelector(opts.username ? '#si-pass' : '#si-user');
+      if (first && !opts.noFocus) setTimeout(() => { try { if (!f.contains(document.activeElement) && first.isConnected) first.focus(); } catch (e2) { /* ignore */ } }, 50);
+    }
     const rt = el.querySelector('#si-retry'); if (rt) rt.onclick = () => { try { sessionStorage.removeItem('hgi_cfg_retry'); } catch (e) { /* ignore */ } location.reload(); };
     const pp = el.querySelector('#si-privacy'); if (pp) pp.onclick = e => { e.preventDefault(); openUrl(config.syncUrl + '/privacy'); };
     if (window.HGI_I18N && window.HGI_I18N.translateTree) window.HGI_I18N.translateTree(el);
+    if (note && opts.error) msg(note, true);
   }
   function openUrl(u) { const N = Native(); if (N && N.openUrl) N.openUrl({ url: u }).catch(() => {}); else window.open(u, '_blank', 'noopener'); }
-  const msg = (s, err) => { const m = document.getElementById('si-msg'); if (m) { m.textContent = s || ''; m.classList.toggle('err', !!err); } };
+  const msg = (s, err) => { const m = document.getElementById('si-msg'); if (m) { m.textContent = s || ''; m.classList.toggle('err', !!err); m.setAttribute('role', err ? 'alert' : 'status'); } };
 
-  // → { session, expiresAt, user:{key,email,name} }
+  /** the form's values, checked the same way the server checks them (the server has the last word) */
+  function readForm() {
+    const v = id => { const e = document.getElementById(id); return e ? e.value : ''; };
+    const username = v('si-user').trim(), password = v('si-pass'), su = siMode === 'signup';
+    const fieldErr = (id, text) => { const e = document.getElementById(id); if (e) { e.setAttribute('aria-invalid', 'true'); e.focus(); } throw new ApiErr(text, 0, 'invalid'); };
+    document.querySelectorAll('#si-form [aria-invalid]').forEach(e => e.removeAttribute('aria-invalid'));
+    if (!username) fieldErr('si-user', t('Enter your username.'));
+    if (su && !USERNAME_RE.test(username.toLowerCase())) fieldErr('si-user', t('Username: 3–30 characters — letters, digits, dot, underscore or hyphen; start and end with a letter or digit.'));
+    if (!password) fieldErr('si-pass', t('Enter your password.'));
+    if (su && password.length < 8) fieldErr('si-pass', t('Password: at least 8 characters.'));
+    if (su && password !== v('si-pass2')) fieldErr('si-pass2', t('The two passwords are not the same.'));
+    return { username, password };
+  }
+
+  // → { session, expiresAt, user:{key, username} }
   async function obtainSession() {
-    if (config.auth === 'test') {
-      const email = ((document.getElementById('si-email') || {}).value || '').trim();
-      return api('POST', '/v1/auth/test', { email });
-    }
-    const N = Native();
-    if (!N || typeof N.googleSignIn !== 'function') throw new ApiErr(t('Google sign-in is available in the Android app.'), 0, 'unsupported');
-    let r;
-    try { r = await N.googleSignIn({ serverClientId: config.webClientId }); }
-    catch (e) {
-      const code = (e && (e.code || e.message)) || '';
-      if (/cancel/i.test(code)) throw new ApiErr('', 0, 'cancelled');
-      if (/no_account|NoCredential/i.test(code)) throw new ApiErr(t('No Google account on this phone. Add one in Android Settings → Accounts, then try again.'), 0, 'no_account');
-      throw new ApiErr(t('Google sign-in failed') + ': ' + (e.message || e), 0, 'google_failed');
-    }
-    return api('POST', '/v1/auth/google', { idToken: r.idToken });
+    const f = readForm();
+    return api('POST', siMode === 'signup' ? '/v1/auth/signup' : '/v1/auth/login', { username: f.username, password: f.password, device: device() });
   }
 
   let busy = false;
   async function signInFlow(btn) {
     if (busy) return; busy = true;
-    if (btn) btn.disabled = true;
-    msg(t('Signing in…'));
+    const label = btn ? btn.textContent : '';
+    const form = document.getElementById('si-form');
+    const lock = on => { if (btn) { btn.disabled = on; btn.textContent = on ? t(siMode === 'signup' ? 'Creating account…' : 'Logging in…') : label; btn.setAttribute('aria-busy', on ? 'true' : 'false'); } if (form) form.classList.toggle('busy', on); };
+    lock(true);
+    msg(t(siMode === 'signup' ? 'Creating your account…' : 'Logging in…'));
     try {
       const s = await obtainSession();
-      msg(t('Checking your cloud data…'));
+      const p = document.getElementById('si-pass'); if (p) p.value = '';
+      const p2 = document.getElementById('si-pass2'); if (p2) p2.value = '';
+      msg(t(siMode === 'signup' ? 'Account created. Opening your data…' : 'Logged in. Checking your cloud data…'));
       await openAccount(s);           // reloads the app on success
     } catch (e) {
-      busy = false; if (btn) btn.disabled = false;
-      msg(e.code === 'cancelled' ? '' : e.code === 'offline'
+      busy = false; lock(false);
+      msg(e.code === 'offline'
         ? (config.auth === 'test' ? t('This TEST build signs in only to the automatic test server, which is not reachable from a normal phone. Install the INTERNAL-TESTKEY APK instead.')
-          : t('No internet connection. You need internet to sign in the first time on this phone.'))
-        : e.message, e.code !== 'cancelled');
+          : t('No internet connection. You need internet to log in the first time on this phone.'))
+        : e.message, true);
     }
   }
 
@@ -234,8 +277,12 @@
   async function openAccount(s) {
     const key = s.user.key;
     const reauth = account && account.key;
-    if (reauth && reauth !== key) throw new ApiErr(t('This app is signed in with another account. Sign out first.'), 0, 'other_account');
-    const next = { key, email: s.user.email, name: s.user.name || '', session: s.session, expiresAt: s.expiresAt };
+    if (reauth && reauth !== key) {
+      // the session just made belongs to another account: end it again on the server
+      try { await api('POST', '/v1/auth/logout', {}, s.session); } catch (e) { /* expires by itself */ }
+      throw new ApiErr(t('This phone is logged in with another account. Log out first.'), 0, 'other_account');
+    }
+    const next = { key, username: s.user.username || '', name: s.user.username || '', email: '', session: s.session, expiresAt: s.expiresAt };
     if (reauth) { account = next; saveAccount(next); setStatus('idle'); hideSignIn(); kick(0); return; }   // session renewed, same account
 
     let local = ls.get(slotKey(key));
@@ -276,6 +323,9 @@
           });
           if (!cloudHas) { merged.company = legacy.obj.company || {}; merged.credentials = legacy.obj.credentials || merged.credentials; }
           use = merged;
+          // safety copy of exactly what was on the phone, kept in the app's own files (not uploaded)
+          await nativeWrite('legacy-backup-' + new Date().toISOString().slice(0, 10), legacy.text);
+          ls.set('hgi_migrating_u_' + key, JSON.stringify({ at: Date.now(), docs: (legacy.obj.invoices || []).length, buyers: (legacy.obj.customers || []).length, products: (legacy.obj.products || []).length }));
           ls.set(LEGACY_OWNER, key);
           if (cloudHas) { ls.set(slotKey(key) + '_before_restore', legacy.text); await nativeWrite('u-' + key + '-before-restore', legacy.text); }
           ls.del(LEGACY_KEY);                    // the app-file copy ('state') stays on the phone as an upgrade safety copy
@@ -311,7 +361,8 @@
       return false;
     }
     try { sessionStorage.removeItem('hgi_cfg_retry'); } catch (e) { /* ignore */ }
-    if (account && account.session) return true;
+    if (account && account.session) { flushLogouts(); return true; }
+    flushLogouts();
     // WebView storage was cleared but the app files survived: pick the account up again
     const saved = parse(await nativeRead('account'));
     if (saved && /^[a-f0-9]{24}$/.test(String(saved.key || '')) && saved.session) {
@@ -320,7 +371,8 @@
       location.reload(); return false;
     }
     document.documentElement.classList.add('signed-out');
-    signInScreen();
+    let note = ''; try { note = sessionStorage.getItem('hgi_logout_note') || ''; sessionStorage.removeItem('hgi_logout_note'); } catch (e) { /* ignore */ }
+    signInScreen(note === 'ok' ? t('Logged out. Your data is safe in your cloud account.') : note === 'later' ? t('Logged out on this phone. The session ends on the server as soon as there is internet.') : '');
     window.HGI_READY = true; window.HGI_SIGNIN_READY = true; document.documentElement.classList.add('booted');
     return false;
   }
@@ -328,7 +380,23 @@
   /* ------------------------------------------------------------------ sync engine (record by record) */
   let status = 'idle', lastErr = '', timer = null, running = false, again = false, backoff = 0, features = { gst: false, files: false }, lastPull = 0;
   const active = () => config.auth !== 'off' && !!account && !(typeof DEMO_MODE !== 'undefined' && DEMO_MODE);
-  function setStatus(s, e) { status = s; lastErr = e || ''; renderCard(); renderBanner(); }
+  function setStatus(s, e) { status = s; lastErr = e || ''; renderCard(); renderBanner(); renderPill(); }
+  // small "saved to cloud" indicator in the app header
+  function renderPill() {
+    if (!active()) return;
+    const head = document.querySelector('#app-container > header > div');
+    if (!head) return;
+    let p = document.getElementById('sync-pill');
+    if (!p) {
+      p = document.createElement('span'); p.id = 'sync-pill'; p.setAttribute('role', 'status');
+      const before = document.getElementById('gs-btn') || document.getElementById('app-avatar');
+      if (before && before.parentNode === head) before.before(p); else head.appendChild(p);
+    }
+    const pend = typeof state !== 'undefined' ? pendingCount() : 0;
+    const [cls, text] = status === 'syncing' ? ['busy', t('Saving…')] : status === 'ok' ? (pend ? ['busy', `${pend} ${t('to upload')}`] : ['ok', t('Saved to cloud')])
+      : status === 'offline' ? ['warn', t('Offline — saved on phone')] : status === 'signin' ? ['warn', t('Log in to sync')] : status === 'error' ? ['warn', t('Not synced')] : ['', t('Cloud')];
+    p.className = cls; p.textContent = text; p.title = lastErr || text;
+  }
   function kick(ms) { if (!active()) return; clearTimeout(timer); timer = setTimeout(syncNow, ms == null ? 3000 : ms); }
 
   const labelOf = (kind, obj) => !obj ? kind : kind === 'invoice' ? `${obj.docType || 'INV'} ${obj.num || ''}`.trim() : kind === 'company' ? t('Company profile') : kind === 'settings' ? t('Settings') : (obj.name || kind);
@@ -456,12 +524,26 @@
         if (p.conflicts) again = true;
       } while (again && ++rounds < 4);
       backoff = 0; setStatus('ok');
+      // first upload of the phone's earlier data: say when ALL of it is in the cloud
+      const mig = parse(ls.get('hgi_migrating_u_' + account.key) || '');
+      if (mig && !pendingCount()) {
+        ls.del('hgi_migrating_u_' + account.key);
+        toast(`${t('All your data is saved in your cloud account')}: ${mig.docs} ${t('documents')}, ${mig.buyers} ${t('buyers')}, ${mig.products} ${t('products')}.`, 'success');
+      }
       if (window.HGI_PDFQ) HGI_PDFQ.drain();
     } catch (e) {
       if (e.status === 401 && e.code === 'account_deleted') { await wipeLocal(account.key); await clearAccount(); toast(t('This account was deleted. Its data was removed from this phone.'), 'error'); return location.reload(); }
-      if (e.status === 401) { setStatus('signin', t('Sign in again to keep syncing. Your data is safe on this phone.')); return; }
+      if (e.status === 401) {
+        const was = status;
+        setStatus('signin', e.code === 'session_revoked' ? t('You were logged out (password changed or "log out everywhere"). Log in again to keep syncing — your data is safe on this phone.') : t('Log in again to keep syncing. Your data is safe on this phone.'));
+        if (was !== 'signin') toast(t('Log in again to keep syncing (Settings → Account & sync).'), 'error');
+        return;
+      }
+      if (e.status === 403 && e.code === 'account_disabled') { setStatus('error', e.message); return; }
       backoff = Math.min(backoff ? backoff * 2 : 15000, 10 * 60000);
+      const wasErr = status === 'error';
       setStatus(e.code === 'offline' ? 'offline' : 'error', e.code === 'offline' ? t('Offline — billing works normally; changes upload automatically when the internet is back.') : e.message);
+      if (e.code !== 'offline' && !wasErr) toast(t('Could not save to the cloud yet') + ': ' + e.message + ' ' + t('Your data is safe on this phone; it will retry.'), 'error');
       kick(backoff);
     } finally { running = false; }
   }
@@ -527,8 +609,25 @@
   }
   async function clearAccount() {
     ls.del(ACCOUNT_KEY); await nativeWrite('account', '');
-    const N = Native(); if (N && N.googleSignOut) { try { await timeout(N.googleSignOut(), 3000); } catch (e) { /* ignore */ } }
     account = null;
+  }
+  /* log-outs that could not reach the server (offline) are sent later, so the session really ends there too */
+  const PENDING_LOGOUT = 'hgi_pending_logout';
+  async function revokeOnServer(session) {
+    try { await api('POST', '/v1/auth/logout', {}, session); return true; }
+    catch (e) {
+      if (e.status === 401) return true;                         // already ended
+      const list = (parse(ls.get(PENDING_LOGOUT) || '') || { s: [] }).s || [];
+      ls.set(PENDING_LOGOUT, JSON.stringify({ s: [...list, session].slice(-10) }));
+      return false;
+    }
+  }
+  async function flushLogouts() {
+    const list = (parse(ls.get(PENDING_LOGOUT) || '') || { s: [] }).s || [];
+    if (!list.length || !config.syncUrl) return;
+    const left = [];
+    for (const tok of list) { try { await api('POST', '/v1/auth/logout', {}, tok); } catch (e) { if (e.status !== 401) left.push(tok); } }
+    if (left.length) ls.set(PENDING_LOGOUT, JSON.stringify({ s: left })); else ls.del(PENDING_LOGOUT);
   }
   function pendingCount() {
     if (!account) return 0;
@@ -540,30 +639,56 @@
 
   /* ------------------------------------------------------------------ account actions (Settings) */
   async function signOutFlow() {
-    const v = await dialog({ title: t('Sign out?'),
-      body: `<p>${esc(t('Your data stays in your cloud account and comes back when you sign in again.'))}</p><label class="acct-check"><input type="checkbox" id="so-wipe"> ${esc(t('Also remove this account\'s data from this phone (shared phone)'))}</label>`,
-      buttons: [{ label: t('Cancel'), value: false }, { label: t('Sign out'), value: true, primary: true }] });
+    const v = await dialog({ title: t('Log out?'),
+      body: `<p>${esc(t('Your data stays in your cloud account and comes back when you log in again.'))}</p><label class="acct-check"><input type="checkbox" id="so-wipe"> ${esc(t('Also remove this account\'s data from this phone (shared phone)'))}</label>`,
+      buttons: [{ label: t('Cancel'), value: false }, { label: t('Log out'), value: true, primary: true }] });
     const box = { wipe: dialog.last.checked };
     if (!v) return;
     saveState(); await syncNow();
     if (pendingCount()) {
-      const go = await dialog({ title: t('Not synced yet'), body: `<p>${esc(t('Some changes could not be uploaded yet (no internet?).'))} ${box.wipe ? esc(t('If you remove the data from this phone now, those changes are lost.')) : esc(t('They stay on this phone and upload when you sign in again.'))}</p>`,
-        buttons: [{ label: t('Cancel'), value: false }, { label: t('Sign out anyway'), value: true, danger: true }] });
+      const go = await dialog({ title: t('Not synced yet'), body: `<p>${esc(t('Some changes could not be uploaded yet (no internet?).'))} ${box.wipe ? esc(t('If you remove the data from this phone now, those changes are lost.')) : esc(t('They stay on this phone and upload when you log in again.'))}</p>`,
+        buttons: [{ label: t('Cancel'), value: false }, { label: t('Log out anyway'), value: true, danger: true }] });
       if (!go) return;
     }
     if (window.HGI_M && HGI_M.flushMirror) await HGI_M.flushMirror();
+    const ended = await revokeOnServer(account.session);
     if (box.wipe) await wipeLocal(account.key);
     await clearAccount();
+    try { sessionStorage.setItem('hgi_logout_note', ended ? 'ok' : 'later'); } catch (e) { /* ignore */ }
     location.reload();
+  }
+  async function changePasswordFlow() {
+    const r = await dialog({ title: t('Change password'),
+      body: `<label class="acct-field">${esc(t('Current password'))}<input type="password" id="acp-cur" class="inp" autocomplete="current-password"></label>
+        <label class="acct-field">${esc(t('New password'))}<input type="password" id="acp-new" class="inp" autocomplete="new-password"></label>
+        <label class="acct-field">${esc(t('Repeat new password'))}<input type="password" id="acp-new2" class="inp" autocomplete="new-password"></label>
+        <p class="acct-note">${esc(t('At least 8 characters. Your other phones will be logged out; this one stays logged in.'))}</p>`,
+      buttons: [{ label: t('Cancel'), value: false }, { label: t('Change password'), value: true, primary: true }] });
+    if (!r) return;
+    const v = dialog.last.values;
+    if (!v['acp-new'] || v['acp-new'].length < 8) return toast(t('New password: at least 8 characters.'), 'error');
+    if (v['acp-new'] !== v['acp-new2']) return toast(t('The two new passwords are not the same.'), 'error');
+    try {
+      const x = await api('POST', '/v1/auth/password', { currentPassword: v['acp-cur'], newPassword: v['acp-new'] }, account.session);
+      toast(t('Password changed') + (x.otherSessionsEnded ? ` — ${x.otherSessionsEnded} ${t('other session(s) logged out')}` : ''), 'success');
+    } catch (e) { toast(t('Password not changed') + ': ' + e.message, 'error'); }
+  }
+  async function logoutAllFlow() {
+    const ok = await dialog({ title: t('Log out on all other devices?'), body: `<p>${esc(t('Every other phone or browser logged in to this account must log in again. Unsynced changes on those devices stay there and upload after they log in.'))}</p>`,
+      buttons: [{ label: t('Cancel'), value: false }, { label: t('Log out others'), value: true, primary: true }] });
+    if (!ok) return;
+    try { const x = await api('POST', '/v1/auth/logout-all', {}, account.session); toast(`${x.ended} ${t('other session(s) logged out')}`, 'success'); }
+    catch (e) { toast(t('Could not log out the other devices') + ': ' + e.message, 'error'); }
   }
   async function deleteAccount() {
     const r = await dialog({ title: t('Delete account and cloud data?'), danger: true,
-      body: `<p>${esc(t('This permanently deletes all business data and invoice PDFs of'))} <strong>${esc(account.email)}</strong> ${esc(t('from the cloud and removes it from this phone. It cannot be undone.'))}</p>
-        <p class="acct-note">${esc(t('Tip: share a backup file first if you may need the invoices later.'))}</p><p>${esc(t('Type DELETE to confirm:'))}</p><input type="text" class="inp" autocomplete="off" autocapitalize="characters">`,
+      body: `<p>${esc(t('This permanently deletes the account'))} <strong>${esc(account.username || account.email)}</strong> ${esc(t('with all its business data and invoice PDFs from the cloud, and removes it from this phone. It cannot be undone.'))}</p>
+        <p class="acct-note">${esc(t('Tip: share a backup file first if you may need the invoices later.'))}</p><p>${esc(t('Type DELETE to confirm:'))}</p><input type="text" id="del-confirm" class="inp" autocomplete="off" autocapitalize="characters">
+        <label class="acct-field">${esc(t('Your password'))}<input type="password" id="del-pass" class="inp" autocomplete="current-password"></label>`,
       buttons: [{ label: t('Cancel'), value: false }, { label: t('Delete permanently'), value: true, danger: true }] });
     if (!r) return;
     if (String(dialog.last.text).trim().toUpperCase() !== 'DELETE') return toast(t('Not deleted — type DELETE to confirm.'), 'info');
-    try { await api('DELETE', '/v1/account', undefined, account.session); }
+    try { await api('DELETE', '/v1/account', { password: dialog.last.values['del-pass'] || '' }, account.session); }
     catch (e) { if (!(e.status === 401 && e.code === 'account_deleted')) return toast(t('Could not delete the account') + ': ' + e.message, 'error'); }
     clearTimeout(timer);
     await wipeLocal(account.key);
@@ -572,7 +697,7 @@
     setTimeout(() => location.reload(), 600);
   }
   async function reSignIn() {
-    signInScreen(t('Sign in again with') + ' ' + account.email);
+    signInScreen(t('Log in again as') + ' ' + (account.username || account.email), { mode: 'login', username: account.username || '', lockUser: true });
     const el = document.getElementById('signin-screen');
     const close = document.createElement('button'); close.type = 'button'; close.className = 'si-close'; close.textContent = t('Not now');
     close.onclick = hideSignIn; el.querySelector('.si-card').appendChild(close);
@@ -609,17 +734,19 @@
     const tone = demo ? 'muted' : cl.length ? 'warn' : status === 'ok' && !pend ? 'ok' : status === 'syncing' || status === 'idle' ? 'muted' : 'warn';
     card.innerHTML = `<h3 class="set-group"><i class="fa-solid fa-cloud-arrow-up"></i>${esc(t('Account & cloud sync'))}</h3>
       <div class="acct-row"><div class="acct-avatar" aria-hidden="true">${esc((account.name || account.email || '?').trim().charAt(0).toUpperCase())}</div>
-        <div class="acct-who"><strong>${esc(account.name || account.email)}</strong><span>${esc(account.email)}</span></div></div>
+        <div class="acct-who"><strong>${esc(account.username || account.name || account.email)}</strong><span>${esc(t('HGI cloud account'))}</span></div></div>
       <p class="acct-status acct-${tone}" id="acct-status" role="status">${esc(line)}</p>
       ${cl.length ? `<p class="acct-alert">${esc(cl.length === 1 ? t('1 document has a number already used on another device.') : cl.length + ' ' + t('documents have numbers already used on another device.'))} <button type="button" class="acct-link" onclick="HGI_SYNC.fixClashes()">${esc(t('Fix'))}</button></p>` : ''}
       ${lost ? `<p class="acct-note mt-1">${esc(lost + ' ' + t('edit(s) replaced by another device\'s version'))} <button type="button" class="acct-link" onclick="HGI_SYNC.reviewConflicts()">${esc(t('Review'))}</button></p>` : ''}
-      <p class="text-[11px] text-slate-500 mt-1">${esc(t('Buyers, products, invoices, payments and your business profile are saved on this phone and synced automatically to your HGI cloud account. Sign in on any phone to get everything back; several phones stay in step. No manual backups needed.'))}</p>
+      <p class="text-[11px] text-slate-500 mt-1">${esc(t('Buyers, products, invoices, payments and your business profile are saved on this phone and synced automatically to your HGI cloud account (Google Sheets). Log in on any phone to get everything back; several phones stay in step.'))}</p>
       <p class="text-[11px] text-slate-500 mt-1" id="acct-features">${features.checked ? `${esc(t('GST look-up'))}: <strong>${features.gst ? esc(t('on')) : esc(t('not set up on the server'))}</strong> · ${esc(t('PDF cloud copies'))}: <strong>${features.files ? esc(t('on')) : esc(t('not set up on the server'))}</strong>` : ''}</p>
       <div class="flex flex-wrap gap-2 mt-3">
-        ${status === 'signin' ? `<button type="button" class="px-3 py-2 bg-orange-600 text-white rounded text-xs font-bold" onclick="HGI_SYNC.reSignIn()">${esc(t('Sign in again'))}</button>` : ''}
+        ${status === 'signin' ? `<button type="button" id="acct-relogin" class="px-3 py-2 bg-orange-600 text-white rounded text-xs font-bold" onclick="HGI_SYNC.reSignIn()">${esc(t('Log in again'))}</button>` : ''}
         <button type="button" id="acct-sync-now" class="px-3 py-2 bg-slate-800 text-white rounded text-xs font-bold" onclick="HGI_SYNC.syncNow()" ${demo ? 'disabled' : ''}>${esc(t('Sync now'))}</button>
         ${features.files && window.HGI_PDFQ ? `<button type="button" id="acct-pdfs" class="px-3 py-2 border rounded text-xs font-bold" onclick="HGI_PDFQ.backupAll()">${esc(t('Back up invoice PDFs'))}</button>` : ''}
-        <button type="button" id="acct-signout" class="px-3 py-2 border rounded text-xs font-bold" onclick="HGI_SYNC.signOut()">${esc(t('Sign out'))}</button>
+        <button type="button" id="acct-password" class="px-3 py-2 border rounded text-xs font-bold" onclick="HGI_SYNC.changePassword()">${esc(t('Change password'))}</button>
+        <button type="button" id="acct-logout-all" class="px-3 py-2 border rounded text-xs font-bold" onclick="HGI_SYNC.logoutAll()">${esc(t('Log out other devices'))}</button>
+        <button type="button" id="acct-signout" class="px-3 py-2 border rounded text-xs font-bold" onclick="HGI_SYNC.signOut()">${esc(t('Log out'))}</button>
         <button type="button" id="acct-delete" class="px-3 py-2 border border-rose-300 text-rose-700 rounded text-xs font-bold" onclick="HGI_SYNC.deleteAccount()">${esc(t('Delete account and cloud data'))}</button>
       </div>`;
   }
@@ -649,14 +776,14 @@
     if (A) A.addListener('appStateChange', ({ isActive }) => { if (!isActive) kick(0); else kick(1000); });
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') kick(0); });
     setInterval(() => { if (document.visibilityState !== 'hidden') kick(0); }, 2 * 60000);   // picks up changes from other devices
-    renderCard(); renderBanner();
+    renderCard(); renderBanner(); renderPill();
     kick(600);
   }
 
   window.HGI_SYNC = {
-    gate, start, syncNow: () => { kick(0); }, signOut: signOutFlow, deleteAccount, reSignIn, fixClashes, reviewConflicts,
+    gate, start, syncNow: () => { kick(0); }, signOut: signOutFlow, deleteAccount, reSignIn, fixClashes, reviewConflicts, changePassword: changePasswordFlow, logoutAll: logoutAllFlow,
     gstLookup, uploadPdf, listPdfs, edocApi, refreshFeatures, features: () => features,
-    active, status: () => ({ status, error: lastErr, account: account && { key: account.key, email: account.email }, sync: account ? readMeta(account.key) : null, pending: account && typeof state !== 'undefined' ? pendingCount() : 0, clashes: clashes().map(x => x.d.num), config: { auth: config.auth } }),
+    active, status: () => ({ status, error: lastErr, account: account && { key: account.key, username: account.username || '', email: account.email }, sync: account ? readMeta(account.key) : null, pending: account && typeof state !== 'undefined' ? pendingCount() : 0, clashes: clashes().map(x => x.d.num), config: { auth: config.auth } }),
     renderCard, _syncNow: syncNow
   };
 })();

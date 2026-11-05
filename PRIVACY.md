@@ -1,21 +1,24 @@
 # Privacy Policy — HGI Billing (Android)
 
-_Last updated: 1 November 2026 — applies from app version 9.0 (cloud account)._
+_Last updated: 6 November 2026 — applies from app version 9.4 (username and password accounts, data kept in Google Sheets)._
 
 HGI Billing is published by HARIGURU INDUSTRIES, Ahmedabad, Gujarat, India ("HGI", "we").
 
 ## 1. Your account
-You sign in with your Google account. From Google we receive your **name, e-mail address and Google account ID**.
-We use them only to identify your account and keep your data separate from every other user. We never receive your Google password.
+You create an account with a **username and password** of your choice. We store the username, a random account ID, the
+date the account was created, its status and the time of your last log-in. Your password itself is never stored: we keep
+only a one-way **scrypt** hash of it, made with a random salt and a secret key that exists only on our server. For each
+device you log in on we keep a session record (a hashed session code, the device model, start and expiry time), so that
+logging out ends the session on our server too.
 
 ## 2. The data you enter
 You enter business data: company profile (including GSTIN, bank and UPI details), buyers, products and stock,
 invoices, quotations, credit/debit notes, payments and settings.
 
 - It is stored **on your phone**, so billing works without internet.
-- It is also stored in **your HGI cloud account**: a database (Google Cloud Firestore) and, for invoice PDFs you create,
-  a private file store (Google Cloud Storage), both in a Google Cloud project controlled by HARIGURU INDUSTRIES and hosted
-  by Google LLC as our service provider. This lets you sign in on any phone and get your data back, and keeps several
+- It is also stored in **your HGI cloud account**: a Google Sheets spreadsheet owned by HARIGURU INDUSTRIES and, for
+  invoice PDFs you create, a private file store (Google Cloud Storage), hosted by Google LLC as our service provider.
+  Every row is marked with your account ID. This lets you log in on any phone and get your data back, and keeps several
   phones in step.
 - Only our sync service can read or write this data, and only for the account that is signed in. Authorised HGI staff
   can access the cloud data for support or recovery. We do not use your business data for advertising, do not sell it and
@@ -46,18 +49,20 @@ The app contains no advertising or analytics SDKs. Android's own Google cloud ba
 
 ## 5. Security
 Connections are encrypted (HTTPS). The app holds no database or storage keys: only our server, running on Google Cloud
-with its own service identity, can reach the database and file store, and it checks the signed-in account on every request.
-The database is encrypted at rest by Google and backed up daily. You can also protect the app with a PIN.
+with its own service identity, writes to the spreadsheet and file store, and it checks the signed-in account on every
+request, so an account can only see and change its own rows. The spreadsheet is shared only with HGI staff who administer
+it; Google encrypts it at rest and keeps its version history. You can also protect the app with a PIN.
 
 ## 6. Keeping and deleting your data
 We keep your cloud data while your account exists. You can delete it at any time:
-- in the app: **Settings → Account → Delete account and cloud data**, or
-- on the web: the account-deletion page linked from the app's Google Play listing (sign in with the same Google account), or
-- by e-mail to info@hariguru.com from the account's e-mail address.
+- in the app: **Settings → Account & sync → Delete account and cloud data**, or
+- on the web: the account-deletion page linked from the app's Google Play listing (enter your username and password), or
+- by e-mail to info@hariguru.com.
 
-Deletion removes all your records and PDFs from the database and file store at once. Copies inside our encrypted
-database backups expire within 7 weeks. We keep only a marker (a random-looking account code and the deletion date, no
-business data) so that phones still signed in to the deleted account stop syncing.
+Deletion removes all your rows from the spreadsheet and your PDFs from the file store at once, and ends all your sessions.
+Earlier versions inside the spreadsheet's version history are kept by Google for a limited time. We keep only the account
+row marked "deleted" (account ID, username, creation and deletion dates — no business data and no password hash) so that
+phones still logged in to the deleted account stop syncing; the username can then be registered again.
 
 ## 7. Children
 The app is a business tool and is not directed at children.

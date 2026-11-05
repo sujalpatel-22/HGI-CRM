@@ -1087,7 +1087,9 @@
       document.body.appendChild(a); a.click();
       setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
     }
-    function toCSV(rows) { return '﻿' + rows.map(r => r.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n'); }
+    // text a spreadsheet program could take for a formula (= + - @ …) gets a leading apostrophe; numbers stay numbers
+    const csvSafe = c => (typeof c === 'string' && /^[=+\-@\t\r\n]/.test(c) && !/^[+-]?\d[\d,]*(\.\d+)?$/.test(c) ? "'" + c : c);
+    function toCSV(rows) { return '﻿' + rows.map(r => r.map(c => `"${String(csvSafe(c) ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n'); }
 
     // invoice line: a 0 % line must say WHY it carries no tax — nil-rated, exempt or non-GST (GSTR-1 Table 8 columns, Rule 49)
     const TAXABILITY_LABEL = { nil: 'Nil-rated', exempt: 'Exempt', nongst: 'Non-GST' };

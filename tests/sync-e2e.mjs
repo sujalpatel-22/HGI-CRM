@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // End-to-end test of the cloud account: the real web app (www/) in Chromium, the real cloud service (backend/server.js)
-// with in-memory stand-ins for Firestore, Cloud Storage and the GST provider (backend/test/fake-google.js).
-// Several browser contexts = several phones. TEST sign-in (@example.com); Google sign-in itself is covered by the backend tests.
+// with in-memory stand-ins for Google Sheets, Cloud Storage and the GST provider (backend/test/fake-google.js).
+// Several browser contexts = several phones, each logging in with a username + password (accounts on the Sheets stand-in).
+import { serviceConfig, fillSignIn, TEST_PASSWORD } from './lib/accounts.mjs';
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -33,9 +34,8 @@ g.gstRecords.set(G_CANCEL, { gstin: G_CANCEL, lgnm: 'OLD MEHSANA TRADERS', trade
 const appServer = http.createServer();
 await new Promise(r => appServer.listen(0, '127.0.0.1', r));
 const appBase = `http://127.0.0.1:${appServer.address().port}`;
-const cfg = config.load({ GOOGLE_CLIENT_IDS: 'test-web-client.apps.googleusercontent.com', SESSION_SECRET: 'x'.repeat(40), PROJECT_ID: 'demo-hgi', FILES_BUCKET: 'hgi-files',
-  GST_API_URL: 'http://x/{gstin}', GST_API_HEADERS: JSON.stringify({ 'x-api-key': g.gstKey }), GST_API_NAME: 'Test GSP', HGI_ALLOW_TEST_LOGIN: '1', ALLOWED_ORIGINS: appBase });
-cfg.endpoints = g.endpoints(); cfg.gst.url = g.gstUrl();
+const cfg = serviceConfig(config, g, { FILES_BUCKET: 'hgi-files', GST_API_URL: 'http://x/{gstin}', GST_API_HEADERS: JSON.stringify({ 'x-api-key': g.gstKey }), GST_API_NAME: 'Test GSP', ALLOWED_ORIGINS: appBase });
+cfg.gst.url = g.gstUrl();
 const sync = createServer(cfg);
 await new Promise(r => sync.listen(0, '127.0.0.1', r));
 const syncBase = `http://127.0.0.1:${sync.address().port}`;
@@ -64,18 +64,22 @@ async function device(name, storage) {
 const open = async page => { await page.goto(appBase + '/'); await page.waitForFunction(() => window.HGI_READY === true || window.HGI_SIGNIN_READY === true, null, { timeout: 20000 }); };
 const afterReload = page => page.waitForFunction(() => window.HGI_READY === true && !document.getElementById('signin-screen'), null, { timeout: 25000 });
 async function signIn(page, email, answer) {
-  await page.waitForSelector('#signin-screen #si-go', { timeout: 15000 });
-  await page.fill('#si-email', email);
+  await fillSignIn(page, email);
   const nav = page.waitForEvent('load', { timeout: 25000 });
   await page.click('#si-go');
   if (answer) { await page.waitForSelector('.acct-dlg', { timeout: 15000 }); await page.click(answer); }
-  await nav; await afterReload(page);
+  await nav.catch(async e => { throw new Error(`no reload after sign-in (${page.label}): "${await page.textContent('#si-msg').catch(() => '?')}"`); });
+  await afterReload(page);
 }
 async function signOut(page) {
   await page.evaluate(() => { HGI_SYNC.signOut(); }); await page.waitForSelector('.acct-dlg');
   const nav = page.waitForEvent('load'); await page.click('.acct-dlg .acct-btn-primary'); await nav;
   await page.waitForFunction(() => window.HGI_SIGNIN_READY === true);
 }
+const waitDlg = page => page.waitForSelector('.acct-dlg', { timeout: 15000 }).catch(async e => {
+  const info = await page.evaluate(() => ({ msg: (document.getElementById('si-msg') || {}).textContent, signin: !!document.getElementById('signin-screen'), ready: window.HGI_READY, acct: !!localStorage.getItem('hgi_account'), legacy: !!localStorage.getItem('hgi_billing_v7_prod'), owner: localStorage.getItem('hgi_legacy_owner') })).catch(x => String(x));
+  throw new Error(`no dialog on ${page.label}: ${JSON.stringify(info)}`);
+});
 const syncNow = page => page.evaluate(() => HGI_SYNC._syncNow().then(() => HGI_SYNC.status()));
 const st = page => page.evaluate(() => ({ nums: state.invoices.map(d => d.num).sort(), cust: state.customers.map(c => c.name).sort(), co: state.company.name, key: STORAGE_KEY, sync: HGI_SYNC.status() }));
 const finishOnboarding = (page, name = 'Test Co') => page.evaluate(n => { const ob = document.getElementById('onboarding'); if (ob) ob.remove(); state.ui.onboarded = true; state.company.name = n; saveState(); }, name);
@@ -245,22 +249,22 @@ const legacy = { credentials: { username: 'admin', password: '123' }, company: {
 const legacyStorage = { cookies: [], origins: [{ origin: appBase, localStorage: [{ name: 'hgi_billing_v7_prod', value: JSON.stringify(legacy) }] }] };
 const U = await device('upgraded', legacyStorage);
 await open(U);
-await U.fill('#si-email', 'chetan@example.com');
+await fillSignIn(U, 'chetan@example.com');
 const navU = U.waitForEvent('load', { timeout: 25000 }); await U.click('#si-go');
-await U.waitForSelector('.acct-dlg', { timeout: 15000 });
+await waitDlg(U);
 check(/Move this phone's data into your account/.test(await U.textContent('.acct-dlg')) && /1 document/.test(await U.textContent('.acct-dlg')), 'asks before moving the phone\'s existing data (shows what)');
 await shot(U, '06-migrate-confirm');
 await U.click('.acct-dlg .acct-btn-primary'); await navU; await afterReload(U); await syncNow(U);
 check((await st(U)).co === 'Old Phone Traders' && (await cloud(U)).invoices.some(d => d.num === 'OLD/1'), 'after "Move": data in the account and uploaded');
 const U2 = await device('upgraded-declined', legacyStorage);
-await open(U2); await U2.fill('#si-email', 'dina@example.com');
+await open(U2); await fillSignIn(U2, 'dina@example.com');
 const navU2 = U2.waitForEvent('load', { timeout: 25000 }); await U2.click('#si-go');
-await U2.waitForSelector('.acct-dlg', { timeout: 15000 }); await U2.click('.acct-dlg button:not(.acct-btn-primary)'); await navU2; await afterReload(U2); await syncNow(U2);
+await waitDlg(U2); await U2.click('.acct-dlg button:not(.acct-btn-primary)'); await navU2; await afterReload(U2); await syncNow(U2);
 check((await st(U2)).nums.length === 0 && (await cloud(U2)).invoices.length === 0 && await U2.evaluate(() => !!localStorage.getItem('hgi_billing_v7_prod')), 'after "Not now": nothing uploaded, the phone\'s data left untouched');
 const U3 = await device('upgraded-merge', legacyStorage);
-await open(U3); await U3.fill('#si-email', 'asha@example.com');
+await open(U3); await fillSignIn(U3, 'asha@example.com');
 const navU3 = U3.waitForEvent('load', { timeout: 25000 }); await U3.click('#si-go');
-await U3.waitForSelector('.acct-dlg', { timeout: 15000 });
+await waitDlg(U3);
 check(/Add this phone's data to your account/.test(await U3.textContent('.acct-dlg')), 'account already has data: offers to add the phone\'s data');
 await U3.click('.acct-dlg .acct-btn-primary'); await navU3; await afterReload(U3); await syncNow(U3); await syncNow(A1);
 const merged = (await st(A1)).nums;
@@ -277,6 +281,51 @@ await B1.evaluate(() => { const po = state.invoices.find(d => d.docType === 'PO'
 await syncNow(B1); await syncNow(A1);
 check(await A1.evaluate(() => !!state.invoices.find(d => d.docType === 'PO').receivedAt), '"received" on one phone shows on the other');
 
+/* ---------------------------------------------------------------- 9c. accounts: clear messages, log-out on the server, password change */
+console.log('\n▶ Accounts: sign-up / log-in messages, log-out, password change, rows in Google Sheets');
+const D1 = await device('phoneD');
+await open(D1);
+const siMsg = async () => (await D1.textContent('#si-msg')).trim();
+const pressGo = async () => { await D1.click('#si-go'); await D1.waitForFunction(() => { const b = document.getElementById('si-go'); return b && !b.disabled; }, null, { timeout: 15000 }); };
+await fillSignIn(D1, 'asha@example.com', { mode: 'signup' }); await pressGo();
+check(/taken/i.test(await siMsg()) && await D1.getAttribute('#si-msg', 'role') === 'alert', `sign-up with a name in use: "${await siMsg()}"`);
+await fillSignIn(D1, 'newname@example.com', { mode: 'signup', password: 'password123' });
+await pressGo();
+check(/too common/i.test(await siMsg()), `weak password refused with a reason: "${await siMsg()}"`);
+await D1.click('#si-tab-signup'); await D1.fill('#si-user', 'other.name'); await D1.fill('#si-pass', 'Good-Pass-2026'); await D1.fill('#si-pass2', 'Good-Pass-2027'); await D1.click('#si-go');
+check(/not the same/i.test(await siMsg()) && await D1.getAttribute('#si-pass2', 'aria-invalid') === 'true', 'repeat password must match (checked before sending)');
+await fillSignIn(D1, 'asha@example.com', { mode: 'login', password: 'Wrong-Pass-1' }); await pressGo();
+check(/incorrect/i.test(await siMsg()), `wrong password: "${await siMsg()}"`);
+await D1.click('#si-tab-login'); await D1.fill('#si-user', ''); await D1.click('#si-go');
+check(/Enter your username/i.test(await siMsg()), 'empty form: asks for the username');
+await signIn(D1, 'asha@example.com');
+check((await st(D1)).nums.includes('HGI/1'), 'log-in on a new phone with username + password: the account\'s data is there');
+const dTok = await tokenOf(D1);
+await signOut(D1);
+check(/Logged out/.test(await D1.textContent('#si-msg')), 'after log-out the sign-in screen says so');
+const dAfter = await fetch(`${syncBase}/v1/me`, { headers: { Authorization: 'Bearer ' + dTok } });
+check(dAfter.status === 401 && (await dAfter.json()).error === 'session_revoked', 'log-out ended the session on the server (the old token no longer works)');
+await signIn(D1, 'asha@example.com');
+check((await st(D1)).nums.includes('HGI/1'), 'log in again after log-out: everything is still there (kept in Google Sheets)');
+const asha = await D1.evaluate(() => HGI_ACCOUNT.key);
+const sheetId = cfg.spreadsheetId;
+const rowsOf = (tab, uid) => { const t = g.sheets.dump(sheetId, tab); const h = t[0]; return t.slice(1).filter(r => r[h.indexOf('userId')] === uid).map(r => Object.fromEntries(h.map((k, i) => [k, r[i]]))); };
+const invRows = rowsOf('Invoices', asha), itemRows = rowsOf('InvoiceItems', asha);
+check(invRows.some(r => r.num === 'HGI/1' && r.grandTotal === 11800) && itemRows.some(r => r.desc === 'Monoblock pump 1HP' && r.qty === 2) && rowsOf('Customers', asha).length >= 2,
+  `the account's invoices, lines and buyers are rows in Google Sheets with its userId (${invRows.length} invoices, ${itemRows.length} lines)`);
+const everything = JSON.stringify(g.sheets.books.get(sheetId));
+check(!everything.includes(TEST_PASSWORD) && !everything.includes(dTok), 'no password and no session token anywhere in the spreadsheet');
+// password change on one phone logs the account out on its other phones
+const C2 = await device('phoneC2'); await open(C2); await signIn(C2, 'bharat@example.com');
+await C1.evaluate(() => { HGI_SYNC.changePassword(); }); await C1.waitForSelector('.acct-dlg #acp-cur');
+await C1.fill('#acp-cur', TEST_PASSWORD); await C1.fill('#acp-new', 'Changed-Pass-2026'); await C1.fill('#acp-new2', 'Changed-Pass-2026');
+await C1.click('.acct-dlg .acct-btn-primary');
+await C1.waitForFunction(() => /Password changed/.test(document.body.innerText), null, { timeout: 10000 }).catch(() => null);
+check(await C1.evaluate(() => /Password changed/.test(document.body.innerText)), 'password changed (message shown)');
+const c2 = await syncNow(C2);
+check(c2.status === 'signin' && await C2.evaluate(() => !!document.getElementById('acct-relogin') || /Log in again/.test(document.body.innerText)), `the other phone is logged out and asked to log in again (status "${c2.status}")`);
+check(await C2.evaluate(() => state.invoices.length >= 0 && !!localStorage.getItem('hgi_billing_u_' + HGI_ACCOUNT.key)), 'its data stays on that phone meanwhile');
+
 /* ---------------------------------------------------------------- 10. Demo Mode never syncs; delete account */
 console.log('\n▶ Demo Mode and account deletion');
 await B1.evaluate(() => HGI_M.enterDemo({ confirmed: true })); await B1.waitForFunction(() => window.HGI_READY === true && typeof DEMO_MODE !== 'undefined' && DEMO_MODE, null, { timeout: 20000 });
@@ -284,7 +333,7 @@ await B1.evaluate(() => { state.company.name = 'DEMO EDIT'; saveState(); }); awa
 check(JSON.parse((await cloud(A1)).company).name === 'Test Co', 'Demo Mode sample data is never uploaded');
 await B1.evaluate(() => HGI_M.exitDemo({ confirmed: true })); await B1.waitForFunction(() => window.HGI_READY === true && !DEMO_MODE, null, { timeout: 20000 });
 await C1.evaluate(() => { HGI_SYNC.deleteAccount(); }); await C1.waitForSelector('.acct-dlg');
-await C1.fill('.acct-dlg input[type=text]', 'delete');
+await C1.fill('.acct-dlg input[type=text]', 'delete'); await C1.fill('#del-pass', 'Changed-Pass-2026');
 const nav9 = C1.waitForEvent('load', { timeout: 20000 }); await C1.click('.acct-dlg .acct-btn-danger'); await nav9;
 await C1.waitForFunction(() => window.HGI_SIGNIN_READY === true);
 check(await C1.isVisible('#signin-screen') && await C1.evaluate(() => !localStorage.getItem('hgi_account') && !Object.keys(localStorage).some(k => k.startsWith('hgi_billing_u_'))), 'delete account: cloud data gone, phone signed out and cleared');

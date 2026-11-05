@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# ONE-TIME Google Cloud setup for HGI Billing's cloud account (database, PDF storage, backups, service identity, secrets).
+# ONE-TIME Google Cloud setup for HGI Billing's cloud service (service identity, secrets, PDF storage). The database is a
+# Google Spreadsheet that YOU create and share with the service account (printed at the end) — docs/SHEETS-SETUP.md.
 # Run it yourself in Cloud Shell (or let Claude run it after you approve). It shows every step and asks before changing anything.
 #
 #   PROJECT_ID=hgi-billing REGION=asia-south1 BUCKET=hgi-billing-pdfs bash deploy/setup-gcp.sh
 #
-# Needs: a Google Cloud project with BILLING ENABLED (Firestore backups, Cloud Run and Cloud Storage need it),
+# Needs: a Google Cloud project with BILLING ENABLED (Cloud Run and Cloud Storage need it),
 # and an account with Owner (or Editor + Security Admin) on the project.
 set -euo pipefail
 : "${PROJECT_ID:?set PROJECT_ID}"; : "${REGION:=asia-south1}"; : "${BUCKET:=${PROJECT_ID}-hgi-pdfs}"
@@ -13,17 +14,13 @@ step() { echo; echo "── $1"; shift; echo "   $*"; read -r -p "   Run this? [
 
 echo "Project $PROJECT_ID · region $REGION · PDF bucket gs://$BUCKET · service account $SA"
 gcloud config set project "$PROJECT_ID" >/dev/null
-step "Enable the APIs" gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com firestore.googleapis.com storage.googleapis.com
-step "Create the Firestore database (native mode, $REGION — cannot be moved later)" gcloud firestore databases create --location="$REGION" --type=firestore-native
-step "Lock the database to the server only (deny-all security rules)" npx -y firebase-tools@13 deploy --only firestore:rules --project "$PROJECT_ID" --config firebase.json
-step "Daily database backups, kept 7 weeks" gcloud firestore backups schedules create --database='(default)' --recurrence=daily --retention=7w
-step "Point-in-time recovery (any minute of the last 7 days; small extra cost)" gcloud firestore databases update --database='(default)' --enable-pitr
+step "Enable the APIs" gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com sheets.googleapis.com storage.googleapis.com
 step "Service identity for the server" gcloud iam service-accounts create hgi-sync --display-name="HGI Billing sync service"
-step "Let it use the database" gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$SA" --role=roles/datastore.user --condition=None
 step "Let it read its secrets" gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$SA" --role=roles/secretmanager.secretAccessor --condition=None
 step "Private bucket for invoice PDFs (no public access, 30-day soft delete)" gcloud storage buckets create "gs://$BUCKET" --location="$REGION" --uniform-bucket-level-access --public-access-prevention --soft-delete-duration=30d
 step "Let the server read/write PDFs in that bucket only" gcloud storage buckets add-iam-policy-binding "gs://$BUCKET" --member="serviceAccount:$SA" --role=roles/storage.objectAdmin
-step "Session-signing secret (random, never leaves Secret Manager)" "openssl rand -base64 48 | tr -d '\n' | gcloud secrets create hgi-session-secret --data-file=-"
+step "Session-ID signing secret (random, never leaves Secret Manager)" "openssl rand -base64 48 | tr -d '\n' | gcloud secrets create hgi-session-secret --data-file=-"
+step "Password pepper (random; every password hash depends on it — NEVER delete or change it)" "openssl rand -base64 48 | tr -d '\n' | gcloud secrets create hgi-password-pepper --data-file=-"
 echo
 echo "GST look-up (optional now, needed for auto-fetch): put your GST provider's request headers in a secret, e.g."
 echo "   echo -n '{\"x-api-key\":\"…\"}' | gcloud secrets create hgi-gst-headers --data-file=-"
@@ -34,4 +31,10 @@ echo "   gcloud secrets create hgi-irp-client-secret --data-file=<file with the 
 echo "   gcloud secrets create hgi-irp-public-key   --data-file=<NIC / GSP public key .pem>"
 echo "   (same for hgi-ewb-client-secret / hgi-ewb-public-key)"
 echo
-echo "Next: deploy the service with deploy/cloudrun.sh (FILES_BUCKET=$BUCKET)."
+echo "Now the database:"
+echo "  1. In Google Drive (the HGI company account), create a new, empty Google Sheets spreadsheet, e.g. 'HGI Billing data'."
+echo "  2. Share it with   $SA   as Editor (untick 'Notify people'). Share it with nobody else except HGI administrators."
+echo "  3. Copy its ID from the address bar: docs.google.com/spreadsheets/d/<ID>/edit"
+echo
+echo "Next: deploy the service with deploy/cloudrun.sh (SHEETS_SPREADSHEET_ID=<ID> FILES_BUCKET=$BUCKET)."
+echo "The service creates the tabs and column headings itself on its first start."

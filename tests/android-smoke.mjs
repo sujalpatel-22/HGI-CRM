@@ -2,6 +2,7 @@
 // Smoke test of the installed debug APK on an Android emulator/device, driving the app's WebView
 // through Chrome DevTools (Playwright _android). Verifies native features: offline assets, onboarding,
 // invoice + GST maths, native PDF rendering to Downloads, data mirror, restart persistence, back button.
+import { serviceConfig, fillSignIn } from './lib/accounts.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -10,7 +11,7 @@ import zlib from 'node:zlib';
 import { _android as android } from 'playwright';
 
 // v8.1: the debug APK signs in with TEST accounts against a local sync service (fake Google Drive/Sheets) on the
-// CI host, reached from the emulator at 127.0.0.1:8787 through `adb reverse`. Release builds use Sign in with Google.
+// CI host, reached from the emulator at 127.0.0.1:8787 through `adb reverse`. Release builds log in to the real service.
 const require = createRequire(import.meta.url);
 const { FakeGoogle } = require('../backend/test/fake-google.js');
 const { createServer } = require('../backend/server.js');
@@ -20,9 +21,8 @@ const { gstinCheck } = require('../backend/lib/gst.js');
 const GSTIN_OK = (b => { for (const c of '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ') if (gstinCheck(b + c)) return b + c; })('27AAPFU0939F1Z');
 g.gstRecords.set(GSTIN_OK, { gstin: GSTIN_OK, lgnm: 'SHREE RAM ENGINEERING PRIVATE LIMITED', tradeNam: 'Shree Ram Engineering', sts: 'Active', rgdt: '01/07/2017', ctb: 'Private Limited Company', dty: 'Regular',
   pradr: { addr: { bno: 'Plot 14', st: 'MIDC Road', loc: 'Bhosari', dst: 'Pune', stcd: 'Maharashtra', pncd: '411026' } } });
-const syncCfg = config.load({ GOOGLE_CLIENT_IDS: 'test-web-client.apps.googleusercontent.com', SESSION_SECRET: 'emulator-test-secret-0123456789abcdef', PROJECT_ID: 'demo-hgi',
-  FILES_BUCKET: 'hgi-files', GST_API_URL: 'http://x/{gstin}', GST_API_HEADERS: JSON.stringify({ 'x-api-key': g.gstKey }), GST_API_NAME: 'Test GSP', HGI_ALLOW_TEST_LOGIN: '1', ALLOWED_ORIGINS: 'https://localhost' });
-syncCfg.endpoints = g.endpoints(); syncCfg.gst.url = g.gstUrl();
+const syncCfg = serviceConfig(config, g, { FILES_BUCKET: 'hgi-files', GST_API_URL: 'http://x/{gstin}', GST_API_HEADERS: JSON.stringify({ 'x-api-key': g.gstKey }), GST_API_NAME: 'Test GSP', ALLOWED_ORIGINS: 'https://localhost' });
+syncCfg.gst.url = g.gstUrl();
 // what the cloud holds for the account signed in on the phone
 async function cloudOf(pg) {
   const tok = await pg.evaluate(() => JSON.parse(localStorage.getItem('hgi_account')).session);
@@ -92,8 +92,7 @@ async function launch() {
 
 // test sign-in on the device; returns the page after the app reloaded into the account
 async function signIn(email, choose) {
-  await page.waitForSelector('#signin-screen #si-go', { timeout: 30000 });
-  await page.fill('#si-email', email);
+  await fillSignIn(page, email);
   await page.click('#si-go');
   if (choose) { await page.waitForSelector('.acct-dlg', { timeout: 30000 }); await page.click(choose); }
   return afterReload(() => window.HGI_READY === true && !!window.HGI_ACCOUNT && !document.getElementById('signin-screen'));

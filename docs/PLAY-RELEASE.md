@@ -1,13 +1,16 @@
 # HGI Billing 8.1 — Google Play release checklist
 
+What changed in 9.4: **accounts are username + password** (sign-up / log-in / log-out in the app) and the cloud copy is a
+**Google Spreadsheet** behind the HGI server — see `docs/SHEETS-SETUP.md`. Google sign-in and Firestore are no longer used.
+
 What changed in 8.1:
-- **Sign in with Google is required.** Each Google account has its own data on the phone and its own cloud copy.
+- **An account is required** (9.4: username + password). Each account has its own data on the phone and its own cloud copy.
 - **Automatic cloud sync (9.0).** Every buyer, product, invoice, payment and the business profile is a record in the account's
-  cloud database (Firestore, through the HGI server on Cloud Run). Changes upload in the background. Several phones can work at
+  cloud copy (Google Sheets since 9.4, through the HGI server on Cloud Run). Changes upload in the background. Several phones can work at
   once, also offline; a document number can be used only once. Manual JSON backups are no longer needed. "Share Backup"
   remains as an optional file export.
-- **Reinstall = sign in.** After uninstalling and reinstalling (or on a new phone), signing in with the same Google account
-  restores everything.
+- **Reinstall = sign in.** After uninstalling and reinstalling (or on a new phone), logging in with the same username
+  and password restores everything.
 - **One permanent release key** created on your PC, consistent package ID `in.hariguru.billing`, versionCode that only goes up.
 
 Nothing secret is inside the app: it only knows the public sync-service URL and the public OAuth web client ID.
@@ -32,9 +35,8 @@ Never use the CI test key for customers. CI already refuses: a build signed with
 
 ## Part B — one-time: Google Cloud (sign-in, database, PDF storage, GST look-up)
 
-This part is in **`docs/CLOUD-SETUP.md`** (version 9.0 replaced the spreadsheet storage of 8.1 with a Firestore database).
-The sign-in clients described there are needed for Part C: a Web application client, plus Android clients for the upload-key
-SHA-1 and the Play signing-key SHA-1.
+This part is in **`docs/SHEETS-SETUP.md`** (9.4: username + password accounts, Google Sheets as the database). No OAuth
+clients or SHA-1 registrations are needed any more; the build only needs the repository variable `HGI_SYNC_URL`.
 
 ## Part C — build and upload
 
@@ -64,7 +66,7 @@ phone needs **one** uninstall. Data in those old copies is only on the phone, so
 
 1. In the old app: Settings → **Share Backup** (save the `.json` file to Drive or WhatsApp yourself).
 2. Uninstall the old app.
-3. Install 8.1 from Google Play (or the release-key APK) and sign in with Google.
+3. Install 8.1 from Google Play (or the release-key APK) and create an account (username + password).
 4. Settings → Data Backup & Recovery → **Restore Backup** and pick the file. It syncs to the cloud automatically.
 
 Once the app is on Google Play, give customers **only the Play Store link**. Play re-signs apps with its own app-signing

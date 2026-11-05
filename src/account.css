@@ -166,3 +166,31 @@ html.dark #app-container #doc-seg button.on { background: #f1f5f9 !important; bo
 html.dark #app-container #doc-seg button.on .dc-dot { background: #0b1430 !important; }
 html.dark #app-container #doc-seg .dc-inv .dc-dot { background: #cbd5e1; }
 html.doc-nontax #edoc-block { display: none !important; }
+
+/* v9.4 — username + password sign-in, account fields, sync pill */
+#signin-screen .si-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 999px; background: var(--paper-2, #f3f0e8); margin: 0 0 16px; }
+#signin-screen .si-tabs button { min-height: 44px; border: 0; border-radius: 999px; background: transparent; color: var(--text-2, #39405a); font: 600 14px/1 var(--f-ui, system-ui); cursor: pointer; }
+#signin-screen .si-tabs button.on { background: var(--surface, #fff); color: var(--text, #0b1430); box-shadow: 0 2px 6px -2px rgba(8, 14, 32, .25); }
+#signin-screen .si-tabs button:focus-visible, #signin-screen .si-form .inp:focus-visible { outline: none; box-shadow: var(--ring, 0 0 0 4px rgba(245, 130, 32, .35)); }
+#signin-screen .si-form { text-align: left; }
+#signin-screen .si-form label { display: block; font: 600 13px/1.3 var(--f-ui, system-ui); color: var(--text, #0b1430); margin: 0 0 6px; }
+#signin-screen .si-form .inp { text-align: left; min-height: 48px; font-size: 16px; margin-bottom: 4px; }
+#signin-screen .si-form .inp[aria-invalid="true"] { border-color: var(--rose, #d6455d); }
+#signin-screen .si-help { min-height: 4px; margin: 0 0 12px; font-size: 12px; line-height: 1.4; color: var(--muted, #5e6275); }
+#signin-screen .si-show { display: flex !important; align-items: center; gap: 8px; font-weight: 500 !important; font-size: 13px !important; min-height: 44px; margin: 0 0 8px !important; cursor: pointer; }
+#signin-screen .si-show input { width: 20px; height: 20px; }
+#signin-screen .si-submit { background: var(--ink, #0b1430); color: #fff; border-color: var(--ink, #0b1430); }
+html.dark #signin-screen .si-submit { background: var(--saffron, #f58220); color: #1a0e02; border-color: var(--saffron, #f58220); }
+html.dark #signin-screen .si-tabs { background: rgba(255, 255, 255, .06); }
+#signin-screen .si-form.busy .inp { opacity: .7; }
+.acct-field { display: block; font-size: 13px; font-weight: 600; margin: 0 0 10px; color: var(--text, #0b1430); }
+.acct-field .inp { margin-top: 4px; min-height: 44px; }
+#sync-pill { display: inline-flex; align-items: center; gap: 6px; font: 600 11.5px/1 var(--f-ui, system-ui); padding: 6px 10px; border-radius: 999px;
+  background: rgba(255, 255, 255, .12); color: #fff; white-space: nowrap; }
+#sync-pill::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #cbd5e1; flex: none; }
+#sync-pill.ok::before { background: #34d399; } #sync-pill.busy::before { background: #fbbf24; animation: hgiPulse 1s ease-in-out infinite; }
+#sync-pill.warn::before { background: #fb7185; }
+@keyframes hgiPulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { #sync-pill.busy::before { animation: none; } }
+@media (max-width: 479px) { #sync-pill { font-size: 0; gap: 0; padding: 9px; } #sync-pill::before { width: 9px; height: 9px; } }
+@media print { #sync-pill { display: none; } }

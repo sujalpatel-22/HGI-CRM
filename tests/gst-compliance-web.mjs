@@ -236,6 +236,12 @@ console.log('\n▶ Draft marking, e-way bill age, export / LUT');
   await page.context().close();
 }
 
+{
+  const page = await openApp();
+  const csv = await page.evaluate(() => toCSV([['=HYPERLINK("x")', '-5', '+91 98765', '@SUM(A1)', 'normal', -3, '-12.50']]));
+  check(csv.includes(`"'=HYPERLINK(""x"")"`) && csv.includes('"-5"') && csv.includes(`"'+91 98765"`) && csv.includes(`"'@SUM(A1)"`) && csv.includes('"-3"') && csv.includes('"-12.50"'), 'CSV export: formula-like text neutralised, numbers untouched');
+  await page.context().close();
+}
 check(!errors.length, `no page errors${errors.length ? ' — ' + errors.slice(0, 3).join(' | ') : ''}`);
 fs.writeFileSync(path.join(OUT, 'gst-compliance-results.txt'), lines.join('\n') + `\n\n${passes} passed, ${failures} failed\n`);
 console.log(`\n${passes} passed, ${failures} failed`);

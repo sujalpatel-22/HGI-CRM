@@ -13,17 +13,17 @@ const config = require('../lib/config');
 const { buildIrpPayload } = require('../lib/einvoice-mapper');
 const { computeDoc } = require('../lib/gst-calc');
 
-module.exports = async function edocTests({ test, g, env, mk, call, gstin, RUN, EMU }) {
+module.exports = async function edocTests({ test, g, env, mk, call, gstin, RUN, signup, SHEET, rowsOf }) {
   const sim = await startSimulator();
   const credKey = crypto.randomBytes(32).toString('base64');
   const SIM = `http://127.0.0.1:${sim.port}`;
   const edocEnv = { EDOC_ENV: 'test', EDOC_CRED_KEY: credKey, IRP_BASE_URL: SIM, IRP_CLIENT_ID: 'gsp-client', IRP_CLIENT_SECRET: 'gsp-secret-irp', IRP_PUBLIC_KEY: sim.publicKeyPem,
     EWB_BASE_URL: SIM, EWB_CLIENT_ID: 'gsp-client-e', EWB_CLIENT_SECRET: 'gsp-secret-ewb', EWB_PUBLIC_KEY: sim.publicKeyPem.replace(/\n/g, '\\n') };
-  const server = createServer(mk(edocEnv));
+  const server = createServer(mk(edocEnv), { log: () => {} });
   await new Promise(r => server.listen(0, '127.0.0.1', r));
   const srv = `http://127.0.0.1:${server.address().port}`;
   const api = (method, p, body, token) => call(method, p, { body, token, srv });
-  const signIn = async (sub, email) => (await call('POST', '/v1/auth/google', { body: { idToken: g.idToken({ sub, email }) }, srv })).json;
+  const signIn = async name => (await signup(name, 'Edoc-Pass-' + RUN, srv)).json;
 
   const SELLER = gstin('24AAACH7409R1Z'), BUYER = gstin('27AAPFU0939F1Z');
   const company = { name: 'HARI GURU INDUSTRIES', legalName: 'HARI GURU INDUSTRIES', gstin: SELLER, stateCode: '24', pin: '382330', aato: '5to10', ewbLimit: 50000,
@@ -53,8 +53,8 @@ module.exports = async function edocTests({ test, g, env, mk, call, gstin, RUN, 
     assert.strictEqual(ok.edoc.env, 'production');
   });
 
-  const U = await signIn('edoc-' + RUN, 'edoc@gmail.com');
-  const V = await signIn('edoc-other-' + RUN, 'other@gmail.com');
+  const U = await signIn('edoc-' + RUN);
+  const V = await signIn('edoc-other-' + RUN);
   await test('server without government API access: features off, generation refused with no number', async () => {
     const me = await call('GET', '/v1/me', { token: U.session });
     assert.deepStrictEqual(me.json.features.edoc, { irp: false, ewb: false, env: 'sandbox' });
@@ -80,9 +80,9 @@ module.exports = async function edocTests({ test, g, env, mk, call, gstin, RUN, 
     const l = (await api('GET', '/v1/edoc/credentials', undefined, U.session));
     assert.strictEqual(l.json.credentials.length, 1); assert.strictEqual(l.json.credentials[0].irpUser, 'te•••••r');
     for (const secret of ['testpass', 'ewbpass', 'gsp-secret-irp', 'gsp-secret-ewb']) { assert.ok(!r.text.includes(secret)); assert.ok(!l.text.includes(secret)); }
-    if (!EMU) {
-      const stored = JSON.stringify([...g.docs.entries()].filter(([n]) => n.includes('/edoc_cred/')));
-      assert.ok(stored.includes('v1.') && !stored.includes('testpass') && !stored.includes('ewbpass') && !stored.includes('"testuser"'), 'encrypted at rest');
+    {
+      const stored = JSON.stringify(rowsOf('Store', U.user.key).filter(r => /\/edoc_cred\//.test(r.path)));
+      assert.ok(stored.includes('v1.') && !stored.includes('testpass') && !stored.includes('ewbpass') && !stored.includes('\\"testuser\\"'), 'encrypted at rest in the Store tab');
     }
     // the GSP's client secret goes only to the government API, in its headers
     assert.ok(sim.calls.some(c => c.headers.client_secret === 'gsp-secret-irp' && c.headers.gstin === SELLER));
@@ -230,9 +230,9 @@ module.exports = async function edocTests({ test, g, env, mk, call, gstin, RUN, 
     assert.strictEqual((await api('PUT', '/v1/edoc/credentials/' + SELLER, { irpUser: 'testuser', irpPass: 'testpass', ewbUser: 'ewbuser', ewbPass: 'ewbpass' }, U.session)).status, 200);
   });
   await test('account deletion removes e-invoice records and API logins', async () => {
-    const d = await api('DELETE', '/v1/account', undefined, U.session);
+    const d = await api('DELETE', '/v1/account', { password: 'Edoc-Pass-' + RUN }, U.session);
     assert.strictEqual(d.status, 200, d.text);
-    if (!EMU) assert.ok(![...g.docs.keys()].some(n => n.includes(`/users/${U.user.key}/`)));
+    assert.strictEqual(rowsOf('Store', U.user.key).length, 0);
   });
 
   server.close(); sim.server.close();

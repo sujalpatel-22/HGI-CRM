@@ -2,6 +2,7 @@
 // E-invoice + e-way bill end to end: the real web app (www/) in Chromium → the real HGI server (backend/server.js) →
 // the TEST-ONLY NIC protocol simulator (backend/test/nic-simulator.js: RSA login, SEK, AES payloads, rek + HMAC).
 // Firestore / Google are the in-memory stand-ins. Two browser contexts = two phones of one account.
+import { serviceConfig, fillSignIn } from './lib/accounts.mjs';
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -32,11 +33,10 @@ const appServer = http.createServer();
 await new Promise(r => appServer.listen(0, '127.0.0.1', r));
 const appBase = `http://127.0.0.1:${appServer.address().port}`;
 const SIM = `http://127.0.0.1:${sim.port}`;
-const cfg = config.load({ GOOGLE_CLIENT_IDS: 'test-web-client.apps.googleusercontent.com', SESSION_SECRET: 'x'.repeat(40), PROJECT_ID: 'demo-hgi', HGI_ALLOW_TEST_LOGIN: '1', ALLOWED_ORIGINS: appBase,
+const cfg = serviceConfig(config, g, { ALLOWED_ORIGINS: appBase,
   EDOC_ENV: 'test', EDOC_CRED_KEY: crypto.randomBytes(32).toString('base64'),
   IRP_BASE_URL: SIM, IRP_CLIENT_ID: 'gsp-client', IRP_CLIENT_SECRET: 'gsp-secret', IRP_PUBLIC_KEY: sim.publicKeyPem,
   EWB_BASE_URL: SIM, EWB_CLIENT_ID: 'gsp-client', EWB_CLIENT_SECRET: 'gsp-secret', EWB_PUBLIC_KEY: sim.publicKeyPem });
-cfg.endpoints = g.endpoints();
 const sync = createServer(cfg);
 await new Promise(r => sync.listen(0, '127.0.0.1', r));
 const syncBase = `http://127.0.0.1:${sync.address().port}`;
@@ -63,8 +63,7 @@ async function device(name) {
 }
 const open = async page => { await page.goto(appBase + '/'); await page.waitForFunction(() => window.HGI_READY === true || window.HGI_SIGNIN_READY === true, null, { timeout: 20000 }); };
 async function signIn(page, email) {
-  await page.waitForSelector('#signin-screen #si-go', { timeout: 15000 });
-  await page.fill('#si-email', email);
+  await fillSignIn(page, email);
   const nav = page.waitForEvent('load', { timeout: 25000 });
   await page.click('#si-go');
   await nav; await page.waitForFunction(() => window.HGI_READY === true && !document.getElementById('signin-screen'), null, { timeout: 25000 });

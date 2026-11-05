@@ -1,10 +1,11 @@
 'use strict';
-/** Access tokens for Firestore + Cloud Storage (Cloud Run service account). Cached until shortly before expiry. */
+/** Access tokens for Google Sheets + Cloud Storage (Cloud Run service account). Cached until shortly before expiry. */
 const crypto = require('crypto');
 const { request } = require('./http');
 
-// Firestore + Cloud Storage
-const SCOPE = 'https://www.googleapis.com/auth/cloud-platform';
+// Google Sheets (the database) + Cloud Storage (invoice PDFs, optional)
+const SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/devstorage.read_write'];
+const SCOPE = SCOPES.join(' ');
 
 class GoogleAccess {
   constructor(cfg) { this.cfg = cfg; this.token = null; this.until = 0; this.pending = null; }
@@ -18,7 +19,7 @@ class GoogleAccess {
     const { cfg } = this;
     let r;
     if (cfg.gcpAuth === 'metadata') {
-      r = await request('GET', `${cfg.endpoints.metadata}?scopes=${encodeURIComponent(SCOPE)}`, { headers: { 'Metadata-Flavor': 'Google' }, timeoutMs: 10000 });
+      r = await request('GET', `${cfg.endpoints.metadata}?scopes=${encodeURIComponent(SCOPES.join(','))}`, { headers: { 'Metadata-Flavor': 'Google' }, timeoutMs: 10000 });
     } else {
       const key = JSON.parse(cfg.saKeyJson);
       const now = Math.floor(Date.now() / 1000);
@@ -34,4 +35,4 @@ class GoogleAccess {
   }
 }
 
-module.exports = { GoogleAccess, SCOPE };
+module.exports = { GoogleAccess, SCOPE, SCOPES };

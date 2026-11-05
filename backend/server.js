@@ -1,39 +1,42 @@
 #!/usr/bin/env node
 'use strict';
 /**
- * HGI Billing — cloud service (Google Cloud Run + Firestore + Cloud Storage). No third-party dependencies (Node 20+).
+ * HGI Billing — cloud service (Google Cloud Run + Google Sheets as the database + optional Cloud Storage for PDFs).
+ * No third-party dependencies (Node 20+).
  *
- *   POST   /v1/auth/google     {idToken}                Sign in with Google → app session
- *   GET    /v1/me                                       account, sync position, which cloud features are set up
- *   GET    /v1/sync/pull?since=N                        records changed after sequence N (other devices' work)
- *   POST   /v1/sync/push       {device, records:[…]}    upload changed records (per-record conflict + number checks)
- *   POST   /v1/numbers/check   {docType, num, docId}    is a document number still free?
- *   GET    /v1/gstin/{GSTIN}                            taxpayer details from GST records (authorised provider)
- *   PUT    /v1/files/pdf/{docId}  {base64, num, …}      store an invoice PDF;  GET /v1/files (list), GET …/pdf/{docId}
- *   DELETE /v1/account                                  delete the account and all its cloud data (in-app)
- *   POST   /v1/account/delete-with-google {idToken}     same, from the web page /delete-account
+ *   POST   /v1/auth/signup     {username, password, device}        create an account → session
+ *   POST   /v1/auth/login      {username, password, device}        → session
+ *   POST   /v1/auth/logout                                         end this session on the server
+ *   POST   /v1/auth/logout-all                                     end every other session of the account
+ *   POST   /v1/auth/password   {currentPassword, newPassword}      change password (other sessions end)
+ *   GET    /v1/me                                                  account, sync position, which cloud features are set up
+ *   GET    /v1/sync/pull?since=N                                   records changed after sequence N (other devices' work)
+ *   POST   /v1/sync/push       {device, records:[…]}               upload changed records (per-record conflict + number checks)
+ *   POST   /v1/numbers/check   {docType, num, docId}               is a document number still free?
+ *   GET    /v1/gstin/{GSTIN}                                       taxpayer details from GST records (authorised provider)
+ *   PUT    /v1/files/pdf/{docId}  {base64, num, …}                 store an invoice PDF;  GET /v1/files (list), GET …/pdf/{docId}
+ *   DELETE /v1/account          {password}                         delete the account and all its cloud data (in-app)
+ *   POST   /v1/account/delete-with-password {username, password}  same, from the web page /delete-account
  *   E-invoice / e-way bill (government APIs through HGI's GSP; each business uses its own API login):
- *   GET    /v1/edoc/credentials                         saved API logins (masked user names only)
- *   PUT    /v1/edoc/credentials/{GSTIN} {irpUser, irpPass, ewbUser, ewbPass}   verify by logging in, then store encrypted
- *   DELETE /v1/edoc/credentials/{GSTIN}
- *   POST   /v1/edoc/preview  {doc, company, mode}       eligibility + validation + the exact JSON (nothing sent)
- *   POST   /v1/edoc/generate {doc, company, mode}       mode irn | irn+ewb (one step) | ewb
- *   POST   /v1/edoc/refresh  {key}                      status from the IRP / e-way bill system
- *   GET    /v1/edoc/record?key=                         stored record
- *   POST   /v1/edoc/cancel-irn | cancel-ewb {key, reasonCode, remark}
- *   POST   /v1/edoc/partb {key, vehicleNo, …}  ·  POST /v1/edoc/transporter {key, transporterId}
+ *   GET    /v1/edoc/credentials · PUT|DELETE /v1/edoc/credentials/{GSTIN} · POST /v1/edoc/preview|generate|refresh|cancel-irn|
+ *          cancel-ewb|partb|transporter · GET /v1/edoc/record?key=
  *   GET    /privacy, /delete-account, /healthz
  *
- * The app never holds a Google Cloud credential or the GST provider's key: those stay on this server.
+ * Every /v1 request except sign-up / log-in needs a session; the account (userId) always comes from the session, never
+ * from the request, so no request can read or change another account's rows.
+ * The app never holds a Google credential, the password pepper or the GST provider's key: those stay on this server.
  */
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const config = require('./lib/config');
-const { GoogleVerifier, Sessions, AuthError, userKey } = require('./lib/identity');
 const { GoogleAccess } = require('./lib/google-access');
-const { Firestore } = require('./lib/firestore');
-const { RecordStore } = require('./lib/record-store');
+const { SheetsClient } = require('./lib/sheets-client');
+const { SheetDB } = require('./lib/sheet-db');
+const { TABLES } = require('./lib/sheets-schema');
+const { SheetsRecordStore } = require('./lib/sheets-record-store');
+const { SheetsDocStore } = require('./lib/sheets-doc-store');
+const { Accounts, AuthError } = require('./lib/accounts');
 const { FileStore } = require('./lib/files');
 const { GstLookup } = require('./lib/gst');
 const { UpstreamError } = require('./lib/http');
@@ -45,11 +48,15 @@ const { EdocService } = require('./lib/edoc-service');
 const log = e => console.log(JSON.stringify({ severity: e.warn ? 'WARNING' : e.error ? 'ERROR' : 'INFO', at: new Date().toISOString(), ...e }));
 
 function createServer(cfg, deps = {}) {
-  const verifier = deps.verifier || new GoogleVerifier(cfg);
-  const sessions = new Sessions(cfg);
   const access = deps.access || new GoogleAccess(cfg);
-  const fsdb = deps.firestore || new Firestore({ projectId: cfg.projectId, emulatorHost: cfg.firestoreEmulator, endpoint: cfg.endpoints.firestore, access });
-  const store = new RecordStore(fsdb, log);
+  const client = deps.sheets || new SheetsClient({ spreadsheetId: cfg.spreadsheetId, endpoint: cfg.endpoints.sheets, access });
+  const db = new SheetDB({ client, tables: TABLES, log: deps.log || log, reloadMs: cfg.sheetsReloadMinutes * 60e3, missReloadMs: cfg.sheetsMissReloadMs });
+  const fsdb = new SheetsDocStore(db);
+  const store = new SheetsRecordStore(db, fsdb, log);
+  const accounts = new Accounts(db, cfg, log);
+  // the spreadsheet is opened (tabs / columns created, data loaded) before the first request is answered
+  let opening = null;
+  const ready = () => (db.opened ? Promise.resolve() : (opening = opening || db.open().catch(e => { opening = null; throw e; })));
   const files = new FileStore(cfg, access);
   const gst = new GstLookup(cfg, fsdb, log);
   const edoc = new EdocService(cfg.edoc, { vault: new CredentialVault(fsdb, cfg.edoc.credKey), store: new EdocStore(fsdb), log, timeoutMs: deps.edocTimeoutMs || 30000 });
@@ -79,7 +86,7 @@ function createServer(cfg, deps = {}) {
   }
   function page(req, res, html) {
     res.writeHead(200, { ...SEC, 'Cache-Control': 'public, max-age=300', 'Content-Type': 'text/html; charset=utf-8', 'X-Frame-Options': 'DENY',
-      'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/client; frame-src https://accounts.google.com; connect-src 'self' https://accounts.google.com; style-src 'self' 'unsafe-inline' https://accounts.google.com; img-src 'self' data: https:; frame-ancestors 'none'" });
+      'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; connect-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'" });
     res.end(html);
   }
   function readBody(req) {
@@ -93,63 +100,60 @@ function createServer(cfg, deps = {}) {
     });
   }
   const ip = req => (cfg.trustProxy && req.headers['x-forwarded-for'] ? String(req.headers['x-forwarded-for']).split(',')[0].trim() : req.socket.remoteAddress);
-  const toUser = s => ({ sub: s.sub, key: userKey(s.sub), email: s.email, name: s.name || '' });
-
   async function deleteAccount(uid) {
     let n = 0;
     if (files.enabled()) for (const f of await store.fileEntries(uid)) { await files.remove(f.object); n++; }
-    const r = await store.deleteAll(uid);
-    log({ event: 'account_deleted', user: uid, records: r.records, files: n });
+    const r = await accounts.deleteAccount(uid, w => store.deleteAll(uid, w));
     return { records: r.records, files: n, deletedAt: r.deletedAt };
   }
-  async function session(req) {
-    const s = sessions.verify(req.headers.authorization);
-    const user = toUser(s);
-    const del = await store.deletedAt(user.key);
-    if (del && s.iat <= del) throw new AuthError('This account was deleted. Sign in again to start a new, empty account.', 'account_deleted');
-    return { s, user };
-  }
-  function signedIn(user, res) {
-    const ses = sessions.issue(user);
-    return { session: ses.token, expiresAt: ses.expiresAt, user: { key: userKey(user.sub), email: user.email, name: user.name || '', picture: user.picture || '' } };
-  }
+  const str = (v, max) => (typeof v === 'string' && v.length <= max ? v : '');
   /* ------------------------------------------------------------ routes */
   async function route(req, res) {
     const url = new URL(req.url, 'http://x');
     const p = url.pathname;
     if (req.method === 'OPTIONS') { res.writeHead(204, { ...SEC, ...cors(req) }); return res.end(); }
-    if (req.method === 'GET' && p === '/healthz') return send(req, res, 200, { ok: true });
+    if (req.method === 'GET' && p === '/healthz') {
+      try { await ready(); } catch (e) { return send(req, res, 503, { ok: false, error: 'sheets_unavailable', message: e.message }); }
+      const cells = db.cellsUsed();
+      return send(req, res, 200, { ok: true, storage: 'google-sheets', quoteMode: db.quoteMode, cells, cellLimit: 10e6, ...(cells > 7e6 ? { warning: 'The spreadsheet is above 70 % of Google\'s 10 million cell limit.' } : {}) });
+    }
     if (req.method === 'GET' && (p === '/' || p === '/privacy')) return page(req, res, pub(p === '/' ? 'index.html' : 'privacy.html').replace(/\{\{SUPPORT_EMAIL\}\}/g, cfg.supportEmail || 'the e-mail shown in the app listing'));
-    if (req.method === 'GET' && p === '/delete-account') return page(req, res, pub('delete-account.html').replace('{{CLIENT_ID}}', cfg.googleClientIds[0] || '').replace(/\{\{SUPPORT_EMAIL\}\}/g, cfg.supportEmail || ''));
+    if (req.method === 'GET' && p === '/delete-account') return page(req, res, pub('delete-account.html').replace(/\{\{SUPPORT_EMAIL\}\}/g, cfg.supportEmail || ''));
+    if (p.startsWith('/v1/')) await ready();
 
-    if (req.method === 'POST' && p === '/v1/auth/google') {
-      if (limited('auth:' + ip(req), 30)) return send(req, res, 429, { error: 'too_many', message: 'Too many sign-in attempts. Wait a minute.' });
+    if (req.method === 'POST' && p === '/v1/auth/signup') {
+      if (!cfg.allowSignup) return send(req, res, 403, { error: 'signup_closed', message: 'New accounts are not being accepted right now.' });
+      if (limited('signup:' + ip(req), cfg.signupPerMinute)) return send(req, res, 429, { error: 'too_many', message: 'Too many new accounts from this network. Wait a minute.' });
       const b = await readBody(req);
-      const g = await verifier.verify(b.idToken);
-      log({ event: 'sign_in', user: userKey(g.sub) });
-      return send(req, res, 200, signedIn(g, res));
+      const r = await accounts.signup({ username: str(b.username, 60), password: str(b.password, 512), device: str(b.device, 200) });
+      return send(req, res, 201, r);
     }
-    if (req.method === 'POST' && p === '/v1/auth/test') {
-      if (!cfg.allowTestLogin) return send(req, res, 404, { error: 'not_found' });
+    if (req.method === 'POST' && p === '/v1/auth/login') {
+      if (limited('login:' + ip(req), cfg.loginPerMinute)) return send(req, res, 429, { error: 'too_many', message: 'Too many log-in attempts. Wait a minute.' });
       const b = await readBody(req);
-      const email = String(b.email || '').toLowerCase();
-      if (!/^[^@\s]+@example\.(com|org)$/.test(email)) return send(req, res, 400, { error: 'test_only', message: 'Test sign-in accepts only @example.com / @example.org addresses' });
-      return send(req, res, 200, signedIn({ sub: 'test-' + email, email, name: 'Test user' }, res));
+      return send(req, res, 200, await accounts.login({ username: str(b.username, 60), password: str(b.password, 512), device: str(b.device, 200) }));
     }
-    if (req.method === 'POST' && p === '/v1/account/delete-with-google') {
-      if (limited('auth:' + ip(req), 30)) return send(req, res, 429, { error: 'too_many' });
-      const g = await verifier.verify((await readBody(req)).idToken);
-      const r = await deleteAccount(userKey(g.sub));
-      return send(req, res, 200, { ok: true, ...r, deleted: r.records > 0 || r.files > 0, email: g.email });
+    if (req.method === 'POST' && p === '/v1/account/delete-with-password') {
+      if (limited('login:' + ip(req), cfg.loginPerMinute)) return send(req, res, 429, { error: 'too_many', message: 'Too many attempts. Wait a minute.' });
+      const b = await readBody(req);
+      const u = await accounts.findForDeletion(str(b.username, 60), str(b.password, 512));
+      const r = await deleteAccount(u.userId);
+      return send(req, res, 200, { ok: true, ...r, deleted: true, username: u.username });
     }
 
     if (p.startsWith('/v1/')) {
-      const { s, user } = await session(req);
+      const { user, sessionId } = await accounts.authenticate(req.headers.authorization);
       if (limited('u:' + user.key, 240)) return send(req, res, 429, { error: 'too_many', message: 'Syncing too often — will retry shortly.' });
-      const renewed = sessions.maybeRenew(s);
-      const extra = renewed ? { 'X-HGI-Session': renewed.token } : {};
+      const extra = {};
       const uid = user.key;
-      if (req.method === 'GET' && p === '/v1/me') return send(req, res, 200, { user: { key: uid, email: user.email, name: user.name }, cloud: await store.state(uid), features: { gst: gst.configured(), files: files.enabled(), edoc: edoc.features() } }, extra);
+      if (req.method === 'POST' && p === '/v1/auth/logout') { await accounts.logout(sessionId); return send(req, res, 200, { ok: true }); }
+      if (req.method === 'POST' && p === '/v1/auth/logout-all') return send(req, res, 200, { ok: true, ended: await accounts.logoutAll(uid, sessionId) });
+      if (req.method === 'POST' && p === '/v1/auth/password') {
+        if (limited('pw:' + uid, 10)) return send(req, res, 429, { error: 'too_many', message: 'Too many attempts. Wait a minute.' });
+        const b = await readBody(req);
+        return send(req, res, 200, await accounts.changePassword(uid, sessionId, str(b.currentPassword, 512), str(b.newPassword, 512)));
+      }
+      if (req.method === 'GET' && p === '/v1/me') return send(req, res, 200, { user: { key: uid, username: user.username, createdAt: user.createdAt }, cloud: await store.state(uid), features: { gst: gst.configured(), files: files.enabled(), edoc: edoc.features() } }, extra);
       if (req.method === 'GET' && p === '/v1/sync/pull') {
         const since = Math.max(0, Number(url.searchParams.get('since')) || 0), limit = Math.min(500, Math.max(1, Number(url.searchParams.get('limit')) || 300));
         const r = await store.pull(uid, since, limit);
@@ -198,7 +202,7 @@ function createServer(cfg, deps = {}) {
       }
       if (p.startsWith('/v1/edoc/')) {
         if (limited('edoc:' + uid, 40)) return send(req, res, 429, { error: 'too_many', message: 'Too many e-invoice requests — wait a minute.' });
-        const by = user.email;
+        const by = user.username;
         if (req.method === 'GET' && p === '/v1/edoc/credentials') return send(req, res, 200, { credentials: await edoc.listCredentials(uid), features: edoc.features() }, extra);
         if ((m = /^\/v1\/edoc\/credentials\/([0-9A-Za-z]{15})$/.exec(p))) {
           if (req.method === 'PUT') return send(req, res, 200, { credential: await edoc.saveCredentials(uid, m[1], await readBody(req)) }, extra);
@@ -217,12 +221,16 @@ function createServer(cfg, deps = {}) {
         }
         return send(req, res, 404, { error: 'not_found' });
       }
-      if (req.method === 'DELETE' && p === '/v1/account') return send(req, res, 200, { ok: true, ...(await deleteAccount(uid)) });
+      if (req.method === 'DELETE' && p === '/v1/account') {
+        const b = await readBody(req);
+        await accounts.checkPasswordOf(uid, str(b.password, 512));          // a second check that the owner is deleting
+        return send(req, res, 200, { ok: true, ...(await deleteAccount(uid)) });
+      }
     }
     return send(req, res, 404, { error: 'not_found' });
   }
 
-  return http.createServer((req, res) => {
+  const srv = http.createServer((req, res) => {
     const t0 = Date.now();
     route(req, res).catch(e => {
       const status = e.status && e.status >= 400 && e.status < 600 ? e.status : 500;
@@ -236,16 +244,25 @@ function createServer(cfg, deps = {}) {
       // Google API trouble is reported as 503 (retry later) — never as success
       const code = upstream ? 503 : status;
       if (code >= 500) log({ error: e.message, path: req.url.split('?')[0], status: code });
-      if (!res.headersSent) send(req, res, code, { error: e.code || (upstream ? 'cloud_unavailable' : 'error'), message: upstream ? 'Cloud storage is not reachable right now. Your data is safe on this phone and will sync later.' : e.message });
+      // internal errors are logged, not shown (their text can name tables, columns or paths)
+      const message = upstream ? 'Cloud storage (Google Sheets) is not reachable right now. Your data is safe on this phone and will sync later.'
+        : code >= 500 && !e.code ? 'Something went wrong on the server. Please try again.' : e.message;
+      if (!res.headersSent) send(req, res, code, { error: e.code || (upstream ? 'cloud_unavailable' : 'error'), message });
     }).finally(() => { if (Date.now() - t0 > 10000) log({ warn: 'slow request', path: req.url.split('?')[0], ms: Date.now() - t0 }); });
   });
+  srv.ready = ready;
+  srv.db = db;
+  return srv;
 }
 
 if (require.main === module) {
   let cfg;
   try { cfg = config.load(); } catch (e) { console.error(e.message); process.exit(1); }
   const server = createServer(cfg);
-  server.listen(cfg.port, () => log({ event: 'listening', port: cfg.port, project: cfg.projectId, gst: !!cfg.gst.url, files: !!cfg.filesBucket, edoc: { env: cfg.edoc.env, irp: !!cfg.edoc.irp.baseUrl, ewb: !!cfg.edoc.ewb.baseUrl }, testLogin: cfg.allowTestLogin }));
+  server.listen(cfg.port, () => {
+    log({ event: 'listening', port: cfg.port, spreadsheet: cfg.spreadsheetId.slice(0, 6) + '…', gst: !!cfg.gst.url, files: !!cfg.filesBucket, edoc: { env: cfg.edoc.env, irp: !!cfg.edoc.irp.baseUrl, ewb: !!cfg.edoc.ewb.baseUrl } });
+    server.ready().catch(e => log({ error: 'could not open the spreadsheet: ' + e.message }));
+  });
   process.on('SIGTERM', () => server.close(() => process.exit(0)));
 }
 

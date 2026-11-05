@@ -1,3 +1,6 @@
+> **Superseded in 9.4.** Accounts are now username + password and the database is Google Sheets — follow
+> [SHEETS-SETUP.md](SHEETS-SETUP.md). The GST data provider (Step 4) and e-invoice notes below still apply.
+
 # HGI Billing 9.0 — cloud setup (what needs your accounts and approval)
 
 Nothing here has been created yet. Every step below needs **your** Google account, billing approval or a contract with a GST
