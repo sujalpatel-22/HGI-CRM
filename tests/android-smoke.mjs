@@ -97,7 +97,20 @@ async function signIn(email, choose) {
   await page.evaluate(() => { if (document.activeElement) document.activeElement.blur(); });
   await page.waitForTimeout(600);
   await page.locator('#si-go').scrollIntoViewIfNeeded();
-  await page.click('#si-go');
+  try { await page.click('#si-go', { timeout: 8000 }); }
+  catch (e) {
+    // Old WebViews (Android 11) can report an element inside a scrolled fixed layer as "outside the viewport". Check the
+    // geometry ourselves: after scrolling the sign-in layer to the end, is the whole button on screen? Then tap it.
+    const geo = await page.evaluate(() => {
+      const scr = document.getElementById('signin-screen'); scr.scrollTop = scr.scrollHeight;
+      const r = document.getElementById('si-go').getBoundingClientRect();
+      return { top: Math.round(r.top), bottom: Math.round(r.bottom), vh: window.innerHeight, vvh: window.visualViewport ? Math.round(window.visualViewport.height) : null, scrollH: scr.scrollHeight, clientH: scr.clientHeight, scrollTop: Math.round(scr.scrollTop) };
+    });
+    console.log('    sign-in button geometry after scrolling:', JSON.stringify(geo));
+    await shot('00b-signin-scrolled');
+    check(geo.top >= 0 && geo.bottom <= geo.vh, `sign-in button can be scrolled fully on screen (${geo.top}–${geo.bottom} of ${geo.vh} px)`);
+    await page.evaluate(() => document.getElementById('si-go').click());
+  }
   if (choose) { await page.waitForSelector('.acct-dlg', { timeout: 30000 }); await page.click(choose); }
   return afterReload(() => window.HGI_READY === true && !!window.HGI_ACCOUNT && !document.getElementById('signin-screen'));
 }
