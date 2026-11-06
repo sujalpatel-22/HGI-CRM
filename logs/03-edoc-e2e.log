@@ -1,0 +1,96 @@
+
+▶ Sign in, company profile, API login
+{"severity":"INFO","at":"2026-11-06T09:18:28.586Z","event":"sheet_created","tab":"Users"}
+{"severity":"INFO","at":"2026-11-06T09:18:28.586Z","event":"sheet_created","tab":"Sessions"}
+{"severity":"INFO","at":"2026-11-06T09:18:28.586Z","event":"sheet_created","tab":"Settings"}
+{"severity":"INFO","at":"2026-11-06T09:18:28.587Z","event":"sheet_created","tab":"Customers"}
+{"severity":"INFO","at":"2026-11-06T09:18:28.587Z","event":"sheet_created","tab":"Products"}
+{"severity":"INFO","at":"2026-11-06T09:18:28.587Z","event":"sheet_created","tab":"Invoices"}
+{"severity":"INFO","at":"2026-11-06T09:18:28.587Z","event":"sheet_created","tab":"InvoiceItems"}
+{"severity":"INFO","at":"2026-11-06T09:18:28.587Z","event":"sheet_created","tab":"Payments"}
+{"severity":"INFO","at":"2026-11-06T09:18:28.587Z","event":"sheet_created","tab":"DocNumbers"}
+{"severity":"INFO","at":"2026-11-06T09:18:28.587Z","event":"sheet_created","tab":"Store"}
+{"severity":"INFO","at":"2026-11-06T09:18:28.587Z","event":"sheet_created","tab":"_Meta"}
+{"severity":"INFO","at":"2026-11-06T09:18:28.587Z","event":"sheet_created","tab":"_Blobs"}
+{"severity":"INFO","at":"2026-11-06T09:18:28.623Z","event":"sheets_loaded","rows":{"Users":0,"Sessions":0,"Settings":0,"Customers":0,"Products":0,"Invoices":0,"InvoiceItems":0,"Payments":0,"DocNumbers":0,"Store":0,"_Meta":1,"_Blobs":0},"counter":0,"quoteMode":"literal"}
+{"severity":"INFO","at":"2026-11-06T09:18:28.629Z","event":"signup","user":"ba7d41bef985bba57ed6275c"}
+   ✓ Settings shows the server set-up and which GST system it uses
+   ✓ wrong API password: the IRP login error is shown, nothing saved
+{"severity":"INFO","at":"2026-11-06T09:18:30.558Z","event":"edoc.credentials_saved","user":"ba7d41bef985bba57ed6275c","gstin":"24AAACH7409R1Z7","irp":true,"ewb":true,"env":"test"}
+   ✓ correct logins verified and saved; only masked user names come back to the phone
+   ✓ API passwords are not stored on the phone
+
+▶ Invoice → IRN + e-way bill in one step
+   ✓ eligible B2B invoice above ₹50,000: combined, IRN-only and the e-way bill hint are offered
+   ✓ confirmation shows document, value, GST system and the 24-hour rule
+{"severity":"INFO","at":"2026-11-06T09:18:31.673Z","event":"irp.auth","ok":true,"env":"test","user":"ba7d41bef985bba57ed6275c"}
+{"severity":"INFO","at":"2026-11-06T09:18:31.684Z","event":"edoc.irn.generate","user":"ba7d41bef985bba57ed6275c","key":"24AAACH7409R1Z7|INV|HGI/101/26-27|26-27","ok":true,"env":"test","ackNo":"112010000000000","ewb":true,"recovered":false}
+   ✓ IRN, Ack No., signed QR and e-way bill 391000000001 are exactly the government answer
+   ✓ one IRP call
+   ✓ record stored on the invoice (marked TEST); the large signed invoice stays on the server
+   ✓ status shows IRN + e-way bill active; generation buttons gone
+   ✓ recorded numbers cannot be typed over
+
+▶ Printed invoice, e-way bill page, sharing text
+   ✓ invoice shows IRN, Ack No., e-way bill and its validity
+   ✓ test / sandbox documents carry a NOT VALID watermark
+   ✓ e-way bill page (for PDF / print): number, Part-A, Part-B vehicle
+   ✓ WhatsApp / e-mail text carries IRN and e-way bill
+   ✓ e-mail button next to WhatsApp
+
+▶ Reported documents are protected
+   ✓ quantity of an e-invoiced document cannot be changed
+   ✓ cannot be deleted
+   ✓ "Cancel" in the register points to the GST cancellation instead
+
+▶ Second phone
+{"severity":"INFO","at":"2026-11-06T09:18:32.426Z","event":"push","user":"ba7d41bef985bba57ed6275c","ok":3}
+{"severity":"INFO","at":"2026-11-06T09:18:32.786Z","event":"login","user":"ba7d41bef985bba57ed6275c"}
+   ✓ IRN and e-way bill synced to the second phone automatically
+{"severity":"INFO","at":"2026-11-06T09:18:33.656Z","event":"push","user":"ba7d41bef985bba57ed6275c","ok":1}
+{"severity":"INFO","at":"2026-11-06T09:18:33.677Z","event":"ewb.auth","ok":true,"env":"test","user":"ba7d41bef985bba57ed6275c"}
+{"severity":"INFO","at":"2026-11-06T09:18:33.682Z","event":"edoc.refresh","user":"ba7d41bef985bba57ed6275c","key":"24AAACH7409R1Z7|INV|HGI/101/26-27|26-27","ok":true,"env":"test"}
+   ✓ status refresh from the second phone asks the government systems
+
+▶ Cancellation
+   ✓ Cancel IRN is disabled while the e-way bill is active
+{"severity":"INFO","at":"2026-11-06T09:18:35.428Z","event":"edoc.ewb.cancel","user":"ba7d41bef985bba57ed6275c","key":"24AAACH7409R1Z7|INV|HGI/101/26-27|26-27","ok":true,"env":"test"}
+   ✓ e-way bill cancelled on the government system
+{"severity":"INFO","at":"2026-11-06T09:18:35.545Z","event":"edoc.irn.cancel","user":"ba7d41bef985bba57ed6275c","key":"24AAACH7409R1Z7|INV|HGI/101/26-27|26-27","ok":true,"env":"test"}
+   ✓ IRN cancelled on the IRP; the invoice is marked cancelled in the register
+   ✓ the cancelled number cannot be reported again
+
+▶ E-way bill only (B2C, no IRN)
+   ✓ B2C: IRN not offered (with the reason), e-way bill offered
+{"severity":"INFO","at":"2026-11-06T09:18:36.696Z","event":"push","user":"ba7d41bef985bba57ed6275c","ok":1}
+{"severity":"INFO","at":"2026-11-06T09:18:37.639Z","event":"edoc.ewb.generate","user":"ba7d41bef985bba57ed6275c","key":"24AAACH7409R1Z7|INV|HGI/102/26-27|26-27","ok":true,"env":"test","via":"EWB"}
+   ✓ e-way bill 391000000002 from the e-way bill system (no IRN)
+   ✓ without a vehicle: Part-A only, shown clearly
+{"severity":"INFO","at":"2026-11-06T09:18:37.840Z","event":"edoc.ewb.partb","user":"ba7d41bef985bba57ed6275c","key":"24AAACH7409R1Z7|INV|HGI/102/26-27|26-27","ok":true,"env":"test"}
+   ✓ Part-B vehicle update recorded with the new validity
+
+▶ IRN first, e-way bill later
+{"severity":"INFO","at":"2026-11-06T09:18:39.625Z","event":"edoc.irn.generate","user":"ba7d41bef985bba57ed6275c","key":"24AAACH7409R1Z7|INV|HGI/103/26-27|26-27","ok":true,"env":"test","ackNo":"112010000000001","ewb":false,"recovered":false}
+   ✓ IRN only; e-way bill offered from the IRN
+{"severity":"INFO","at":"2026-11-06T09:18:39.839Z","event":"edoc.ewb.generate","user":"ba7d41bef985bba57ed6275c","key":"24AAACH7409R1Z7|INV|HGI/103/26-27|26-27","ok":true,"env":"test","via":"IRP"}
+   ✓ e-way bill generated by IRN
+
+▶ Errors
+   ✓ missing buyer PIN: listed before anything is sent
+   ✓ offline: clear message, nothing reported
+{"severity":"WARNING","at":"2026-11-06T09:18:42.323Z","event":"edoc.irn_generate","user":"ba7d41bef985bba57ed6275c","key":"24AAACH7409R1Z7|INV|HGI/104/26-27|26-27","ok":false,"env":"test","warn":true,"error":"2211: The pincode of the buyer does not belong to the state","codes":["2211"]}
+   ✓ IRP rejection shown with its error code; no IRN on the invoice
+{"severity":"WARNING","at":"2026-11-06T09:18:42.669Z","event":"edoc.irn_generate","user":"ba7d41bef985bba57ed6275c","key":"24AAACH7409R1Z7|INV|HGI/104/26-27|26-27","ok":false,"env":"test","warn":true,"error":"The GST system (IRP / e-way bill) returned an unreadable answer (HTTP 502)","codes":[]}
+{"severity":"WARNING","at":"2026-11-06T09:18:42.671Z","warn":true,"error":"The GST system (IRP / e-way bill) returned an unreadable answer (HTTP 502)","code":"PROVIDER_BAD_RESPONSE","path":"/v1/edoc/generate"}
+   ✓ lost answer: error, no number, advice to tap again
+{"severity":"INFO","at":"2026-11-06T09:18:42.838Z","event":"edoc.irn.generate","user":"ba7d41bef985bba57ed6275c","key":"24AAACH7409R1Z7|INV|HGI/104/26-27|26-27","ok":true,"env":"test","ackNo":"112010000000002","ewb":false,"recovered":true}
+   ✓ retry recovered the IRN the IRP already had (duplicate 2150) — one IRN for the document
+
+▶ Server not set up
+{"severity":"INFO","at":"2026-11-06T09:18:42.894Z","event":"push","user":"ba7d41bef985bba57ed6275c","ok":4}
+{"severity":"INFO","at":"2026-11-06T09:18:43.219Z","event":"login","user":"ba7d41bef985bba57ed6275c"}
+   ✓ server not set up: recorded IRN status still shown, with a clear "not set up" message
+   ✓ no generation buttons, clear "not set up" message; numbers from the portal can still be typed
+   ✓ no script errors
+
+39 passed, 0 failed

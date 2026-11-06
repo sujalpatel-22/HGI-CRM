@@ -1,0 +1,126 @@
+
+▶ Sign in and automatic sync (records)
+   ✓ sign-in required before any data is shown
+{"severity":"INFO","at":"2026-11-06T09:17:15.139Z","event":"sheet_created","tab":"Users"}
+{"severity":"INFO","at":"2026-11-06T09:17:15.139Z","event":"sheet_created","tab":"Sessions"}
+{"severity":"INFO","at":"2026-11-06T09:17:15.139Z","event":"sheet_created","tab":"Settings"}
+{"severity":"INFO","at":"2026-11-06T09:17:15.139Z","event":"sheet_created","tab":"Customers"}
+{"severity":"INFO","at":"2026-11-06T09:17:15.139Z","event":"sheet_created","tab":"Products"}
+{"severity":"INFO","at":"2026-11-06T09:17:15.139Z","event":"sheet_created","tab":"Invoices"}
+{"severity":"INFO","at":"2026-11-06T09:17:15.139Z","event":"sheet_created","tab":"InvoiceItems"}
+{"severity":"INFO","at":"2026-11-06T09:17:15.139Z","event":"sheet_created","tab":"Payments"}
+{"severity":"INFO","at":"2026-11-06T09:17:15.139Z","event":"sheet_created","tab":"DocNumbers"}
+{"severity":"INFO","at":"2026-11-06T09:17:15.139Z","event":"sheet_created","tab":"Store"}
+{"severity":"INFO","at":"2026-11-06T09:17:15.139Z","event":"sheet_created","tab":"_Meta"}
+{"severity":"INFO","at":"2026-11-06T09:17:15.139Z","event":"sheet_created","tab":"_Blobs"}
+{"severity":"INFO","at":"2026-11-06T09:17:15.178Z","event":"sheets_loaded","rows":{"Users":0,"Sessions":0,"Settings":0,"Customers":0,"Products":0,"Invoices":0,"InvoiceItems":0,"Payments":0,"DocNumbers":0,"Store":0,"_Meta":1,"_Blobs":0},"counter":0,"quoteMode":"literal"}
+{"severity":"INFO","at":"2026-11-06T09:17:15.183Z","event":"signup","user":"3836154cb6d245b69a5fe76b"}
+   ✓ account opens its own data slot
+{"severity":"INFO","at":"2026-11-06T09:17:15.655Z","event":"push","user":"3836154cb6d245b69a5fe76b","ok":6}
+   ✓ buyers, invoices and company profile stored as separate cloud records (2 invoices, 2 buyers)
+{"severity":"INFO","at":"2026-11-06T09:17:18.675Z","event":"push","user":"3836154cb6d245b69a5fe76b","ok":1}
+   ✓ a new invoice uploads by itself within seconds of saving
+   ✓ no manual-backup warnings
+
+▶ Install on another phone / reinstall
+{"severity":"INFO","at":"2026-11-06T09:17:18.989Z","event":"login","user":"3836154cb6d245b69a5fe76b"}
+   ✓ second phone: all data after sign-in, no restore step (HGI/1, HGI/2, HGI/3)
+{"severity":"INFO","at":"2026-11-06T09:17:19.372Z","event":"push","user":"3836154cb6d245b69a5fe76b","ok":3}
+   ✓ second phone in sync
+
+▶ Two phones billing offline at the same time
+   ✓ offline: billing works, 2 change(s) waiting (status "offline")
+{"severity":"INFO","at":"2026-11-06T09:17:19.851Z","event":"push","user":"3836154cb6d245b69a5fe76b","ok":2}
+{"severity":"INFO","at":"2026-11-06T09:17:19.915Z","event":"push","user":"3836154cb6d245b69a5fe76b","ok":2}
+   ✓ back online: both phones have both phones' invoices and buyers (HGI/1, HGI/2, HGI/3, HGI/4, HGI/5)
+   ✓ no duplicate invoices in the cloud
+
+▶ Same invoice number issued on two phones offline
+{"severity":"INFO","at":"2026-11-06T09:17:20.041Z","event":"push","user":"3836154cb6d245b69a5fe76b","ok":2}
+{"severity":"INFO","at":"2026-11-06T09:17:20.089Z","event":"push","user":"3836154cb6d245b69a5fe76b","ok":2,"number_taken":1}
+   ✓ second phone: "HGI/6" refused by the cloud (already used) — kept on the phone (["HGI/6"])
+   ✓ banner tells the user, with a Fix button
+   ✓ cloud has exactly one HGI/6 (the first one)
+   ✓ fix offers the next free number: HGI/6 → 01/26-27
+{"severity":"INFO","at":"2026-11-06T09:17:20.981Z","event":"push","user":"3836154cb6d245b69a5fe76b","ok":1}
+   ✓ renumbered and uploaded; all numbers unique, both phones equal (HGI/4, HGI/5, HGI/6)
+   ✓ banner gone
+
+▶ Same invoice changed on two phones
+{"severity":"INFO","at":"2026-11-06T09:17:21.088Z","event":"push","user":"3836154cb6d245b69a5fe76b","ok":1}
+{"severity":"INFO","at":"2026-11-06T09:17:21.159Z","event":"push","user":"3836154cb6d245b69a5fe76b","ok":1}
+   ✓ receipts recorded on both phones are all kept (PAY-A,PAY-B)
+
+▶ Deletion
+{"severity":"INFO","at":"2026-11-06T09:17:21.272Z","event":"push","user":"3836154cb6d245b69a5fe76b","ok":1}
+   ✓ invoice deleted on one phone disappears on the other
+
+▶ GSTIN → buyer details
+   ✓ valid GSTIN fills trade name, address, state, code, PIN (Shree Ram Engineering; Plot 14, Ram Udyog, MIDC Road, Bhosari, Pune; 411026)
+   ✓ shows status, legal name, constitution and the source
+   ✓ saved buyer keeps the GST registration details
+   ✓ a name the user typed is kept (empty fields filled; "Use GST details" offered)
+   ✓ cancelled registration clearly warned, with the date
+   ✓ unknown GSTIN: "not found", nothing invented
+   ✓ offline: message + manual entry stays possible (No internet connection — enter the details manually; you can fetch them later.Try again)
+   ✓ "Try again" works once back online
+   ✓ invoice form: "Fetch GST details" appears for a valid GSTIN
+   ✓ invoice form: buyer filled from GST records
+
+▶ Account separation
+{"severity":"INFO","at":"2026-11-06T09:17:24.976Z","event":"push","user":"3836154cb6d245b69a5fe76b","ok":1}
+{"severity":"INFO","at":"2026-11-06T09:17:25.240Z","event":"signup","user":"701a0439042dae49c07f2b05"}
+   ✓ another account starts empty and its cloud has nothing of Asha's
+{"severity":"INFO","at":"2026-11-06T09:17:25.712Z","event":"push","user":"701a0439042dae49c07f2b05","ok":4}
+   ✓ same invoice number in another account is independent
+
+▶ Upgrade: phone data from before sign-in
+{"severity":"INFO","at":"2026-11-06T09:17:26.143Z","event":"signup","user":"aae58da95260c4cfcb31e393"}
+   ✓ asks before moving the phone's existing data (shows what)
+{"severity":"INFO","at":"2026-11-06T09:17:26.792Z","event":"push","user":"aae58da95260c4cfcb31e393","ok":4}
+   ✓ after "Move": data in the account and uploaded
+{"severity":"INFO","at":"2026-11-06T09:17:27.212Z","event":"signup","user":"420e1aa04f2085d765a8bd92"}
+{"severity":"INFO","at":"2026-11-06T09:17:27.701Z","event":"push","user":"420e1aa04f2085d765a8bd92","ok":2}
+   ✓ after "Not now": nothing uploaded, the phone's data left untouched
+{"severity":"INFO","at":"2026-11-06T09:17:28.117Z","event":"login","user":"3836154cb6d245b69a5fe76b"}
+   ✓ account already has data: offers to add the phone's data
+{"severity":"INFO","at":"2026-11-06T09:17:28.625Z","event":"push","user":"3836154cb6d245b69a5fe76b","ok":2}
+   ✓ added: account now has both (7 documents), the account's business profile kept
+
+▶ Proforma invoice and purchase order on another phone
+{"severity":"INFO","at":"2026-11-06T09:17:28.742Z","event":"push","user":"3836154cb6d245b69a5fe76b","ok":3}
+{"severity":"INFO","at":"2026-11-06T09:17:28.805Z","event":"push","user":"3836154cb6d245b69a5fe76b","ok":2}
+   ✓ proforma and purchase order synced to the second phone (PI PI/01/26-27, PO PO/01/26-27)
+{"severity":"INFO","at":"2026-11-06T09:17:28.878Z","event":"push","user":"3836154cb6d245b69a5fe76b","ok":1}
+   ✓ "received" on one phone shows on the other
+
+▶ Accounts: sign-up / log-in messages, log-out, password change, rows in Google Sheets
+   ✓ sign-up with a name in use: "That username is taken. Choose another one."
+   ✓ weak password refused with a reason: "That password is too common. Choose another one."
+   ✓ repeat password must match (checked before sending)
+{"severity":"INFO","at":"2026-11-06T09:17:29.742Z","event":"login_failed","user":"3836154cb6d245b69a5fe76b"}
+   ✓ wrong password: "Username or password is incorrect."
+   ✓ empty form: asks for the username
+{"severity":"INFO","at":"2026-11-06T09:17:30.009Z","event":"login","user":"3836154cb6d245b69a5fe76b"}
+   ✓ log-in on a new phone with username + password: the account's data is there
+   ✓ after log-out the sign-in screen says so
+   ✓ log-out ended the session on the server (the old token no longer works)
+{"severity":"INFO","at":"2026-11-06T09:17:30.788Z","event":"login","user":"3836154cb6d245b69a5fe76b"}
+   ✓ log in again after log-out: everything is still there (kept in Google Sheets)
+   ✓ the account's invoices, lines and buyers are rows in Google Sheets with its userId (10 invoices, 9 lines)
+   ✓ no password and no session token anywhere in the spreadsheet
+{"severity":"INFO","at":"2026-11-06T09:17:31.498Z","event":"login","user":"701a0439042dae49c07f2b05"}
+{"severity":"INFO","at":"2026-11-06T09:17:31.998Z","event":"password_changed","user":"701a0439042dae49c07f2b05","sessionsEnded":1}
+   ✓ password changed (message shown)
+   ✓ the other phone is logged out and asked to log in again (status "signin")
+   ✓ its data stays on that phone meanwhile
+{"severity":"INFO","at":"2026-11-06T09:17:32.462Z","event":"signup","user":"cbea51284aff6a71995c58ee"}
+   ✓ on a 320×480 screen the Create account button can be reached and works
+
+▶ Demo Mode and account deletion
+   ✓ Demo Mode sample data is never uploaded
+{"severity":"INFO","at":"2026-11-06T09:17:37.335Z","event":"account_deleted","user":"701a0439042dae49c07f2b05","records":6}
+   ✓ delete account: cloud data gone, phone signed out and cleared
+   ✓ no JavaScript errors
+
+55 passed, 0 failed

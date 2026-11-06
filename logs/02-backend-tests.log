@@ -1,0 +1,242 @@
+Configuration
+  ✓ Cloud Run refuses test endpoints and test switches
+  ✓ needs the spreadsheet ID, two distinct strong secrets; GST URL must be https
+Spreadsheet structure
+  ✓ first start creates every tab with its column names in row 1, protected for the server only
+Accounts
+{"severity":"INFO","at":"2026-11-06T09:15:40.278Z","event":"signup","user":"1b3f03a61024086abd85ed1e"}
+  ✓ sign-up → session; Users row has a unique ID, the hashed password, creation date and status — never the password
+      (one production hash: 86 ms)
+  ✓ production password hashing uses scrypt N=32768, r=8 (default parameters)
+{"severity":"INFO","at":"2026-11-06T09:15:40.554Z","event":"signup","user":"e1edf01aad9d137dbd237596"}
+  ✓ usernames are unique regardless of case; 8 sign-ups racing for one name → exactly one account
+  ✓ input rules: bad usernames and weak passwords are refused with a clear reason
+{"severity":"INFO","at":"2026-11-06T09:15:40.584Z","event":"login","user":"1b3f03a61024086abd85ed1e"}
+{"severity":"INFO","at":"2026-11-06T09:15:40.591Z","event":"login_failed","user":"1b3f03a61024086abd85ed1e"}
+{"severity":"INFO","at":"2026-11-06T09:15:40.608Z","event":"login","user":"1b3f03a61024086abd85ed1e"}
+  ✓ log-in: right password → session; wrong password and unknown user get the same answer
+{"severity":"INFO","at":"2026-11-06T09:15:40.615Z","event":"signup","user":"d5529db5aaa0ffd94d335e60"}
+{"severity":"INFO","at":"2026-11-06T09:15:40.623Z","event":"login_failed","user":"d5529db5aaa0ffd94d335e60"}
+{"severity":"INFO","at":"2026-11-06T09:15:40.629Z","event":"login_failed","user":"d5529db5aaa0ffd94d335e60"}
+{"severity":"INFO","at":"2026-11-06T09:15:40.634Z","event":"login_failed","user":"d5529db5aaa0ffd94d335e60"}
+{"severity":"INFO","at":"2026-11-06T09:15:40.639Z","event":"login_failed","user":"d5529db5aaa0ffd94d335e60"}
+{"severity":"INFO","at":"2026-11-06T09:15:40.644Z","event":"login_failed","user":"d5529db5aaa0ffd94d335e60"}
+{"severity":"INFO","at":"2026-11-06T09:15:40.648Z","event":"login_failed","user":"d5529db5aaa0ffd94d335e60"}
+{"severity":"INFO","at":"2026-11-06T09:15:40.653Z","event":"login_failed","user":"d5529db5aaa0ffd94d335e60"}
+{"severity":"INFO","at":"2026-11-06T09:15:40.657Z","event":"login_failed","user":"d5529db5aaa0ffd94d335e60"}
+{"severity":"INFO","at":"2026-11-06T09:15:40.661Z","event":"login_failed","user":"d5529db5aaa0ffd94d335e60"}
+{"severity":"INFO","at":"2026-11-06T09:15:40.666Z","event":"login_failed","user":"d5529db5aaa0ffd94d335e60"}
+  ✓ 10 wrong passwords lock the account for 15 minutes (even with the right password); unknown names are throttled too
+{"severity":"INFO","at":"2026-11-06T09:15:40.783Z","event":"signup","user":"58dbd285e2961efc4539fe7b"}
+{"severity":"INFO","at":"2026-11-06T09:15:40.800Z","event":"login","user":"58dbd285e2961efc4539fe7b"}
+  ✓ no / malformed / forged / expired / revoked sessions → 401; a disabled account → 403
+{"severity":"INFO","at":"2026-11-06T09:15:40.808Z","event":"login","user":"1b3f03a61024086abd85ed1e"}
+{"severity":"INFO","at":"2026-11-06T09:15:40.815Z","event":"login","user":"1b3f03a61024086abd85ed1e"}
+{"severity":"INFO","at":"2026-11-06T09:15:40.819Z","event":"login","user":"1b3f03a61024086abd85ed1e"}
+{"severity":"INFO","at":"2026-11-06T09:15:40.828Z","event":"login","user":"1b3f03a61024086abd85ed1e"}
+{"severity":"INFO","at":"2026-11-06T09:15:40.838Z","event":"login","user":"1b3f03a61024086abd85ed1e"}
+  ✓ log-out ends that session on the server; other devices stay signed in; "log out everywhere" ends them
+{"severity":"INFO","at":"2026-11-06T09:15:40.843Z","event":"signup","user":"2a1488176d2a5fe2b7df0762"}
+{"severity":"INFO","at":"2026-11-06T09:15:40.847Z","event":"login","user":"2a1488176d2a5fe2b7df0762"}
+{"severity":"INFO","at":"2026-11-06T09:15:40.859Z","event":"password_changed","user":"2a1488176d2a5fe2b7df0762","sessionsEnded":1}
+{"severity":"INFO","at":"2026-11-06T09:15:40.867Z","event":"login_failed","user":"2a1488176d2a5fe2b7df0762"}
+{"severity":"INFO","at":"2026-11-06T09:15:40.870Z","event":"login","user":"2a1488176d2a5fe2b7df0762"}
+  ✓ password change: needs the current password, refuses weak ones, ends other sessions
+{"severity":"INFO","at":"2026-11-06T09:15:40.878Z","event":"signup","user":"d1b4095fe1ee98fb08d6e62c"}
+{"severity":"INFO","at":"2026-11-06T09:15:40.894Z","event":"login_failed","user":"d1b4095fe1ee98fb08d6e62c"}
+  ✓ a hash planted in the sheet by someone without the server pepper does not work
+Records sync
+  ✓ new account: nothing in the cloud; GST lookup and PDF storage reported as set up
+{"severity":"INFO","at":"2026-11-06T09:15:40.907Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":4}
+  ✓ push company, buyer, product and invoice → each stored with revision 1 and a sequence number
+  ✓ the data is in readable rows: Settings, Customers, Products, Invoices, InvoiceItems, Payments, DocNumbers — each with the userId
+  ✓ another device of the same account pulls exactly that data (same JSON text)
+{"severity":"INFO","at":"2026-11-06T09:15:40.916Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+{"severity":"INFO","at":"2026-11-06T09:15:40.917Z","event":"push","user":"1b3f03a61024086abd85ed1e","conflict":1}
+  ✓ edit on device 2 (base rev 1) → rev 2 with a payment row; device 1 editing the old version gets a conflict with the cloud copy
+{"severity":"INFO","at":"2026-11-06T09:15:40.918Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+  ✓ sending the same content again (reply lost) is accepted without a new revision
+  ✓ pull since a sequence returns only newer changes (cursor)
+{"severity":"INFO","at":"2026-11-06T09:15:40.923Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+{"severity":"INFO","at":"2026-11-06T09:15:40.926Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+{"severity":"INFO","at":"2026-11-06T09:15:40.930Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+  ✓ fewer lines after an edit: surplus InvoiceItems rows are cleared, and later reused
+Exact round trip, formula injection, large values
+{"severity":"INFO","at":"2026-11-06T09:15:40.932Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+  ✓ texts that look like formulas are stored as text, never run, and come back exactly
+{"severity":"INFO","at":"2026-11-06T09:15:40.948Z","event":"signup","user":"5213ac96b8c1e82f0638cb56"}
+{"severity":"INFO","at":"2026-11-06T09:15:40.951Z","event":"push","user":"5213ac96b8c1e82f0638cb56","ok":1}
+  ✓ … also when Google keeps a leading apostrophe as its quote prefix (probed at start-up)
+{"severity":"INFO","at":"2026-11-06T09:15:40.970Z","event":"signup","user":"19fb621d50cef4282b587441"}
+{"severity":"INFO","at":"2026-11-06T09:15:41.008Z","event":"push","user":"19fb621d50cef4282b587441","ok":150}
+{"severity":"INFO","at":"2026-11-06T09:15:41.044Z","event":"push","user":"19fb621d50cef4282b587441","ok":150}
+{"severity":"INFO","at":"2026-11-06T09:15:41.096Z","event":"record_stored_whole","kind":"product"}
+{"severity":"INFO","at":"2026-11-06T09:15:41.100Z","event":"push","user":"19fb621d50cef4282b587441","ok":1}
+  ✓ 300 varied documents (nested data, empty texts, nulls, unicode, numeric IDs, odd field order) come back byte-for-byte
+{"severity":"INFO","at":"2026-11-06T09:15:41.123Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+{"severity":"INFO","at":"2026-11-06T09:15:41.174Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+  ✓ a 200 KB logo (more than one cell can hold) is split into _Blobs and comes back whole; replacing it frees the old parts
+Document numbers
+{"severity":"INFO","at":"2026-11-06T09:15:41.176Z","event":"push","user":"1b3f03a61024086abd85ed1e","number_taken":1}
+  ✓ a second invoice with the same number is refused (number_taken), naming the document that holds it
+{"severity":"INFO","at":"2026-11-06T09:15:41.178Z","event":"push","user":"1b3f03a61024086abd85ed1e","number_taken":1}
+{"severity":"INFO","at":"2026-11-06T09:15:41.182Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+  ✓ same number with different spacing / case is the same number; a quotation may reuse it
+{"severity":"INFO","at":"2026-11-06T09:15:41.187Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1,"number_taken":1}
+  ✓ two new invoices with one number in the same upload: the second is refused
+{"severity":"INFO","at":"2026-11-06T09:15:41.191Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+{"severity":"INFO","at":"2026-11-06T09:15:41.192Z","event":"push","user":"1b3f03a61024086abd85ed1e","number_taken":1}
+  ✓ two phones saving different invoices with one number at the same moment: exactly one gets it
+{"severity":"INFO","at":"2026-11-06T09:15:41.197Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+{"severity":"INFO","at":"2026-11-06T09:15:41.202Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+{"severity":"INFO","at":"2026-11-06T09:15:41.207Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+{"severity":"INFO","at":"2026-11-06T09:15:41.208Z","event":"push","user":"1b3f03a61024086abd85ed1e","number_taken":1}
+{"severity":"INFO","at":"2026-11-06T09:15:41.213Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+{"severity":"INFO","at":"2026-11-06T09:15:41.217Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+  ✓ renumbering frees the old number; a cancelled invoice keeps its number; deleting releases it
+  ✓ deletions reach other devices as tombstones (no business data left in the row)
+{"severity":"INFO","at":"2026-11-06T09:15:41.226Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+{"severity":"INFO","at":"2026-11-06T09:15:41.226Z","event":"push","user":"1b3f03a61024086abd85ed1e","conflict":1}
+  ✓ two phones uploading at the same moment from the same base: one wins, the other gets a conflict
+{"severity":"INFO","at":"2026-11-06T09:15:41.235Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+{"severity":"INFO","at":"2026-11-06T09:15:41.240Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+{"severity":"INFO","at":"2026-11-06T09:15:41.244Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+{"severity":"INFO","at":"2026-11-06T09:15:41.248Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+{"severity":"INFO","at":"2026-11-06T09:15:41.251Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+{"severity":"INFO","at":"2026-11-06T09:15:41.255Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+{"severity":"INFO","at":"2026-11-06T09:15:41.258Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+{"severity":"INFO","at":"2026-11-06T09:15:41.262Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+{"severity":"INFO","at":"2026-11-06T09:15:41.265Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+{"severity":"INFO","at":"2026-11-06T09:15:41.269Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+{"severity":"INFO","at":"2026-11-06T09:15:41.273Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+{"severity":"INFO","at":"2026-11-06T09:15:41.276Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+{"severity":"INFO","at":"2026-11-06T09:15:41.282Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+{"severity":"INFO","at":"2026-11-06T09:15:41.285Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+{"severity":"INFO","at":"2026-11-06T09:15:41.288Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+{"severity":"INFO","at":"2026-11-06T09:15:41.291Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+{"severity":"INFO","at":"2026-11-06T09:15:41.295Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+{"severity":"INFO","at":"2026-11-06T09:15:41.299Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+{"severity":"INFO","at":"2026-11-06T09:15:41.302Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+{"severity":"INFO","at":"2026-11-06T09:15:41.306Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+  ✓ 20 uploads at once from one account: all stored, every sequence number used once
+Isolation
+{"severity":"INFO","at":"2026-11-06T09:15:41.310Z","event":"signup","user":"29cc55bdc238cbdcb4d33b5c"}
+{"severity":"INFO","at":"2026-11-06T09:15:41.318Z","event":"push","user":"29cc55bdc238cbdcb4d33b5c","ok":1}
+  ✓ another account sees none of this data; the same record IDs and numbers stay separate
+{"severity":"INFO","at":"2026-11-06T09:15:41.322Z","event":"push","user":"29cc55bdc238cbdcb4d33b5c","conflict":2}
+  ✓ B cannot change or delete A's records — even naming A's IDs or putting A's userId inside the data
+{"severity":"INFO","at":"2026-11-06T09:15:41.329Z","event":"signup","user":"438053f591274936032519bd"}
+{"severity":"INFO","at":"2026-11-06T09:15:41.356Z","event":"push","user":"438053f591274936032519bd","ok":200}
+{"severity":"INFO","at":"2026-11-06T09:15:41.382Z","event":"push","user":"438053f591274936032519bd","ok":200}
+{"severity":"INFO","at":"2026-11-06T09:15:41.419Z","event":"push","user":"438053f591274936032519bd","ok":200}
+{"severity":"INFO","at":"2026-11-06T09:15:41.451Z","event":"push","user":"438053f591274936032519bd","ok":150}
+  ✓ 750 records upload in batches and come back in order over several pages
+{"severity":"INFO","at":"2026-11-06T09:15:41.477Z","event":"push","user":"1b3f03a61024086abd85ed1e","invalid":1,"too_large":1}
+  ✓ bad uploads are refused: unknown kind, too many, duplicates, junk, oversized record, control characters in IDs
+Persistence and failures
+{"severity":"INFO","at":"2026-11-06T09:15:41.518Z","event":"login","user":"1b3f03a61024086abd85ed1e"}
+  ✓ everything survives a restart / another server instance: log in again and pull it all
+{"severity":"INFO","at":"2026-11-06T09:15:41.566Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+{"severity":"INFO","at":"2026-11-06T09:15:41.593Z","event":"push","user":"1b3f03a61024086abd85ed1e","conflict":1}
+  ✓ a write by another instance is noticed before writing (write counter) — nothing is overwritten
+{"severity":"ERROR","at":"2026-11-06T09:15:41.599Z","error":"Google API: injected failure","path":"/v1/sync/push","status":503}
+{"severity":"INFO","at":"2026-11-06T09:15:41.605Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+  ✓ Google answers 503 to a write: the app is told to retry, nothing half-written; the retry succeeds
+{"severity":"INFO","at":"2026-11-06T09:15:41.611Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+{"severity":"INFO","at":"2026-11-06T09:15:41.613Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+  ✓ a write that Google applied but whose answer was lost is recognised (no double write)
+{"severity":"INFO","at":"2026-11-06T09:15:42.532Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+  ✓ Google read quota (429) is retried
+{"severity":"INFO","at":"2026-11-06T09:15:42.576Z","event":"push","user":"1b3f03a61024086abd85ed1e","ok":1}
+  ✓ columns reordered and a column added by the owner: still read correctly, the owner's column is kept
+  ✓ health check reports the cells used (Google's limit is 10 million)
+GSTIN lookup
+  ✓ valid GSTIN → legal & trade name, address, state, PIN, status, registration details from the provider
+  ✓ repeat lookups come from the 7-day cache in the Store tab (no second provider call)
+{"severity":"WARNING","at":"2026-11-06T09:15:43.636Z","warn":"gst provider error","status":503,"error":"Google API: provider down"}
+{"severity":"ERROR","at":"2026-11-06T09:15:43.636Z","error":"GST records could not be reached right now. Enter the details manually or try again later.","path":"/v1/gstin/19AABCU9603R1ZK","status":502}
+  ✓ cancelled registration; wrong check digit → 400; unknown → 404; provider down → 502 (nothing invented)
+{"severity":"ERROR","at":"2026-11-06T09:15:43.675Z","error":"GST lookup is not set up on the server yet.","path":"/v1/gstin/27AAPFU0939F1ZV","status":503}
+  ✓ server without a GST provider → 503 gst_not_configured
+Invoice PDFs
+  ✓ PDF stored in the private bucket, indexed in the Store tab, returned byte-for-byte
+  ✓ not a PDF → 400; another account cannot read it (404)
+Pages and CORS
+  ✓ privacy policy and the account-deletion page (username + password form, no third-party scripts)
+  ✓ app origin allowed, other websites not
+{"severity":"ERROR","at":"2026-11-06T09:15:43.692Z","error":"Cannot convert object to primitive value","path":"/v1/sync/push","status":500}
+  ✓ server errors do not reveal internals
+E-invoice & e-way bill: configuration
+  ✓ test mode only with the local simulator; never on Cloud Run; production needs explicit confirmation
+{"severity":"INFO","at":"2026-11-06T09:15:43.757Z","event":"signup","user":"0bb98d066b985340c9c1703d"}
+{"severity":"INFO","at":"2026-11-06T09:15:43.766Z","event":"signup","user":"5bfa255fec457818a099f113"}
+{"severity":"WARNING","at":"2026-11-06T09:15:43.802Z","warn":true,"error":"E-invoice and e-way bill access is not set up on the HGI server yet. Nothing was sent to the GST system.","code":"EDOC_NOT_CONFIGURED","path":"/v1/edoc/generate"}
+  ✓ server without government API access: features off, generation refused with no number
+E-invoice & e-way bill: API logins
+  ✓ features on; no login saved → 412 NO_CREDENTIALS
+  ✓ a wrong login is checked against the IRP and never saved
+{"severity":"INFO","at":"2026-11-06T09:15:43.826Z","event":"edoc.credentials_saved","user":"0bb98d066b985340c9c1703d","gstin":"24AAACH7409R1Z7","irp":true,"ewb":true,"env":"test"}
+  ✓ correct logins verified (IRP + e-way bill) and stored encrypted; the app only sees masked user names
+  ✓ another account has no login for this GSTIN
+E-invoice & e-way bill: checks before anything is sent
+  ✓ mapping: assessable value and taxes add up exactly to the app totals
+  ✓ preview: B2C, turnover up to ₹5 cr, number starting with 0 and wrong totals are caught; nothing reaches the IRP
+E-invoice & e-way bill: one-step IRN + e-way bill
+{"severity":"INFO","at":"2026-11-06T09:15:43.865Z","event":"irp.auth","ok":true,"env":"test","user":"0bb98d066b985340c9c1703d"}
+{"severity":"INFO","at":"2026-11-06T09:15:43.878Z","event":"edoc.irn.generate","user":"0bb98d066b985340c9c1703d","key":"24AAACH7409R1Z7|INV|HGI/7/26-27|26-27","ok":true,"env":"test","ackNo":"112010000000000","ewb":true,"recovered":false}
+  ✓ IRN, acknowledgement, signed QR and e-way bill come from the IRP answer (encrypted round trip)
+  ✓ a second tap returns the stored IRN — the IRP is not called again
+{"severity":"INFO","at":"2026-11-06T09:15:43.917Z","event":"edoc.irn.generate","user":"0bb98d066b985340c9c1703d","key":"24AAACH7409R1Z7|INV|HGI/8/26-27|26-27","ok":true,"env":"test","ackNo":"112010000000001","ewb":false,"recovered":false}
+  ✓ two phones at the same moment: one IRN, one IRP call
+{"severity":"WARNING","at":"2026-11-06T09:15:43.944Z","event":"edoc.irn_generate","user":"0bb98d066b985340c9c1703d","key":"24AAACH7409R1Z7|INV|HGI/9/26-27|26-27","ok":false,"env":"test","warn":true,"error":"The GST system (IRP / e-way bill) returned an unreadable answer (HTTP 502)","codes":[]}
+{"severity":"WARNING","at":"2026-11-06T09:15:43.949Z","warn":true,"error":"The GST system (IRP / e-way bill) returned an unreadable answer (HTTP 502)","code":"PROVIDER_BAD_RESPONSE","path":"/v1/edoc/generate"}
+{"severity":"INFO","at":"2026-11-06T09:15:43.967Z","event":"edoc.irn.generate","user":"0bb98d066b985340c9c1703d","key":"24AAACH7409R1Z7|INV|HGI/9/26-27|26-27","ok":true,"env":"test","ackNo":"112010000000002","ewb":false,"recovered":true}
+  ✓ answer lost on the way back → error, nothing recorded; retry recovers the same IRN from the IRP (duplicate 2150)
+{"severity":"WARNING","at":"2026-11-06T09:15:43.985Z","event":"edoc.irn_generate","user":"0bb98d066b985340c9c1703d","key":"24AAACH7409R1Z7|INV|HGI/10/26-27|26-27","ok":false,"env":"test","warn":true,"error":"2211: The pincode of the buyer does not belong to the state","codes":["2211"]}
+  ✓ IRP rejection is passed on with its error code; nothing recorded
+E-invoice & e-way bill: status and cancellation
+{"severity":"INFO","at":"2026-11-06T09:15:44.002Z","event":"ewb.auth","ok":true,"env":"test","user":"0bb98d066b985340c9c1703d"}
+{"severity":"INFO","at":"2026-11-06T09:15:44.008Z","event":"edoc.refresh","user":"0bb98d066b985340c9c1703d","key":"24AAACH7409R1Z7|INV|HGI/7/26-27|26-27","ok":true,"env":"test"}
+  ✓ status refresh asks the government systems
+  ✓ IRN cannot be cancelled while its e-way bill is active
+{"severity":"INFO","at":"2026-11-06T09:15:44.041Z","event":"edoc.ewb.cancel","user":"0bb98d066b985340c9c1703d","key":"24AAACH7409R1Z7|INV|HGI/7/26-27|26-27","ok":true,"env":"test"}
+{"severity":"INFO","at":"2026-11-06T09:15:44.064Z","event":"edoc.irn.cancel","user":"0bb98d066b985340c9c1703d","key":"24AAACH7409R1Z7|INV|HGI/7/26-27|26-27","ok":true,"env":"test"}
+  ✓ cancel e-way bill, then IRN; the cancelled number can never get a new IRN
+{"severity":"INFO","at":"2026-11-06T09:15:44.100Z","event":"edoc.irn.generate","user":"0bb98d066b985340c9c1703d","key":"24AAACH7409R1Z7|INV|HGI/11/26-27|26-27","ok":true,"env":"test","ackNo":"112010000000003","ewb":false,"recovered":false}
+  ✓ cancellation after 24 hours is refused (credit note instead)
+  ✓ records are private to the account
+E-invoice & e-way bill: separate e-way bill (no IRN)
+{"severity":"INFO","at":"2026-11-06T09:15:44.139Z","event":"edoc.ewb.generate","user":"0bb98d066b985340c9c1703d","key":"24AAACH7409R1Z7|INV|HGI/12/26-27|26-27","ok":true,"env":"test","via":"EWB"}
+  ✓ B2C invoice: e-way bill through the e-way bill system (ACCESSTOKEN, SEK, GENEWAYBILL); IRN refused
+{"severity":"INFO","at":"2026-11-06T09:15:44.175Z","event":"edoc.ewb.partb","user":"0bb98d066b985340c9c1703d","key":"24AAACH7409R1Z7|INV|HGI/12/26-27|26-27","ok":true,"env":"test"}
+{"severity":"INFO","at":"2026-11-06T09:15:44.211Z","event":"edoc.ewb.transporter","user":"0bb98d066b985340c9c1703d","key":"24AAACH7409R1Z7|INV|HGI/12/26-27|26-27","ok":true,"env":"test"}
+{"severity":"INFO","at":"2026-11-06T09:15:44.222Z","event":"edoc.refresh","user":"0bb98d066b985340c9c1703d","key":"24AAACH7409R1Z7|INV|HGI/12/26-27|26-27","ok":true,"env":"test"}
+  ✓ Part-B vehicle update, transporter update, status with rek + HMAC check
+{"severity":"INFO","at":"2026-11-06T09:15:44.247Z","event":"edoc.ewb.cancel","user":"0bb98d066b985340c9c1703d","key":"24AAACH7409R1Z7|INV|HGI/12/26-27|26-27","ok":true,"env":"test"}
+  ✓ cancel the e-way bill
+{"severity":"INFO","at":"2026-11-06T09:15:44.275Z","event":"edoc.irn.generate","user":"0bb98d066b985340c9c1703d","key":"24AAACH7409R1Z7|INV|HGI/13/26-27|26-27","ok":true,"env":"test","ackNo":"112010000000004","ewb":false,"recovered":false}
+{"severity":"INFO","at":"2026-11-06T09:15:44.302Z","event":"edoc.ewb.generate","user":"0bb98d066b985340c9c1703d","key":"24AAACH7409R1Z7|INV|HGI/13/26-27|26-27","ok":true,"env":"test","via":"IRP"}
+  ✓ IRN first, e-way bill later (separate steps, by IRN)
+{"severity":"INFO","at":"2026-11-06T09:15:44.315Z","event":"edoc.credentials_deleted","user":"0bb98d066b985340c9c1703d","gstin":"24AAACH7409R1Z7"}
+{"severity":"INFO","at":"2026-11-06T09:15:44.325Z","event":"edoc.credentials_saved","user":"0bb98d066b985340c9c1703d","gstin":"24AAACH7409R1Z7","irp":true,"ewb":true,"env":"test"}
+  ✓ removing the API login stops further calls
+{"severity":"INFO","at":"2026-11-06T09:15:44.328Z","event":"account_deleted","user":"0bb98d066b985340c9c1703d","records":9}
+  ✓ account deletion removes e-invoice records and API logins
+Account deletion
+{"severity":"INFO","at":"2026-11-06T09:15:44.341Z","event":"account_deleted","user":"1b3f03a61024086abd85ed1e","records":52}
+{"severity":"INFO","at":"2026-11-06T09:15:44.367Z","event":"account_deleted","user":"1b3f03a61024086abd85ed1e","records":52}
+  ✓ in-app deletion needs the password; removes every row of the account in every tab, the PDFs and all sessions
+{"severity":"INFO","at":"2026-11-06T09:15:44.389Z","event":"signup","user":"5381369b5782afaeccf88abd"}
+{"severity":"INFO","at":"2026-11-06T09:15:44.403Z","event":"push","user":"5381369b5782afaeccf88abd","ok":1}
+  ✓ the username can be registered again — as a new, empty account
+{"severity":"INFO","at":"2026-11-06T09:15:44.410Z","event":"account_deleted","user":"29cc55bdc238cbdcb4d33b5c","records":3}
+  ✓ deletion from the web page with username + password; wrong password refused
+{"severity":"INFO","at":"2026-11-06T09:15:44.469Z","event":"signup","user":"406d25f9830a3a80450cf498"}
+{"severity":"INFO","at":"2026-11-06T09:15:44.478Z","event":"signup","user":"939acb62c5867a9c80df6746"}
+{"severity":"INFO","at":"2026-11-06T09:15:44.486Z","event":"signup","user":"3a2102c9235e7deb7b688860"}
+{"severity":"INFO","at":"2026-11-06T09:15:44.494Z","event":"signup","user":"3ca287f8ea3fc12bace04ded"}
+{"severity":"INFO","at":"2026-11-06T09:15:44.502Z","event":"signup","user":"379690d8d64c49cf638a76c4"}
+  ✓ sign-ups and log-ins are limited per network address (default 5 / 20 a minute)
+  ✓ sign-up can be closed by the operator (ALLOW_SIGNUP=0)
+
+82 passed, 0 failed

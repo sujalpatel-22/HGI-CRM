@@ -1,0 +1,101 @@
+
+▶ Accessibility (labels, names, contrast, tap targets) — light and dark
+   ✓ light dashboard: no unnamed controls, unlabelled fields, low-contrast text or tap targets < 32 px
+   ✓ light invoices: no unnamed controls, unlabelled fields, low-contrast text or tap targets < 32 px
+   ✓ light customers: no unnamed controls, unlabelled fields, low-contrast text or tap targets < 32 px
+   ✓ light items: no unnamed controls, unlabelled fields, low-contrast text or tap targets < 32 px
+   ✓ light returns: no unnamed controls, unlabelled fields, low-contrast text or tap targets < 32 px
+   ✓ light settings: no unnamed controls, unlabelled fields, low-contrast text or tap targets < 32 px
+   ✓ light create-invoice: no unnamed controls, unlabelled fields, low-contrast text or tap targets < 32 px
+   ✓ light search sheet passes the same checks {"unnamed":[],"unlabeled":[],"smallTargets":[],"lowContrast":[]}
+   ✓ light filter dialog passes {"unnamed":[],"unlabeled":[],"smallTargets":[],"lowContrast":[]}
+   ✓ dark dashboard: no unnamed controls, unlabelled fields, low-contrast text or tap targets < 32 px
+   ✓ dark invoices: no unnamed controls, unlabelled fields, low-contrast text or tap targets < 32 px
+   ✓ dark customers: no unnamed controls, unlabelled fields, low-contrast text or tap targets < 32 px
+   ✓ dark items: no unnamed controls, unlabelled fields, low-contrast text or tap targets < 32 px
+   ✓ dark returns: no unnamed controls, unlabelled fields, low-contrast text or tap targets < 32 px
+   ✓ dark settings: no unnamed controls, unlabelled fields, low-contrast text or tap targets < 32 px
+   ✓ dark create-invoice: no unnamed controls, unlabelled fields, low-contrast text or tap targets < 32 px
+   ✓ dark search sheet passes the same checks {"unnamed":[],"unlabeled":[],"smallTargets":[],"lowContrast":[]}
+   ✓ dark filter dialog passes {"unnamed":[],"unlabeled":[],"smallTargets":[],"lowContrast":[]}
+
+▶ Layout
+   ✓ 1366px: crore amount (₹8,94,65,858.00) and legend fit their boxes — no overlap, nothing cut off 
+   ✓ 1180px: crore amount (₹8,94,65,858.00) and legend fit their boxes — no overlap, nothing cut off 
+   ✓ 800px: crore amount (₹8,94,65,858.00) and legend fit their boxes — no overlap, nothing cut off 
+   ✓ 412px: crore amount (₹8,94,65,858.00) and legend fit their boxes — no overlap, nothing cut off 
+   ✓ 412px: document types in one scrollable row of 7 chips (rows 1, height 40)
+   ✓ 412px: the chosen chip (Purchase order) is scrolled into view
+   ✓ 412px: header says "Edit Invoice" while editing (was "New Invoice")
+   ✓ 412px: sticky header is opaque enough that text does not show through (alpha 0.96)
+   ✓ 360px: crore amount (₹8,94,65,858.00) and legend fit their boxes — no overlap, nothing cut off 
+   ✓ 360px: document types in one scrollable row of 7 chips (rows 1, height 40)
+   ✓ 360px: the chosen chip (Purchase order) is scrolled into view
+   ✓ 360px: header says "Edit Invoice" while editing (was "New Invoice")
+   ✓ 360px: sticky header is opaque enough that text does not show through (alpha 0.96)
+
+▶ Global search
+   ✓ Ctrl+K opens search with the cursor in the field
+   ✓ Esc closes it
+   ✓ empty search offers actions
+   ✓ document number 109/26-27 is the top result
+   ✓ Enter opens it
+   ✓ amount finds the document
+   ✓ partial words "Pat Indu" find buyer Patel Industries
+   ✓ buyer result → "New invoice": a new invoice with the buyer's details filled in
+   ✓ while an invoice is open, products come first
+   ✓ product "Monoblock Pump 1HP" added with its rate and GST ([["Monoblock Pump 1HP",5315,18]])
+   ✓ recent items: the opened document, buyer and product
+   ✓ no match: a clear empty state
+   ✓ actions: "gst return" + Enter opens GST Returns
+   ✓ arrow keys move the highlighted result (and tell screen readers)
+   ✓ search over 5,000 documents + 600 products: 15 ms per query (budget 400 ms)
+   ✓ buyer row action: new invoice for the buyer
+   ✓ "Repeat last" copies 112/26-27's items into a new invoice with a new number (154/26-27)
+
+▶ Dashboard widgets
+   ✓ hidden widget disappears, moved widget moves (recent 4 before cash flow 5)
+   ✓ layout kept after restart
+   ✓ cannot hide every widget
+   ✓ Reset restores the standard dashboard
+
+▶ Document register: filters, sort, bulk actions
+   ✓ buyer + amount ≥ ₹10,000 + sorted high→low: 11 documents (expected 11)
+   ✓ active filters shown as removable pills (+ clear all)
+   ✓ removing a pill removes that filter only
+   ✓ "Clear all" shows everything again
+   ✓ supply filter "Other state (IGST)" shows IGST documents only
+   ✓ impossible amount range is refused with a message
+   ✓ register search matches every word
+   ✓ tapping rows selects them (3 selected), without opening them
+   ✓ no document was opened by the taps
+   ✓ CSV of the selected documents (header + 3 rows)
+   ✓ Mark paid: one receipt for the exact balance on each, balance now 0
+   ✓ cash receipt of ₹2 lakh or more is refused (Sec 269ST)
+   ✓ leaving selection mode removes the bar
+
+▶ Performance with 5,000 invoices, 400 buyers, 600 products
+   ✓ all screens render in 361 ms (budget 3000; was 2,354 ms before v9.2)
+   ✓ products & stock: 110 ms (budget 900; was 1,679 ms)
+   ✓ dashboard: 80 ms (budget 1500; was 857 ms)
+   ✓ document register: 82 ms, search: 51 ms
+   ✓ start-up with the 5.6 MB book: 789 ms, all 5000 invoices back
+   ✓ tab switches (tap → painted, median of 3): {"invoices":103,"customers":31,"items":44,"returns":44,"dashboard":85} ms (budget 1200)
+
+▶ Large book persistence
+   ✓ 6,500 invoices (7.2 MB) is over the 5 MB quick-storage limit; the user is told the data is kept in the browser database
+   ✓ after restart: 6500 invoices and the last edit are there (before v9.2 the edit was lost)
+   ✓ a change made just before closing the tab is kept
+
+▶ GST calculation: app (computeDoc) = server (gst-calc) on random documents
+   ✓ 4000 random documents (8 supply types, 8 GST rates incl. 0.25 / 3 / 40 %, units, discounts, charges, reverse charge): app and server agree to the paisa
+   ✓ intra-state 2 × ₹5,000 @ 18 %: CGST 900 + SGST 900 = ₹11,800
+   ✓ inter-state: IGST 1,800
+   ✓ export under LUT: zero-rated
+   ✓ reverse charge: tax shown (CGST 250) but not added to the total
+   ✓ discount + packing apportioned; total rounded to the rupee (1249.98, 105.11, 105.11, 0, -0.2, 1460)
+   ✓ no script errors
+
+benchmarks {"renderAll":361,"dashboard":80,"items":110,"register":82,"buyers":72,"save":20,"search":51,"returns":13,"bytes":5568105,"boot":789,"switchTab":{"invoices":103,"customers":31,"items":44,"returns":44,"dashboard":85}}
+
+81 passed, 0 failed

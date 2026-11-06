@@ -1,0 +1,6 @@
+HGI Billing 9.4.0 (versionCode 169) — commit cf6040eae5860a920ed53f71abb8d6f988136163
+Signing mode: test-key
+Certificate SHA-256: 61EE332A6DFF81A2BAB02EF6AF2F32F45922AD66B3FC227D0A35E458E87548A6
+Sign-in: off · sync service: not configured
+The *-debug-TESTONLY.apk is for automated tests only (test sign-in, CI debug key) — never give it to customers.
+INTERNAL TEST BUILD — throw-away key. NOT for Google Play, NOT for customers. Updates from this build cannot be installed over a Play/release install.

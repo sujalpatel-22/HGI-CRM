@@ -1,0 +1,53 @@
+
+▶ Rule book: dated values switch on their effective dates
+   ✓ B2C (Large): ₹2.5 lakh up to 31-07-2024, ₹1 lakh from 01-08-2024 (Notfn 12/2024-CT)
+   ✓ e-way bill: 180-day document age limit from 01-01-2025 only
+   ✓ IRP 30-day limit: AATO ≥ ₹100 cr till 31-03-2025, ≥ ₹10 cr from 01-04-2025
+   ✓ e-invoicing threshold ₹10 cr → ₹5 cr from 01-08-2023 (Notfn 10/2023-CT)
+   ✓ before 22-09-2025: 12 % and 28 % valid, 40 % not
+   ✓ from 22-09-2025 (GST 2.0): 12 % / 28 % gone, 40 % valid
+   ✓ special rates 0.25 % / 1.5 % / 3 % stay valid
+   ✓ credit note deadline: 30 November after the end of the invoice's FY (Sec 34(2))
+   ✓ every dated rule is in date order
+   ✓ every cited source exists and has a link
+
+▶ Place of supply of goods: decided from the stated fact, never from names
+   ✓ buyer 24, delivery 08, fact missing → the app must ask (no guess)
+   ✓ third person on the buyer's direction → POS = buyer's state 24 (Sec 10(1)(b)) → CGST + SGST
+   ✓ buyer's own site → POS = delivery state 08 (Sec 10(1)(a)) → IGST
+   ✓ delivery in the buyer's state → no question, POS = that state
+   ✓ buyer 27 orders delivery to a third person in 24 → POS 27 → IGST (10(1)(b))
+   ✓ bill-to / ship-to without the buyer's state → the app must ask
+   ✓ no state at all → supplier's state, marked as an assumption
+   ✓ SEZ and export supplies are always inter-State (IGST Act s.7(5))
+
+▶ UTGST, cess guard, HSN digits, e-invoice applicability
+   ✓ intra-UT supply in Chandigarh / DNH&DD / Lakshadweep / A&N / Ladakh → UTGST
+   ✓ Delhi, Puducherry, J&K (legislatures) and states → SGST; inter-State → no UTGST
+   ✓ cess headings refused (tobacco, pan masala); a 4-digit HSN covering one is flagged
+   ✓ motor cars: cess risk before GST 2.0 only
+   ✓ HSN digits: ≤ ₹5 cr 4 on B2B / optional on B2C; > ₹5 cr 6 on all (Notfn 78/2020-CT)
+   ✓ e-invoicing by band and date (unknown where the band is too coarse for that date's threshold)
+
+▶ Tax engine golden cases (server engine = app engine, parity tested elsewhere) — expected values worked by hand
+   ✓ G1 bill-to/ship-to (POS 24): CGST 9,674.91 + SGST 9,674.91, total 1,26,849 (9674.91/9674.91/126849)
+   ✓ G1′ buyer's own site (POS 08): IGST 19,349.82, same total (19349.82)
+   ✓ G2 discount + packing, two rates: taxable 11,700, CGST 926.25, total 13,553
+   ✓ G3 export under LUT: IGST 0, total 5,000, inter-State
+   ✓ G4 reverse charge: CGST/SGST 250 each shown, total 10,000
+   ✓ G5 rounding: tax to the paisa per HSN line, invoice to the rupee
+   ✓ G6 0.25 % rate: 1.25 + 1.25, total 1,003 (1,002.50 rounds up)
+   ✓ G7 intra-UT: CGST 90 + UTGST 90
+
+▶ Server re-derives the place of supply and refuses unresolved facts
+   ✓ no recorded delivery fact → server refuses the e-way bill
+   ✓ bill-to/ship-to recorded → accepted: transaction type 2, bill-to state 24, ship-to state 08 []
+   ✓ fact says "buyer itself" but POS 24 → server refuses (POS must be 08)
+   ✓ document 200 days old → server refuses the e-way bill (GSTN advisory, from 01-01-2025)
+
+▶ One rule book everywhere
+   ✓ server copy backend/lib/gst-rules.js is identical to src/gst-rules.js
+   ✓ app loads the rule book before its tax engine
+   ✓ returns use the B2CL limit of the document date, not a constant
+
+39 passed, 0 failed

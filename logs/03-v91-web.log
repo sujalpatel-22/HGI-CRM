@@ -1,0 +1,57 @@
+▶ PIN code → state, state code, city / district
+   ✓ India Post directory (19,297 PINs) loads offline
+   ✓ billing PIN 380015 → Gujarat (24), Ahmedabad
+   ✓ "Same as billing" copies the billing state to shipping
+   ✓ shipping PIN 411026 → shipping Maharashtra (27), Pune; billing stays Gujarat (24)
+   ✓ goods delivered to Maharashtra for a Gujarat buyer → the app asks who receives them (no guess)
+   ✓ delivered to the buyer itself in Maharashtra → place of supply 27, IGST ₹1800 (Sec 10(1)(a))
+   ✓ the reason for the place of supply is shown
+   ✓ typing another consignee name alone does not change the place of supply (no name matching)
+   ✓ bill-to / ship-to (another person on the buyer's instruction) → buyer's state 24, CGST + SGST (Sec 10(1)(b))
+   ✓ ambiguous PIN 503145 (Telangana / Andhra Pradesh): choices shown, nothing guessed
+   ✓ picked Telangana → shipping 36, place of supply recalculated
+   ✓ PIN starting with 0 is refused
+   ✓ unknown PIN: warning, the state is not changed
+   ✓ a PIN inside the delivery address fills the empty PIN field and its state
+   ✓ address PIN and PIN field disagree → warning
+   ✓ buyer GSTIN → billing state 27
+   ✓ billing PIN in another state never overwrites the GSTIN state — warning instead
+   ✓ multi-district PINs offered as choices (e.g. 110001)
+   ✓ services: recipient's state is the place of supply (Sec 12(2)) [27 Services — recipient's location: Maharashtra (27) (Sec 12(2)).]
+▶ Buyer master: separate shipping state
+   ✓ buyer master: billing PIN → 24, ship PIN → 27 (each its own)
+   ✓ choosing the buyer fills billing 24 and shipping 27 (not the billing state)
+▶ Proforma Invoice
+   ✓ own number series (PI/01/26-27)
+   ✓ saved with GST (₹17700, CGST ₹1350)
+   ✓ PDF: PROFORMA INVOICE, "not a tax invoice", bank details + UPI QR for the advance
+   ✓ not in sales, GST returns or receivables
+   ✓ WhatsApp / e-mail text for the proforma includes payment details
+   ✓ status Open
+   ✓ one tap → GST invoice form 01/26-27 with the same buyer and items
+   ✓ saved invoice 01/26-27; proforma marked Converted → 01/26-27
+▶ Purchase order from a customer
+   ✓ own reference series; field for the customer's PO number
+   ✓ PDF: ORDER CONFIRMATION quoting the customer's PO
+   ✓ convert → GST invoice carries the customer's PO number and date
+   ✓ invoice saved, customer PO marked Converted
+▶ Purchase order to a supplier
+   ✓ own series PO/…, supplier and "deliver to" sections
+   ✓ delivery address starts as our own address
+   ✓ supplier list shows suppliers only
+   ✓ supplier Maharashtra (27), delivery stays at our Gujarat address
+   ✓ inter-state purchase: supplier charges IGST ₹5400; place of supply = our delivery state 24
+   ✓ saved (₹35400)
+   ✓ PDF: PURCHASE ORDER to the supplier, deliver-to address, no bank details, "quote this PO" note
+   ✓ WhatsApp / e-mail text written for the supplier
+   ✓ purchase order is not in sales or GST returns
+   ✓ marked received; stock 1 → 11
+   ✓ supplier in our state → CGST + SGST
+   ✓ "Save to Supplier Master" stores a supplier
+   ✓ document register filters purchase orders ["PO PO/01/26-27 06/11/2026 — Kirloskar Castings27AABCK1234M1Z"]
+▶ Existing features
+   ✓ tax invoice numbering and labels unchanged (03/26-27)
+   ✓ document type control offers all 7 types
+   ✓ no script errors
+
+49 passed, 0 failed
