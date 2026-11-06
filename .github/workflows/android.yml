@@ -54,6 +54,9 @@ jobs:
       - name: Cloud service tests (accounts, Google Sheets storage via the Sheets API stand-in, isolation, deletion)
         run: node backend/test/run-tests.js 2>&1 | tee logs/02-backend-tests.log
 
+      - name: Live-check script works (verify-deployment.js incl. restart phase, against the stand-in)
+        run: node backend/test/verify-script-test.js 2>&1 | tee logs/02-verify-script.log
+
       - name: GST rule book + tax engine golden cases (release blocker)
         run: node tests/gst-rules.test.mjs 2>&1 | tee logs/02-gst-rules.log
 

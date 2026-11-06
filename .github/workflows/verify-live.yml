@@ -1,0 +1,44 @@
+# Live check of the DEPLOYED cloud service against the real Google Spreadsheet. Never runs on ordinary pushes:
+# it starts only when someone pushes to the branch `live-check` (e.g. `git push -f origin HEAD:live-check`), or from
+# Actions → "Live check (real spreadsheet)" → Run workflow once this file is on the default branch. It creates throw-away accounts
+# (verify-<random>, random passwords, never printed) and deletes them again. It uses no secret.
+# The PASS / FAIL log is published to the branch ci-output-verify so it can be read without Actions access.
+# The restart part of the check needs gcloud on the project: run deploy/verify-live.sh in Cloud Shell for that.
+name: Live check (real spreadsheet)
+on:
+  push:
+    branches: [live-check]
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'Service URL (empty = repository variable HGI_SYNC_URL)'
+        required: false
+permissions:
+  contents: write   # only to publish the log branch
+concurrency: { group: verify-live, cancel-in-progress: false }
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: Run scripts/verify-deployment.js against the service
+        env:
+          URL_IN: ${{ inputs.url }}
+          URL_VAR: ${{ vars.HGI_SYNC_URL }}
+        run: |
+          URL="${URL_IN:-$URL_VAR}"
+          case "$URL" in https://*) ;; *) echo "No https service URL (input or HGI_SYNC_URL)"; exit 1;; esac
+          mkdir -p logs
+          set -o pipefail
+          node backend/scripts/verify-deployment.js "$URL" 2>&1 | tee logs/verify-live.txt
+      - name: Publish the log to branch ci-output-verify
+        if: always()
+        run: |
+          OUT=$RUNNER_TEMP/out; mkdir -p "$OUT"; cp logs/verify-live.txt "$OUT/" 2>/dev/null || echo "no log" > "$OUT/verify-live.txt"
+          echo "run=$GITHUB_RUN_ID sha=$GITHUB_SHA status=${{ job.status }} at=$(date -u +%FT%TZ)" > "$OUT/STATUS.txt"
+          cd "$OUT" && git init -q -b ci-output-verify && git add -A
+          git -c user.name="hgi-ci" -c user.email="hgi-ci@users.noreply.github.com" commit -qm "live check run $GITHUB_RUN_ID (${{ job.status }})"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" ci-output-verify

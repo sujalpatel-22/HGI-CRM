@@ -48,6 +48,7 @@ const { EdocService } = require('./lib/edoc-service');
 const log = e => console.log(JSON.stringify({ severity: e.warn ? 'WARNING' : e.error ? 'ERROR' : 'INFO', at: new Date().toISOString(), ...e }));
 
 function createServer(cfg, deps = {}) {
+  const startedAt = new Date().toISOString();   // /healthz: lets the live check prove a NEW instance re-read the spreadsheet
   const access = deps.access || new GoogleAccess(cfg);
   const client = deps.sheets || new SheetsClient({ spreadsheetId: cfg.spreadsheetId, endpoint: cfg.endpoints.sheets, access });
   const db = new SheetDB({ client, tables: TABLES, log: deps.log || log, reloadMs: cfg.sheetsReloadMinutes * 60e3, missReloadMs: cfg.sheetsMissReloadMs });
@@ -115,7 +116,7 @@ function createServer(cfg, deps = {}) {
     if (req.method === 'GET' && p === '/healthz') {
       try { await ready(); } catch (e) { return send(req, res, 503, { ok: false, error: 'sheets_unavailable', message: e.message }); }
       const cells = db.cellsUsed();
-      return send(req, res, 200, { ok: true, storage: 'google-sheets', quoteMode: db.quoteMode, cells, cellLimit: 10e6, ...(cells > 7e6 ? { warning: 'The spreadsheet is above 70 % of Google\'s 10 million cell limit.' } : {}) });
+      return send(req, res, 200, { ok: true, storage: 'google-sheets', startedAt, quoteMode: db.quoteMode, cells, cellLimit: 10e6, ...(cells > 7e6 ? { warning: 'The spreadsheet is above 70 % of Google\'s 10 million cell limit.' } : {}) });
     }
     if (req.method === 'GET' && (p === '/' || p === '/privacy')) return page(req, res, pub(p === '/' ? 'index.html' : 'privacy.html').replace(/\{\{SUPPORT_EMAIL\}\}/g, cfg.supportEmail || 'the e-mail shown in the app listing'));
     if (req.method === 'GET' && p === '/delete-account') return page(req, res, pub('delete-account.html').replace(/\{\{SUPPORT_EMAIL\}\}/g, cfg.supportEmail || ''));

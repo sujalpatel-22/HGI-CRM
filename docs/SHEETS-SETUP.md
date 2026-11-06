@@ -108,7 +108,7 @@ the sheet every 10 minutes, so a hand edit is picked up eventually, but edits be
 1. **Google Cloud project with billing**, if you don't have one: console.cloud.google.com → new project, link billing.
 2. **Infrastructure** (Cloud Shell). The script shows each command and asks `y/N` before running it:
    ```
-   cd backend
+   git clone https://github.com/sujalpatel-22/hgi-crm && cd hgi-crm && git checkout android-v7 && cd backend
    PROJECT_ID=hgi-billing REGION=asia-south1 BUCKET=hgi-billing-pdfs bash deploy/setup-gcp.sh
    ```
    It:
@@ -129,20 +129,31 @@ the sheet every 10 minutes, so a hand edit is picked up eventually, but edits be
    ```
    - optional: `ALLOW_SIGNUP=0` closes sign-up;
    - optional: `MIN_INSTANCES=1` avoids a cold start, for a small always-on cost.
-5. **Check** `https://<url>/healthz`. It should answer `{"ok":true,"storage":"google-sheets",…}`. The tabs should now
+5. **Check** `https://<url>/healthz`. It should answer `{"ok":true,"storage":"google-sheets","startedAt":…,…}`. The tabs should now
    be in the spreadsheet.
-6. **Live check against the real spreadsheet** (any computer with Node 20+):
+6. **Live check against the real spreadsheet, including a restart** (Cloud Shell, in `backend/`):
    ```
-   node backend/scripts/verify-deployment.js https://<url>
+   PROJECT_ID=hgi-billing REGION=asia-south1 bash deploy/verify-live.sh
    ```
-   It:
-   - creates a throw-away account;
-   - uploads tricky data: formula-like texts, apostrophes, unicode, a 45,000-character text and a logo;
-   - reads everything back byte-for-byte;
-   - checks a duplicate number, a conflict and log-out;
-   - deletes the account.
+   It needs no password or key from you. It:
+   - creates throw-away accounts (`verify-<random>`) with random passwords that are never printed;
+   - checks that the same username cannot be taken twice (also in capitals), that a weak or wrong password is refused,
+     and that a log-in on a second device reaches the same account;
+   - uploads tricky data: formula-like texts, apostrophes, unicode, a 45,000-character text and a 90 KB logo, and reads
+     it back byte-for-byte on the second device;
+   - checks that a second account sees none of the first account's data, cannot change it, and may use the same
+     invoice number for itself;
+   - checks a duplicate number, a conflict, log-out, and that the data is still there after logging in again;
+   - **restarts the service** (asks first) and checks that the new instance, which can only have read the spreadsheet,
+     lets the account log in and serves the same data byte-for-byte; then deletes the test accounts.
 
-   Every line must say PASS. **Do this before giving the app to anyone.**
+   Every line must say PASS. **Do this before giving the app to anyone.** Then open the spreadsheet and look at the
+   Users tab yourself: `passwordHash` must start with `scrypt$1$` and no column may hold a readable password.
+
+   Without Cloud Shell, the same check minus the restart runs on GitHub against the repository variable `HGI_SYNC_URL`:
+   push any commit to the branch `live-check` (`git push -f origin HEAD:live-check`). Once the workflow file is on the
+   default branch it can also be started from Actions → "Live check (real spreadsheet)" → Run workflow. Its PASS / FAIL
+   log is published to the branch `ci-output-verify`, so Claude can read it.
 7. **App builds:**
    - in GitHub, set the repository variable `HGI_SYNC_URL` to the Cloud Run URL. Builds signed with the release key then
      require accounts;

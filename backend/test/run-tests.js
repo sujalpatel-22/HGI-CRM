@@ -77,7 +77,7 @@ const quiet = () => {};
 
   console.log('Spreadsheet structure');
   await test('first start creates every tab with its column names in row 1, protected for the server only', async () => {
-    const h = await call('GET', '/healthz'); assert.strictEqual(h.status, 200, h.text); assert.strictEqual(h.json.ok, true);
+    const h = await call('GET', '/healthz'); assert.strictEqual(h.status, 200, h.text); assert.strictEqual(h.json.ok, true); assert.ok(!isNaN(Date.parse(h.json.startedAt)));
     const b = g.sheets.books.get(SHEET);
     for (const t of TABLES) {
       const sh = b.sheets.find(s => s.props.title === t.name); assert.ok(sh, 'tab ' + t.name);
