@@ -1,0 +1,113 @@
+▶ api35-pixel_c: sdk_gphone64_x86_64 · Android SDK 35 · WebView versionName=124.0.6367.219
+  ✓ runs as native Capacitor app
+  ✓ HgiNative plugin reachable from JavaScript
+  ✓ native writeState/readState round trip
+  ✓ bundled QR + Chart libraries loaded (offline)
+  ✓ bundled Font Awesome icons
+  ✓ bundled Inter font
+  ✓ compiled Tailwind CSS loaded
+  ✓ no username/password screen on Android
+  ✓ debug build: test sign-in against the local test service ({"auth":"test","syncUrl":"http://127.0.0.1:8787","webClientId":"","debug":true})
+  ✓ sign-in required before the app opens
+{"severity":"INFO","at":"2026-11-15T18:57:03.321Z","event":"sheet_created","tab":"Users"}
+{"severity":"INFO","at":"2026-11-15T18:57:03.321Z","event":"sheet_created","tab":"Sessions"}
+{"severity":"INFO","at":"2026-11-15T18:57:03.321Z","event":"sheet_created","tab":"Settings"}
+{"severity":"INFO","at":"2026-11-15T18:57:03.321Z","event":"sheet_created","tab":"Customers"}
+{"severity":"INFO","at":"2026-11-15T18:57:03.321Z","event":"sheet_created","tab":"Products"}
+{"severity":"INFO","at":"2026-11-15T18:57:03.321Z","event":"sheet_created","tab":"Invoices"}
+{"severity":"INFO","at":"2026-11-15T18:57:03.321Z","event":"sheet_created","tab":"InvoiceItems"}
+{"severity":"INFO","at":"2026-11-15T18:57:03.321Z","event":"sheet_created","tab":"Payments"}
+{"severity":"INFO","at":"2026-11-15T18:57:03.321Z","event":"sheet_created","tab":"DocNumbers"}
+{"severity":"INFO","at":"2026-11-15T18:57:03.321Z","event":"sheet_created","tab":"Store"}
+{"severity":"INFO","at":"2026-11-15T18:57:03.321Z","event":"sheet_created","tab":"_Meta"}
+{"severity":"INFO","at":"2026-11-15T18:57:03.321Z","event":"sheet_created","tab":"_Blobs"}
+{"severity":"INFO","at":"2026-11-15T18:57:03.428Z","event":"sheets_loaded","rows":{"Users":0,"Sessions":0,"Settings":0,"Customers":0,"Products":0,"Invoices":0,"InvoiceItems":0,"Payments":0,"DocNumbers":0,"Store":0,"_Meta":1,"_Blobs":0},"counter":0,"quoteMode":"literal"}
+{"severity":"INFO","at":"2026-11-15T18:57:03.447Z","event":"signup","user":"c0da80eeb0f1fd6e40d70e61"}
+  ✓ signed in: data opens in the account's own slot
+  ✓ onboarding shown on first launch
+  ✓ fresh install starts with no business data (no sample company, items, buyers or invoices)
+  ✓ setup wizard covers the screen, buttons unstyled by default (844/844px, rgba(0, 0, 0, 0))
+{"severity":"INFO","at":"2026-11-15T18:57:22.462Z","event":"push","user":"c0da80eeb0f1fd6e40d70e61","ok":2}
+  ✓ onboarding done, tablet top navigation shown
+{"severity":"INFO","at":"2026-11-15T18:57:53.610Z","event":"push","user":"c0da80eeb0f1fd6e40d70e61","ok":2}
+  ✓ ₹ sign has its own width (33.2px at 64px, probe [11.4,11.4,8.4,8.7])
+  ✓ no native title bar over the app
+    status-bar pixel [ 243, 241, 236 ] header pixel [ 238, 236, 232 ] insets "0px"
+  ✓ status bar painted the page colour (rgb 243,241,236 vs page 243,241,236)
+{"severity":"INFO","at":"2026-11-15T18:58:09.631Z","event":"push","user":"c0da80eeb0f1fd6e40d70e61","ok":1}
+  ✓ invoice saved
+  ✓ GST: inter-state IGST 18% on ₹10,000 = ₹1,800, total ₹11,800
+{"severity":"INFO","at":"2026-11-15T18:58:12.796Z","event":"push","user":"c0da80eeb0f1fd6e40d70e61","ok":1}
+  ✓ UPI scan-to-pay QR rendered
+  ✓ invoice header: company name clear of the logo (18px, flex gap native)
+    save toast: PDF saved: Downloads/HGI Billing/Invoice_01-26-27_Shree_Ram_Engineering.pdf
+  ✓ native A4 PDF written to Downloads/HGI Billing (115563 bytes)
+  ✓ file is a valid PDF
+  ✓ native PDF: 3 copies → 3 A4 sheets (one per copy, no spill-over pages; page target 280 mm)
+  ✓ Android back button closes dialog
+  ✓ back button returns to dashboard
+  ✓ product search opens when the item description is tapped
+  ✓ Android back closes the search and stays on the invoice
+  ✓ picked item filled the row: {"desc":"Industrial Machine Components","qty":"2","rate":"2500","hsn":"848390","taxable":5000,"rows":1}
+  ✓ data persists after app restart
+{"severity":"INFO","at":"2026-11-15T18:58:56.241Z","event":"push","user":"c0da80eeb0f1fd6e40d70e61","ok":1}
+  ✓ newer on-device copy wins over older WebView storage
+{"severity":"INFO","at":"2026-11-15T18:59:11.776Z","event":"push","user":"c0da80eeb0f1fd6e40d70e61","ok":1}
+    files dir: hgi-account.json
+hgi-selftest.json
+hgi-state-u-c0da80eeb0f1fd6e40d70e61.json
+hgi-sync2-u-c0da80eeb0f1fd6e40d70e61.json
+profileInstalled
+  ✓ data restored from on-device mirror when WebView storage is wiped
+  ✓ Demo Mode shows sample data with a DEMO banner
+  ✓ real data in the native mirror untouched while Demo Mode is open
+  ✓ exit Demo Mode returns to real data and deletes the sample data
+  ✓ after restart the app opens real data, not demo
+  ✓ Hindi UI
+  ✓ phone data synced to the cloud database as records (status ok, 1 invoice)
+  ✓ app uninstalled (all on-device data gone)
+  ✓ reinstalled app asks for sign-in
+{"severity":"INFO","at":"2026-11-15T19:00:32.912Z","event":"login","user":"c0da80eeb0f1fd6e40d70e61"}
+  ✓ after reinstall + sign-in all data is restored from the cloud (invoice, company, no setup wizard)
+  ✓ stays signed in and keeps the data after restart
+  ✓ signed-in restart opens the dashboard directly — no login / sign-in screen at any moment
+  ✓ invoice PDF saved on the phone → private cloud copy (116092 bytes)
+  ✓ GSTIN typed in the buyer form → details from GST records ({"name":"Shree Ram Engineering","pin":"411026","st":"Maharashtra"})
+{"severity":"INFO","at":"2026-11-15T19:01:30.775Z","event":"signup","user":"17a68f7c66cdd2ba86cbf607"}
+  ✓ another account on the same phone starts empty (data separated)
+{"severity":"INFO","at":"2026-11-15T19:01:39.725Z","event":"push","user":"17a68f7c66cdd2ba86cbf607","ok":2}
+{"severity":"INFO","at":"2026-11-15T19:02:03.338Z","event":"signup","user":"f26627dd8f5ce892058ff961"}
+  ✓ upgrade: data saved before sign-in existed is kept and opened in the account
+{"severity":"INFO","at":"2026-11-15T19:02:08.498Z","event":"push","user":"f26627dd8f5ce892058ff961","ok":3}
+  ✓ upgrade: after the user agreed, that data is uploaded to the account
+  ✓ no-cloud mode: opens the phone's data without any sign-in ({"auth":"off","key":"hgi_billing_v7_prod","n":3,"co":"Local Mode Traders"})
+  ✓ restart 1: dashboard directly, login screen never shown (no flash)
+  ✓ restart 2: dashboard directly, login screen never shown (no flash)
+  ✓ bulk export dialog counts matching documents (3 documents will be exported → buyer filter: 2 documents will be exported)
+  ✓ 2 PDFs zipped and saved: Downloads/HGI Billing/HGI_Invoices_2026-10-01_to_2026-11-15_Buyer_Alpha.zip
+  ✓ ZIP holds 2 valid PDFs of Buyer Alpha (Invoice_LM-1_Buyer_Alpha.pdf 75886 B, Invoice_LM-3_Buyer_Alpha.pdf 75886 B)
+  ✓ ZIP includes index.csv listing exactly those documents
+  ✓ screen restored after the export (preview hidden again)
+  ✓ PIN directory works offline in the app (411026 → Maharashtra, Pune)
+  ✓ purchase order PDF made on the phone and handed to e-mail / sharing (PurchaseOrder_PO-01-26-27_Kirloskar_Castings.pdf)
+  ✓ WhatsApp share: invoice PDF created () and handed to Android sharing since WhatsApp is missing
+  ✓ Android share sheet opened (topResumedActivity=ActivityRecord{5dd872e u0 com.android.intentresolver/.ChooserActivityLauncher t16})
+  ✓ logout: login screen shown, session ended, all 3 documents still stored, new password saved
+  ✓ after restart the app stays logged out (login required)
+  ✓ wrong password is refused
+  ✓ correct password: back in, data intact
+  ✓ after logging back in, restarts go straight to the dashboard again
+  ✓ global search on the phone finds LM/3
+  ✓ Android back closes the search (and stays on the screen)
+  ✓ orientation changed: 1280×844 → 900×1224
+  ✓ rotating keeps the screen as it was (no restart, the half-typed invoice is still there)
+  ✓ data intact after rotating, no horizontal scrolling (0px)
+  ✓ rotated back, still intact
+    perf api35-pixel_c: {"save":33,"render":320,"bytes":3345601,"n":3000,"boot":9674,"switchTab":{"invoices":3363,"items":623,"customers":1116,"dashboard":236}}
+  ✓ 3,000 invoices (3.3 MB): render 320 ms, save 33 ms, restart 9674 ms, all back
+  ✓ tab switches with 3,000 invoices (software-rendered emulator): {"invoices":3363,"items":623,"customers":1116,"dashboard":236} ms (fails only above 6 s)
+    search api35-pixel_c: in-app 62 ms per query, typed end-to-end 7883 ms
+  ✓ search over 3,000 invoices + 400 products: 62 ms per query in the app (typed end-to-end incl. keyboard: 7883 ms)
+  ✓ no JavaScript errors
+
+api35-pixel_c: 76 passed, 0 failed
