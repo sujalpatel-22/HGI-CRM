@@ -1,0 +1,13 @@
+{
+ "save": 18,
+ "render": 295,
+ "bytes": 3345601,
+ "n": 3000,
+ "boot": 9501,
+ "switchTab": {
+  "invoices": 199,
+  "items": 1229,
+  "customers": 504,
+  "dashboard": 296
+ }
+}

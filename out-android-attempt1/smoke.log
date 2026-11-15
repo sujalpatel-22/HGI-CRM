@@ -1,0 +1,69 @@
+▶ api33-pixel_6: Android SDK built for x86_64 · Android SDK 33 · WebView 
+  ✓ runs as native Capacitor app
+  ✓ HgiNative plugin reachable from JavaScript
+  ✓ native writeState/readState round trip
+  ✓ bundled QR + Chart libraries loaded (offline)
+  ✓ bundled Font Awesome icons
+  ✓ bundled Inter font
+  ✓ compiled Tailwind CSS loaded
+  ✓ no username/password screen on Android
+  ✓ debug build: test sign-in against the local test service ({"auth":"test","syncUrl":"http://127.0.0.1:8787","webClientId":"","debug":true})
+  ✓ sign-in required before the app opens
+{"severity":"INFO","at":"2026-11-15T18:56:24.236Z","event":"sheet_created","tab":"Users"}
+{"severity":"INFO","at":"2026-11-15T18:56:24.236Z","event":"sheet_created","tab":"Sessions"}
+{"severity":"INFO","at":"2026-11-15T18:56:24.236Z","event":"sheet_created","tab":"Settings"}
+{"severity":"INFO","at":"2026-11-15T18:56:24.236Z","event":"sheet_created","tab":"Customers"}
+{"severity":"INFO","at":"2026-11-15T18:56:24.236Z","event":"sheet_created","tab":"Products"}
+{"severity":"INFO","at":"2026-11-15T18:56:24.236Z","event":"sheet_created","tab":"Invoices"}
+{"severity":"INFO","at":"2026-11-15T18:56:24.236Z","event":"sheet_created","tab":"InvoiceItems"}
+{"severity":"INFO","at":"2026-11-15T18:56:24.236Z","event":"sheet_created","tab":"Payments"}
+{"severity":"INFO","at":"2026-11-15T18:56:24.236Z","event":"sheet_created","tab":"DocNumbers"}
+{"severity":"INFO","at":"2026-11-15T18:56:24.236Z","event":"sheet_created","tab":"Store"}
+{"severity":"INFO","at":"2026-11-15T18:56:24.236Z","event":"sheet_created","tab":"_Meta"}
+{"severity":"INFO","at":"2026-11-15T18:56:24.236Z","event":"sheet_created","tab":"_Blobs"}
+{"severity":"INFO","at":"2026-11-15T18:56:24.295Z","event":"sheets_loaded","rows":{"Users":0,"Sessions":0,"Settings":0,"Customers":0,"Products":0,"Invoices":0,"InvoiceItems":0,"Payments":0,"DocNumbers":0,"Store":0,"_Meta":1,"_Blobs":0},"counter":0,"quoteMode":"literal"}
+{"severity":"INFO","at":"2026-11-15T18:56:24.302Z","event":"signup","user":"ff7537f6afed32817a4f4505"}
+{"severity":"INFO","at":"2026-11-15T18:56:31.068Z","event":"push","user":"ff7537f6afed32817a4f4505","ok":2}
+  ✓ signed in: data opens in the account's own slot
+  ✓ onboarding shown on first launch
+  ✓ fresh install starts with no business data (no sample company, items, buyers or invoices)
+  ✓ setup wizard covers the screen, buttons unstyled by default (818/818px, rgba(0, 0, 0, 0))
+  ✓ onboarding done, bottom tab bar shown
+{"severity":"INFO","at":"2026-11-15T18:56:56.501Z","event":"push","user":"ff7537f6afed32817a4f4505","ok":2}
+  ✓ ₹ sign has its own width (23.9px at 46px, probe [11.4,11.4,9,8.7])
+  ✓ no native title bar over the app
+    status-bar pixel [ 243, 241, 236 ] header pixel [ 241, 232, 226 ] insets "0px"
+  ✓ status bar painted the page colour (rgb 243,241,236 vs page 243,241,236)
+  ✓ invoice saved
+{"severity":"INFO","at":"2026-11-15T18:57:09.252Z","event":"push","user":"ff7537f6afed32817a4f4505","ok":2}
+  ✓ GST: inter-state IGST 18% on ₹10,000 = ₹1,800, total ₹11,800
+  ✓ UPI scan-to-pay QR rendered
+  ✓ invoice header: company name clear of the logo (9px, flex gap native)
+    save toast: PDF saved: Downloads/HGI Billing/Invoice_01-26-27_Shree_Ram_Engineering.pdf
+  ✓ native A4 PDF written to Downloads/HGI Billing (111102 bytes)
+  ✓ file is a valid PDF
+  ✓ native PDF: 3 copies → 3 A4 sheets (one per copy, no spill-over pages; page target 270 mm)
+  ✓ Android back button closes dialog
+  ✓ back button returns to dashboard
+  ✓ product search opens when the item description is tapped
+  ✓ Android back closes the search and stays on the invoice
+  ✓ picked item filled the row: {"desc":"Industrial Machine Components","qty":"2","rate":"2500","hsn":"848390","taxable":5000,"rows":1}
+{"severity":"INFO","at":"2026-11-15T18:57:34.367Z","event":"push","user":"ff7537f6afed32817a4f4505","ok":1}
+  ✓ data persists after app restart
+{"severity":"INFO","at":"2026-11-15T18:57:43.013Z","event":"push","user":"ff7537f6afed32817a4f4505","ok":1}
+  ✓ newer on-device copy wins over older WebView storage
+    files dir: hgi-account.json
+hgi-selftest.json
+hgi-state-u-ff7537f6afed32817a4f4505.json
+hgi-sync2-u-ff7537f6afed32817a4f4505.json
+profileInstalled
+  ✓ data restored from on-device mirror when WebView storage is wiped
+file:///home/runner/work/HGI-CRM/HGI-CRM/tests/android-smoke.mjs:73
+  throw new Error('app did not come back after reload');
+        ^
+
+Error: app did not come back after reload
+    at afterReload (file:///home/runner/work/HGI-CRM/HGI-CRM/tests/android-smoke.mjs:73:9)
+    at async file:///home/runner/work/HGI-CRM/HGI-CRM/tests/android-smoke.mjs:272:8
+
+Node.js v22.23.4
