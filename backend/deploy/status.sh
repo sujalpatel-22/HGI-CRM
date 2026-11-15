@@ -17,5 +17,5 @@ if [ -n "$BUCKET" ]; then
   gcloud storage buckets get-iam-policy "gs://$BUCKET" --format=json 2>/dev/null | grep -q "serviceAccount:$SA" && ok "SA has access to the bucket" || no "SA bucket access"
 fi
 URL=$(gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)' 2>/dev/null)
-if [ -n "$URL" ]; then ok "Cloud Run $URL"; echo "      healthz: $(curl -s --max-time 30 "$URL/healthz")"; else no "Cloud Run service $SERVICE"; fi
+if [ -n "$URL" ]; then ok "Cloud Run $URL"; echo "      health: $(curl -s --max-time 30 "$URL/v1/health")"; else no "Cloud Run service $SERVICE"; fi
 echo "== end"

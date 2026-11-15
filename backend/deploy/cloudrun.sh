@@ -48,7 +48,7 @@ gcloud run deploy "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --source
 
 URL=$(gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format 'value(status.url)')
 echo; echo "Deployed: $URL"
-curl -fsS "$URL/healthz" && echo
+sleep 5; curl -fsS "$URL/v1/health" && echo
 echo "Check: $URL/privacy · $URL/delete-account"
 echo "Live check against the real spreadsheet (creates and deletes a test account):  node scripts/verify-deployment.js $URL"
 echo "Then: GitHub repository variable HGI_SYNC_URL=$URL (the app builds use it)."

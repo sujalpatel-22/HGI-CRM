@@ -70,7 +70,7 @@ the record from those rows. If the result is not byte-for-byte the text the app 
 **Formula injection.** Every cell is written as a typed literal (`stringValue` / `numberValue` / `boolValue`), so Google
 never evaluates anything as a formula. Text starting with `= + - @`, a tab, a line break or an apostrophe also gets a
 leading apostrophe, so a CSV downloaded from the sheet is safe in Excel. The apostrophe is removed again when the
-record is read. On start-up the server checks how Google keeps that apostrophe (`/healthz` → `quoteMode`). The app's own
+record is read. On start-up the server checks how Google keeps that apostrophe (`/v1/health` → `quoteMode`). The app's own
 CSV exports apply the same guard.
 
 **Deleted rows.** A removed line or record row is blanked, not deleted, and blank rows are reused. A write whose answer
@@ -97,7 +97,7 @@ This is what makes the following safe:
 the sheet every 10 minutes, so a hand edit is picked up eventually, but edits between reloads are not detected.
 
 **Limits to plan for:**
-- **Cells:** 10 million per spreadsheet. `/healthz` reports cells used and warns above 70 %. At roughly 100 cells per
+- **Cells:** 10 million per spreadsheet. `/v1/health` reports cells used and warns above 70 %. At roughly 100 cells per
   invoice with its lines, that is on the order of 90,000 invoices across all accounts.
 - **API quota:** about 60 write and 60 read requests a minute for the service account. Reads are served from the server's
   in-memory copy, so each sync costs one read and one write. Ask Google for a quota increase if many people use it at
@@ -129,7 +129,7 @@ the sheet every 10 minutes, so a hand edit is picked up eventually, but edits be
    ```
    - optional: `ALLOW_SIGNUP=0` closes sign-up;
    - optional: `MIN_INSTANCES=1` avoids a cold start, for a small always-on cost.
-5. **Check** `https://<url>/healthz`. It should answer `{"ok":true,"storage":"google-sheets","startedAt":…,…}`. The tabs should now
+5. **Check** `https://<url>/v1/health`. It should answer `{"ok":true,"storage":"google-sheets","startedAt":…,…}`. The tabs should now
    be in the spreadsheet.
 6. **Live check against the real spreadsheet, including a restart** (Cloud Shell, in `backend/`):
    ```

@@ -84,7 +84,7 @@ fills anything it did not receive from GST records.
 PROJECT_ID=hgi-billing REGION=asia-south1 GOOGLE_CLIENT_IDS=<web client id> FILES_BUCKET=hgi-billing-pdfs \
 SUPPORT_EMAIL=info@hariguru.com GST_API_URL='<from step 4>' GST_API_NAME='<provider>' bash deploy/cloudrun.sh
 ```
-The script runs the tests, asks you to type `DEPLOY`, then prints the URL. Check that `<url>/healthz` answers
+The script runs the tests, asks you to type `DEPLOY`, then prints the URL. Check that `<url>/v1/health` answers
 `{"ok":true}`. Then sign in once in a test build and look at **Settings → Account**. It shows whether "GST look-up" and
 "PDF cloud copies" are **on** — the server reports what is actually configured.
 

@@ -60,7 +60,7 @@ function compare(sentHashes, got, label) {
   }
 }
 async function health(label) {
-  const h = await call('GET', '/healthz');
+  const h = await call('GET', '/v1/health');
   ok(h.status === 200 && h.json && h.json.ok === true && h.json.storage === 'google-sheets', `${label}: service is up and opened the spreadsheet`, h.text.slice(0, 300));
   if (h.json && h.json.ok) console.log(`      quote mode: ${h.json.quoteMode} · cells used: ${h.json.cells} of ${h.json.cellLimit} · instance started ${h.json.startedAt}`);
   return h.json || {};

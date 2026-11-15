@@ -20,7 +20,7 @@
  *   E-invoice / e-way bill (government APIs through HGI's GSP; each business uses its own API login):
  *   GET    /v1/edoc/credentials · PUT|DELETE /v1/edoc/credentials/{GSTIN} · POST /v1/edoc/preview|generate|refresh|cancel-irn|
  *          cancel-ewb|partb|transporter · GET /v1/edoc/record?key=
- *   GET    /privacy, /delete-account, /healthz
+ *   GET    /privacy, /delete-account, /v1/health (also /healthz locally — Cloud Run's front end reserves paths ending in 'z')
  *
  * Every /v1 request except sign-up / log-in needs a session; the account (userId) always comes from the session, never
  * from the request, so no request can read or change another account's rows.
@@ -113,7 +113,7 @@ function createServer(cfg, deps = {}) {
     const url = new URL(req.url, 'http://x');
     const p = url.pathname;
     if (req.method === 'OPTIONS') { res.writeHead(204, { ...SEC, ...cors(req) }); return res.end(); }
-    if (req.method === 'GET' && p === '/healthz') {
+    if (req.method === 'GET' && (p === '/v1/health' || p === '/healthz')) {
       try { await ready(); } catch (e) { return send(req, res, 503, { ok: false, error: 'sheets_unavailable', message: e.message }); }
       const cells = db.cellsUsed();
       return send(req, res, 200, { ok: true, storage: 'google-sheets', startedAt, quoteMode: db.quoteMode, cells, cellLimit: 10e6, ...(cells > 7e6 ? { warning: 'The spreadsheet is above 70 % of Google\'s 10 million cell limit.' } : {}) });
