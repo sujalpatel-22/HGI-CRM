@@ -15,7 +15,7 @@ step() { echo; echo "── $1"; shift; echo "   $*"; read -r -p "   Run this? [
 echo "Project $PROJECT_ID · region $REGION · PDF bucket gs://$BUCKET · service account $SA"
 gcloud config set project "$PROJECT_ID" >/dev/null
 step "Enable the APIs" gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com sheets.googleapis.com storage.googleapis.com
-step "Service identity for the server" gcloud iam service-accounts create hgi-sync --display-name="HGI Billing sync service"
+step "Service identity for the server" "gcloud iam service-accounts create hgi-sync --display-name='HGI Billing sync service' && sleep 15"
 step "Let it read its secrets" gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$SA" --role=roles/secretmanager.secretAccessor --condition=None
 step "Private bucket for invoice PDFs (no public access, 30-day soft delete)" gcloud storage buckets create "gs://$BUCKET" --location="$REGION" --uniform-bucket-level-access --public-access-prevention --soft-delete-duration=30d
 step "Let the server read/write PDFs in that bucket only" gcloud storage buckets add-iam-policy-binding "gs://$BUCKET" --member="serviceAccount:$SA" --role=roles/storage.objectAdmin

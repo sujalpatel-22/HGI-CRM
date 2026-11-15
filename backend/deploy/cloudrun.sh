@@ -14,7 +14,7 @@
 #   hgi-ewb-client-secret, hgi-ewb-public-key [, hgi-irp-extra-headers, hgi-ewb-extra-headers].
 set -euo pipefail
 cd "$(dirname "$0")/.."
-: "${PROJECT_ID:?set PROJECT_ID}"; : "${REGION:=asia-south1}"; : "${SHEETS_SPREADSHEET_ID:?set SHEETS_SPREADSHEET_ID (the ID in the spreadsheet's address)}"
+: "${PROJECT_ID:?set PROJECT_ID}"; : "${REGION:=asia-south1}"; : "${SHEETS_SPREADSHEET_ID:?set SHEETS_SPREADSHEET_ID (the ID in the spreadsheet address)}"
 : "${SERVICE:=hgi-sync}"; : "${RUN_SA:=hgi-sync@${PROJECT_ID}.iam.gserviceaccount.com}"; : "${FILES_BUCKET:=}"; : "${GST_API_URL:=}"
 
 node test/run-tests.js > /dev/null || { echo "Tests failed — not deploying"; exit 1; }
@@ -42,7 +42,7 @@ echo "  PDF storage: ${FILES_BUCKET:-off} · GST look-up: ${GST_API_URL:+on}${GS
 echo "  E-invoice (IRP): ${IRP_BASE_URL:-off} · E-way bill: ${EWB_BASE_URL:-off} · GST system: $EDOC_ENV"
 read -r -p "Type DEPLOY to continue: " OK; [ "$OK" = "DEPLOY" ] || { echo "Cancelled"; exit 1; }
 
-gcloud run deploy "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --source . \
+gcloud run deploy "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --source . --quiet \
   --service-account "$RUN_SA" --allow-unauthenticated --min-instances "${MIN_INSTANCES:-0}" --max-instances 1 --concurrency 80 --memory 1Gi --cpu 1 --timeout 120 \
   --set-env-vars "^@^$ENVV" --set-secrets "$SECRETS"
 
