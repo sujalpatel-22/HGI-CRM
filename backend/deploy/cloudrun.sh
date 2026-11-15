@@ -20,7 +20,9 @@ cd "$(dirname "$0")/.."
 node test/run-tests.js > /dev/null || { echo "Tests failed — not deploying"; exit 1; }
 node scripts/build-pages.js
 
-SECRETS="SESSION_SECRET=hgi-session-secret:latest,PASSWORD_PEPPER=hgi-password-pepper:latest"
+# secret NAMES (never values); a test service uses its own, e.g. SESSION_SECRET_NAME=hgi-test-session-secret
+: "${SESSION_SECRET_NAME:=hgi-session-secret}"; : "${PEPPER_SECRET_NAME:=hgi-password-pepper}"
+SECRETS="SESSION_SECRET=$SESSION_SECRET_NAME:latest,PASSWORD_PEPPER=$PEPPER_SECRET_NAME:latest"
 [ -n "$GST_API_URL" ] && SECRETS="$SECRETS,GST_API_HEADERS=hgi-gst-headers:latest"
 [ -n "${GST_API_AUTH_URL:-}" ] && SECRETS="$SECRETS,GST_API_AUTH_HEADERS=hgi-gst-auth-headers:latest"
 : "${IRP_BASE_URL:=}"; : "${EWB_BASE_URL:=}"; : "${EDOC_ENV:=sandbox}"
@@ -32,12 +34,13 @@ if [ -n "$IRP_BASE_URL$EWB_BASE_URL" ]; then
   [ -n "${EWB_EXTRA_HEADERS_SECRET:-}" ] && SECRETS="$SECRETS,EWB_EXTRA_HEADERS=$EWB_EXTRA_HEADERS_SECRET:latest"
 fi
 # '@' separates the variables (values such as URLs may contain commas)
-ENVV="PROJECT_ID=$PROJECT_ID@SHEETS_SPREADSHEET_ID=$SHEETS_SPREADSHEET_ID@GCP_AUTH=metadata@FILES_BUCKET=$FILES_BUCKET@SUPPORT_EMAIL=${SUPPORT_EMAIL:-}@ALLOW_SIGNUP=${ALLOW_SIGNUP:-1}"
+ENVV="PROJECT_ID=$PROJECT_ID@SHEETS_SPREADSHEET_ID=$SHEETS_SPREADSHEET_ID@GCP_AUTH=metadata@FILES_BUCKET=$FILES_BUCKET@SUPPORT_EMAIL=${SUPPORT_EMAIL:-}@ALLOW_SIGNUP=${ALLOW_SIGNUP:-1}@KDF=${KDF:-scrypt}@BACKEND_NAME=cloud-run"
 ENVV="$ENVV@EDOC_ENV=$EDOC_ENV@EDOC_CONFIRM_PRODUCTION=${EDOC_CONFIRM_PRODUCTION:-}@IRP_BASE_URL=$IRP_BASE_URL@IRP_CLIENT_ID=${IRP_CLIENT_ID:-}@EWB_BASE_URL=$EWB_BASE_URL@EWB_CLIENT_ID=${EWB_CLIENT_ID:-}"
 ENVV="$ENVV@GST_API_URL=$GST_API_URL@GST_API_NAME=${GST_API_NAME:-}@GST_API_AUTH_URL=${GST_API_AUTH_URL:-}@GST_API_TOKEN_PATH=${GST_API_TOKEN_PATH:-}@GST_API_TOKEN_HEADER=${GST_API_TOKEN_HEADER:-}"
 
 echo "About to deploy '$SERVICE' to $PROJECT_ID ($REGION) as $RUN_SA"
 echo "  Database: Google Sheets ${SHEETS_SPREADSHEET_ID:0:8}… (share it with $RUN_SA as Editor) · ONE instance (Sheets has no cross-writer transactions)"
+echo "  Secrets: $SESSION_SECRET_NAME, $PEPPER_SECRET_NAME · password hashing: ${KDF:-scrypt}"
 echo "  PDF storage: ${FILES_BUCKET:-off} · GST look-up: ${GST_API_URL:+on}${GST_API_URL:-off}"
 echo "  E-invoice (IRP): ${IRP_BASE_URL:-off} · E-way bill: ${EWB_BASE_URL:-off} · GST system: $EDOC_ENV"
 read -r -p "Type DEPLOY to continue: " OK; [ "$OK" = "DEPLOY" ] || { echo "Cancelled"; exit 1; }
