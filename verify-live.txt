@@ -1,0 +1,36 @@
+PASS  start: service is up and opened the spreadsheet
+      quote mode: literal · cells used: 222000 of 10000000 · instance started 2026-11-15T17:21:04.128Z
+PASS  sign-up
+PASS  the same user name (in capitals) cannot be taken again
+PASS  a weak password is refused at sign-up
+PASS  wrong password refused
+PASS  log-in on a second device (user name in another case) reaches the same account
+PASS  upload of company, settings, buyer, product, 2 invoices
+PASS  second device reads it back byte-for-byte: company/main
+PASS  second device reads it back byte-for-byte: settings/main
+PASS  second device reads it back byte-for-byte: customer/VC1
+PASS  second device reads it back byte-for-byte: product/VP1
+PASS  second device reads it back byte-for-byte: invoice/VD1
+PASS  second device reads it back byte-for-byte: invoice/VD2
+PASS  second account signs up
+PASS  second account sees none of the first account's records
+PASS  second account can use the same record ID and invoice number for itself
+PASS  the first account's buyer is unchanged and it does not see the second account's invoice
+PASS  second account still sees only its own records
+PASS  second test account deleted
+PASS  second test account: its session no longer works
+PASS  duplicate invoice number refused within one account
+PASS  stale edit gets a conflict
+PASS  number check
+PASS  log-out ends the session on the server
+PASS  log-in again after log-out
+PASS  after log-out and log-in, data still there: company/main
+PASS  after log-out and log-in, data still there: settings/main
+PASS  after log-out and log-in, data still there: customer/VC1
+PASS  after log-out and log-in, data still there: product/VP1
+PASS  after log-out and log-in, data still there: invoice/VD1
+PASS  after log-out and log-in, data still there: invoice/VD2
+PASS  test account deleted
+PASS  test account: its session no longer works
+
+33 passed, 0 failed
