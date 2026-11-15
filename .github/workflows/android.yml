@@ -2,7 +2,7 @@ name: Android build & test
 
 on:
   push:
-    branches: [main, "android-*"]
+    branches: [main, "android-*", live-check]   # live-check: also runs the app against the deployed service (live-app-test)
     tags: ["v*"]            # a version tag = production release build (owner key required)
   pull_request:
   workflow_dispatch:
@@ -171,6 +171,13 @@ jobs:
             echo "::error::Release key fingerprint $FP does not match the registered ANDROID_CERT_SHA256 $EXPECTED — wrong keystore in secrets"; exit 1
           fi
           if [ "${{ steps.signing.outputs.mode }}" = "release-key" ] && echo "$DN" | grep -q "HGI Billing TEST"; then echo "::error::release-key mode but the certificate is the test key"; exit 1; fi
+          # what the release APK itself carries: sign-in mode and service URL (public values)
+          "$BT/aapt2" dump resources "$APK" | grep -A1 -E "string/hgi_(auth|sync_url)" | tee -a logs/06-verify.log
+          if [ -n "${{ vars.HGI_SYNC_URL }}" ]; then
+            "$BT/aapt2" dump resources "$APK" | grep -A1 "string/hgi_auth" | grep -q '"password"' || { echo "::error::release APK is not set to password accounts"; exit 1; }
+            "$BT/aapt2" dump resources "$APK" | grep -A1 "string/hgi_sync_url" | grep -qF '"${{ vars.HGI_SYNC_URL }}"' || { echo "::error::release APK does not carry HGI_SYNC_URL"; exit 1; }
+            echo "release APK: password accounts on ${{ vars.HGI_SYNC_URL }}" | tee -a logs/06-verify.log
+          fi
 
       - name: Collect artifacts
         run: |
@@ -192,6 +199,23 @@ jobs:
           # full generated Android Studio project (without build outputs) for local builds
           tar --exclude='build' --exclude='.gradle' --exclude='.idea' --exclude='android/app/src/main/assets/public' \
             -czf "dist/HGI-Billing-$V-android-project.tgz" android
+
+      - name: Live-check debug APK (branch live-check only — the debug build with its sign-in pointed at the deployed service)
+        if: github.ref == 'refs/heads/live-check' && vars.HGI_SYNC_URL != ''
+        run: |
+          V="$HGI_VERSION_NAME-$HGI_VERSION_CODE"
+          cat > android/app/src/debug/res/values/hgi_config.xml <<XML
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <string name="hgi_auth" translatable="false">password</string>
+              <string name="hgi_sync_url" translatable="false">${{ vars.HGI_SYNC_URL }}</string>
+              <string name="hgi_web_client_id" translatable="false"></string>
+          </resources>
+          XML
+          sed -i 's/^          //' android/app/src/debug/res/values/hgi_config.xml
+          (cd android && ./gradlew --no-daemon assembleDebug 2>&1 | tail -5 | tee ../logs/05-gradle-live.log)
+          cp android/app/build/outputs/apk/debug/app-debug.apk "dist/HGI-Billing-$V-debug-LIVE-TESTONLY.apk"
+          (cd dist && sha256sum * > SHA256SUMS.txt)
 
       - uses: actions/upload-artifact@v4
         if: success()
@@ -215,6 +239,7 @@ jobs:
   emulator-test:
     name: Emulator API ${{ matrix.api }} (${{ matrix.profile }})
     needs: build
+    if: github.ref != 'refs/heads/live-check'   # that branch runs live-app-test instead
     runs-on: ubuntu-latest
     timeout-minutes: 90          # two attempts; the AOSP API 33 image (WebView 101) needs ~25 min for the full v9.2 suite
     strategy:
@@ -291,3 +316,56 @@ jobs:
           cd "$OUT" && git init -q -b "$B" && git add -A
           git -c user.name="hgi-ci" -c user.email="hgi-ci@users.noreply.github.com" commit -qm "emulator api${{ matrix.api }} run $GITHUB_RUN_ID (${{ job.status }})"
           git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" "$B"
+
+  live-app-test:
+    # The app against the DEPLOYED service and the REAL spreadsheet: sign-up, invoice, upload, read-back from another
+    # device, wiped-app log-in, account deletion. Only on the branch live-check (git push -f origin HEAD:live-check).
+    name: Live app test (deployed service)
+    needs: build
+    if: github.ref == 'refs/heads/live-check' && vars.HGI_SYNC_URL != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund --no-save playwright@1.56.0 && npx playwright install android
+      - uses: actions/download-artifact@v4
+        with:
+          name: hgi-billing-android
+          path: dist
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Live test on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          target: google_apis
+          arch: x86_64
+          profile: pixel_7
+          disable-animations: true
+          emulator-boot-timeout: 900
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -memory 3072
+          script: |
+            mkdir -p tests/out-android
+            adb uninstall in.hariguru.billing > /dev/null 2>&1 || true
+            adb install -r dist/*-debug-LIVE-TESTONLY.apk 2>&1 | tee tests/out-android/install.log
+            HGI_LIVE_URL="${{ vars.HGI_SYNC_URL }}" HGI_TEST_LABEL=live-api36 node tests/android-live.mjs > tests/out-android/live.log 2>&1; R=$?; cat tests/out-android/live.log; adb logcat -d > tests/out-android/logcat.txt 2>&1
+            adb uninstall in.hariguru.billing > /dev/null 2>&1 || true
+            adb install -r dist/HGI-Billing-*-INTERNAL-TESTKEY.apk 2>&1 | tee -a tests/out-android/install.log || adb install -r $(ls dist/HGI-Billing-*.apk | grep -v TESTONLY | head -1) 2>&1 | tee -a tests/out-android/install.log
+            adb shell am start -W -n in.hariguru.billing/.MainActivity | tee tests/out-android/release-start.log; sleep 20
+            adb exec-out screencap -p > tests/out-android/release-apk-start.png; adb shell pidof in.hariguru.billing && echo "release APK running" | tee -a tests/out-android/release-start.log
+            exit $R
+      - name: Publish results to branch ci-output-live
+        if: always()
+        run: |
+          OUT=$RUNNER_TEMP/ci-out; rm -rf "$OUT"; mkdir -p "$OUT"
+          cp -r tests/out-android "$OUT/" 2>/dev/null || true
+          echo "run=$GITHUB_RUN_ID sha=$GITHUB_SHA status=${{ job.status }} service=${{ vars.HGI_SYNC_URL }}" > "$OUT/STATUS.txt"
+          cd "$OUT" && git init -q -b ci-output-live && git add -A
+          git -c user.name="hgi-ci" -c user.email="hgi-ci@users.noreply.github.com" commit -qm "live app test run $GITHUB_RUN_ID (${{ job.status }})"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" ci-output-live
