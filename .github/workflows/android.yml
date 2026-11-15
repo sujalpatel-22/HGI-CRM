@@ -28,7 +28,7 @@ concurrency:
 jobs:
   build:
     name: Build web + signed APK/AAB
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # pinned: ubuntu-latest moved to 26.04, which Playwright 1.56 cannot install Chromium on
     timeout-minutes: 45
     outputs:
       signing: ${{ steps.signing.outputs.mode }}
@@ -240,7 +240,7 @@ jobs:
     name: Emulator API ${{ matrix.api }} (${{ matrix.profile }})
     needs: build
     if: github.ref != 'refs/heads/live-check'   # that branch runs live-app-test instead
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # pinned: ubuntu-latest moved to 26.04, which Playwright 1.56 cannot install Chromium on
     timeout-minutes: 90          # two attempts; the AOSP API 33 image (WebView 101) needs ~25 min for the full v9.2 suite
     strategy:
       fail-fast: false
@@ -323,7 +323,7 @@ jobs:
     name: Live app test (deployed service)
     needs: build
     if: github.ref == 'refs/heads/live-check' && vars.HGI_SYNC_URL != ''
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # pinned: ubuntu-latest moved to 26.04, which Playwright 1.56 cannot install Chromium on
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
