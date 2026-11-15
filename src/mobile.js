@@ -429,6 +429,7 @@
 
   /* ------------------------------------------------------------------ onboarding */
   function needsOnboarding() { return !ui().onboarded && !(state.invoices || []).length; }
+  window.HGI_APP.needsOnboarding = needsOnboarding;   // account.js: close the wizard when synced data arrives
   function showOnboarding() {
     // never pre-fill the wizard with the old sample values (fake GSTIN / bank account)
     const co = placeholderFields(state.company).length

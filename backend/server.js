@@ -36,7 +36,7 @@ const { SheetDB } = require('./lib/sheet-db');
 const { TABLES } = require('./lib/sheets-schema');
 const { SheetsRecordStore } = require('./lib/sheets-record-store');
 const { SheetsDocStore } = require('./lib/sheets-doc-store');
-const { Accounts, AuthError } = require('./lib/accounts');
+const { Accounts } = require('./lib/accounts');
 const { FileStore } = require('./lib/files');
 const { GstLookup } = require('./lib/gst');
 const { UpstreamError } = require('./lib/http');
@@ -44,6 +44,7 @@ const { ApiError } = require('./lib/nic-http');
 const { CredentialVault } = require('./lib/credentials');
 const { EdocStore } = require('./lib/edoc-store');
 const { EdocService } = require('./lib/edoc-service');
+const { createRouter, memoryLimiter } = require('./lib/router');
 
 const log = e => console.log(JSON.stringify({ severity: e.warn ? 'WARNING' : e.error ? 'ERROR' : 'INFO', at: new Date().toISOString(), ...e }));
 
@@ -64,26 +65,20 @@ function createServer(cfg, deps = {}) {
   if (edoc.keyError) log({ warn: edoc.keyError });
   const pub = f => fs.readFileSync(path.join(__dirname, 'public', f), 'utf8');
 
-  /* ------------------------------------------------------------ rate limits (per instance) */
-  const buckets = new Map();
-  function limited(key, perMin) {
-    const now = Date.now(); let b = buckets.get(key);
-    if (!b || now - b.t > 60e3) { b = { t: now, n: 0 }; buckets.set(key, b); }
-    if (buckets.size > 20000) for (const [k, v] of buckets) if (now - v.t > 60e3) buckets.delete(k);
-    return ++b.n > perMin;
-  }
+  const router = createRouter({ cfg, db, store, accounts, files, gst, edoc, ready, log, startedAt, runtime: 'cloud-run',
+    page: f => pub(f).replace(/\{\{SUPPORT_EMAIL\}\}/g, cfg.supportEmail || (f === 'delete-account.html' ? '' : 'the e-mail shown in the app listing')).replace(/\{\{API\}\}/g, ''),
+    limited: memoryLimiter(), UpstreamError, ApiError });
 
-  /* ------------------------------------------------------------ http helpers */
+  /* ------------------------------------------------------------ http transport */
   const SEC = { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'Cache-Control': 'no-store', 'Strict-Transport-Security': 'max-age=31536000' };
   function cors(req) {
     const o = req.headers.origin;
     if (!o || !cfg.allowedOrigins.includes(o)) return {};
     return { 'Access-Control-Allow-Origin': o, Vary: 'Origin', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Allow-Methods': 'GET, PUT, POST, DELETE, OPTIONS', 'Access-Control-Expose-Headers': 'X-HGI-Session', 'Access-Control-Max-Age': '600' };
   }
-  function send(req, res, status, obj, extra = {}) {
-    const body = JSON.stringify(obj);
-    res.writeHead(status, { ...SEC, ...cors(req), 'Content-Type': 'application/json; charset=utf-8', ...extra });
-    res.end(body);
+  function send(req, res, status, obj) {
+    res.writeHead(status, { ...SEC, ...cors(req), 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify(obj));
   }
   function page(req, res, html) {
     res.writeHead(200, { ...SEC, 'Cache-Control': 'public, max-age=300', 'Content-Type': 'text/html; charset=utf-8', 'X-Frame-Options': 'DENY',
@@ -101,155 +96,17 @@ function createServer(cfg, deps = {}) {
     });
   }
   const ip = req => (cfg.trustProxy && req.headers['x-forwarded-for'] ? String(req.headers['x-forwarded-for']).split(',')[0].trim() : req.socket.remoteAddress);
-  async function deleteAccount(uid) {
-    let n = 0;
-    if (files.enabled()) for (const f of await store.fileEntries(uid)) { await files.remove(f.object); n++; }
-    const r = await accounts.deleteAccount(uid, w => store.deleteAll(uid, w));
-    return { records: r.records, files: n, deletedAt: r.deletedAt };
-  }
-  const str = (v, max) => (typeof v === 'string' && v.length <= max ? v : '');
-  /* ------------------------------------------------------------ routes */
-  async function route(req, res) {
-    const url = new URL(req.url, 'http://x');
-    const p = url.pathname;
-    if (req.method === 'OPTIONS') { res.writeHead(204, { ...SEC, ...cors(req) }); return res.end(); }
-    if (req.method === 'GET' && (p === '/v1/health' || p === '/healthz')) {
-      try { await ready(); } catch (e) { return send(req, res, 503, { ok: false, error: 'sheets_unavailable', message: e.message }); }
-      const cells = db.cellsUsed();
-      return send(req, res, 200, { ok: true, storage: 'google-sheets', startedAt, quoteMode: db.quoteMode, cells, cellLimit: 10e6, ...(cells > 7e6 ? { warning: 'The spreadsheet is above 70 % of Google\'s 10 million cell limit.' } : {}) });
-    }
-    if (req.method === 'GET' && (p === '/' || p === '/privacy')) return page(req, res, pub(p === '/' ? 'index.html' : 'privacy.html').replace(/\{\{SUPPORT_EMAIL\}\}/g, cfg.supportEmail || 'the e-mail shown in the app listing'));
-    if (req.method === 'GET' && p === '/delete-account') return page(req, res, pub('delete-account.html').replace(/\{\{SUPPORT_EMAIL\}\}/g, cfg.supportEmail || ''));
-    if (p.startsWith('/v1/')) await ready();
-
-    if (req.method === 'POST' && p === '/v1/auth/signup') {
-      if (!cfg.allowSignup) return send(req, res, 403, { error: 'signup_closed', message: 'New accounts are not being accepted right now.' });
-      if (limited('signup:' + ip(req), cfg.signupPerMinute)) return send(req, res, 429, { error: 'too_many', message: 'Too many new accounts from this network. Wait a minute.' });
-      const b = await readBody(req);
-      const r = await accounts.signup({ username: str(b.username, 60), password: str(b.password, 512), device: str(b.device, 200) });
-      return send(req, res, 201, r);
-    }
-    if (req.method === 'POST' && p === '/v1/auth/login') {
-      if (limited('login:' + ip(req), cfg.loginPerMinute)) return send(req, res, 429, { error: 'too_many', message: 'Too many log-in attempts. Wait a minute.' });
-      const b = await readBody(req);
-      return send(req, res, 200, await accounts.login({ username: str(b.username, 60), password: str(b.password, 512), device: str(b.device, 200) }));
-    }
-    if (req.method === 'POST' && p === '/v1/account/delete-with-password') {
-      if (limited('login:' + ip(req), cfg.loginPerMinute)) return send(req, res, 429, { error: 'too_many', message: 'Too many attempts. Wait a minute.' });
-      const b = await readBody(req);
-      const u = await accounts.findForDeletion(str(b.username, 60), str(b.password, 512));
-      const r = await deleteAccount(u.userId);
-      return send(req, res, 200, { ok: true, ...r, deleted: true, username: u.username });
-    }
-
-    if (p.startsWith('/v1/')) {
-      const { user, sessionId } = await accounts.authenticate(req.headers.authorization);
-      if (limited('u:' + user.key, 240)) return send(req, res, 429, { error: 'too_many', message: 'Syncing too often — will retry shortly.' });
-      const extra = {};
-      const uid = user.key;
-      if (req.method === 'POST' && p === '/v1/auth/logout') { await accounts.logout(sessionId); return send(req, res, 200, { ok: true }); }
-      if (req.method === 'POST' && p === '/v1/auth/logout-all') return send(req, res, 200, { ok: true, ended: await accounts.logoutAll(uid, sessionId) });
-      if (req.method === 'POST' && p === '/v1/auth/password') {
-        if (limited('pw:' + uid, 10)) return send(req, res, 429, { error: 'too_many', message: 'Too many attempts. Wait a minute.' });
-        const b = await readBody(req);
-        return send(req, res, 200, await accounts.changePassword(uid, sessionId, str(b.currentPassword, 512), str(b.newPassword, 512)));
-      }
-      if (req.method === 'GET' && p === '/v1/me') return send(req, res, 200, { user: { key: uid, username: user.username, createdAt: user.createdAt }, cloud: await store.state(uid), features: { gst: gst.configured(), files: files.enabled(), edoc: edoc.features() } }, extra);
-      if (req.method === 'GET' && p === '/v1/sync/pull') {
-        const since = Math.max(0, Number(url.searchParams.get('since')) || 0), limit = Math.min(500, Math.max(1, Number(url.searchParams.get('limit')) || 300));
-        const r = await store.pull(uid, since, limit);
-        return send(req, res, 200, r, extra);
-      }
-      if (req.method === 'POST' && p === '/v1/sync/push') {
-        const b = await readBody(req);
-        const r = await store.push(uid, user, b.records, b.device);
-        const counts = r.results.reduce((a, x) => (a[x.status] = (a[x.status] || 0) + 1, a), {});
-        log({ event: 'push', user: uid, ...counts });
-        return send(req, res, 200, r, extra);
-      }
-      if (req.method === 'POST' && p === '/v1/numbers/check') {
-        const b = await readBody(req);
-        if (!b.num) return send(req, res, 400, { error: 'bad_request', message: 'num required' });
-        return send(req, res, 200, await store.numberFree(uid, b.docType || 'INV', b.num, b.docId || ''), extra);
-      }
-      let m;
-      if (req.method === 'GET' && (m = /^\/v1\/gstin\/([0-9A-Za-z]{15})$/.exec(p))) {
-        if (limited('gst:' + uid, 30)) return send(req, res, 429, { error: 'too_many', message: 'Too many GST lookups — wait a minute.' });
-        const r = await gst.lookup(m[1], { fresh: url.searchParams.get('fresh') === '1' });
-        return send(req, res, 200, r, extra);
-      }
-      if (req.method === 'GET' && p === '/v1/files') return send(req, res, 200, { files: files.enabled() ? (await store.fileEntries(uid)).map(({ object, ...x }) => x) : [], enabled: files.enabled() }, extra);
-      if ((m = /^\/v1\/files\/pdf\/([^/]{1,200})$/.exec(p))) {
-        if (!files.enabled()) return send(req, res, 503, { error: 'files_not_configured', message: 'PDF storage is not set up on the server yet.' });
-        const docId = decodeURIComponent(m[1]);
-        if (req.method === 'PUT') {
-          const b = await readBody(req);
-          const buf = Buffer.from(String(b.base64 || ''), 'base64');
-          if (buf.length < 100 || buf.slice(0, 5).toString() !== '%PDF-') return send(req, res, 400, { error: 'not_pdf', message: 'That is not a PDF file.' });
-          if (buf.length > 15 * 1024 * 1024) return send(req, res, 413, { error: 'too_large', message: 'PDF is larger than 15 MB.' });
-          const object = files.object(uid, docId);
-          await files.put(object, buf);
-          const entry = { object, bytes: buf.length, num: String(b.num || '').slice(0, 60), docType: String(b.docType || '').slice(0, 10), hash: String(b.hash || '').slice(0, 64), uploadedAt: new Date().toISOString() };
-          await store.putFileEntry(uid, docId, entry);
-          return send(req, res, 200, { ok: true, bytes: buf.length }, extra);
-        }
-        if (req.method === 'GET') {
-          const e = await store.getFileEntry(uid, docId);
-          if (!e) return send(req, res, 404, { error: 'not_found' });
-          const buf = await files.get(e.object);
-          if (!buf) return send(req, res, 404, { error: 'not_found' });
-          return send(req, res, 200, { base64: buf.toString('base64'), num: e.num, uploadedAt: e.uploadedAt }, extra);
-        }
-      }
-      if (p.startsWith('/v1/edoc/')) {
-        if (limited('edoc:' + uid, 40)) return send(req, res, 429, { error: 'too_many', message: 'Too many e-invoice requests — wait a minute.' });
-        const by = user.username;
-        if (req.method === 'GET' && p === '/v1/edoc/credentials') return send(req, res, 200, { credentials: await edoc.listCredentials(uid), features: edoc.features() }, extra);
-        if ((m = /^\/v1\/edoc\/credentials\/([0-9A-Za-z]{15})$/.exec(p))) {
-          if (req.method === 'PUT') return send(req, res, 200, { credential: await edoc.saveCredentials(uid, m[1], await readBody(req)) }, extra);
-          if (req.method === 'DELETE') { await edoc.deleteCredentials(uid, m[1]); return send(req, res, 200, { ok: true }, extra); }
-        }
-        if (req.method === 'GET' && p === '/v1/edoc/record') return send(req, res, 200, await edoc.record(uid, url.searchParams.get('key'), url.searchParams.get('full') === '1'), extra);
-        if (req.method === 'POST') {
-          const b = await readBody(req);
-          if (p === '/v1/edoc/preview') return send(req, res, 200, await edoc.preview(uid, b.doc, b.company, b.mode), extra);
-          if (p === '/v1/edoc/generate') return send(req, res, 200, await edoc.generate(uid, b.doc, b.company, b.mode, by), extra);
-          if (p === '/v1/edoc/refresh') return send(req, res, 200, await edoc.refresh(uid, String(b.key || '')), extra);
-          if (p === '/v1/edoc/cancel-irn') return send(req, res, 200, await edoc.cancelIrn(uid, String(b.key || ''), b.reasonCode, b.remark, by), extra);
-          if (p === '/v1/edoc/cancel-ewb') return send(req, res, 200, await edoc.cancelEwb(uid, String(b.key || ''), b.reasonCode, b.remark, by), extra);
-          if (p === '/v1/edoc/partb') return send(req, res, 200, await edoc.updatePartB(uid, String(b.key || ''), b, by), extra);
-          if (p === '/v1/edoc/transporter') return send(req, res, 200, await edoc.updateTransporter(uid, String(b.key || ''), b.transporterId, by), extra);
-        }
-        return send(req, res, 404, { error: 'not_found' });
-      }
-      if (req.method === 'DELETE' && p === '/v1/account') {
-        const b = await readBody(req);
-        await accounts.checkPasswordOf(uid, str(b.password, 512));          // a second check that the owner is deleting
-        return send(req, res, 200, { ok: true, ...(await deleteAccount(uid)) });
-      }
-    }
-    return send(req, res, 404, { error: 'not_found' });
-  }
 
   const srv = http.createServer((req, res) => {
     const t0 = Date.now();
-    route(req, res).catch(e => {
-      const status = e.status && e.status >= 400 && e.status < 600 ? e.status : 500;
-      if (e instanceof ApiError) {
-        // government API / validation answers: passed on as they are, with the error codes — never turned into success
-        if (e.status >= 500) log({ warn: true, error: e.message, code: e.code, path: req.url.split('?')[0] });
-        if (!res.headersSent) send(req, res, e.status || 502, { error: e.code, message: e.message, errors: e.errors || [], warnings: (e.info && e.info.warnings) || [] });
-        return;
-      }
-      const upstream = e instanceof UpstreamError;
-      // Google API trouble is reported as 503 (retry later) — never as success
-      const code = upstream ? 503 : status;
-      if (code >= 500) log({ error: e.message, path: req.url.split('?')[0], status: code });
-      // internal errors are logged, not shown (their text can name tables, columns or paths)
-      const message = upstream ? 'Cloud storage (Google Sheets) is not reachable right now. Your data is safe on this phone and will sync later.'
-        : code >= 500 && !e.code ? 'Something went wrong on the server. Please try again.' : e.message;
-      if (!res.headersSent) send(req, res, code, { error: e.code || (upstream ? 'cloud_unavailable' : 'error'), message });
-    }).finally(() => { if (Date.now() - t0 > 10000) log({ warn: 'slow request', path: req.url.split('?')[0], ms: Date.now() - t0 }); });
+    if (req.method === 'OPTIONS') { res.writeHead(204, { ...SEC, ...cors(req) }); return res.end(); }
+    const url = new URL(req.url, 'http://x');
+    let body;   // read once, on demand
+    router.handle({ method: req.method, path: url.pathname, query: url.searchParams, auth: req.headers.authorization || '', ip: ip(req),
+      readBody: () => (body = body || readBody(req)) })
+      .then(r => (r.html !== undefined ? page(req, res, r.html) : send(req, res, r.status, r.body)))
+      .catch(e => { log({ error: e.message, path: url.pathname }); if (!res.headersSent) send(req, res, 500, { error: 'error', message: 'Something went wrong on the server. Please try again.' }); })
+      .finally(() => { if (Date.now() - t0 > 10000) log({ warn: 'slow request', path: url.pathname, ms: Date.now() - t0 }); });
   });
   srv.ready = ready;
   srv.db = db;

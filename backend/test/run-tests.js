@@ -112,6 +112,23 @@ const quiet = () => {};
     assert.match(h, /^scrypt\$1\$N=32768,r=8,p=1\$/); assert.ok((await a.verifyHash('Some-Password-1', h)).ok); assert.ok(!(await a.verifyHash('Some-Password-2', h)).ok);
     console.log(`      (one production hash: ${ms} ms)`);
   });
+  await test('PBKDF2 mode (Apps Script): pbkdf2$1$ hashes; each runtime verifies the other\'s hashes; wrong pepper fails', async () => {
+    const { Accounts } = require('../lib/accounts');
+    const crypto = require('crypto');
+    const cfg = { passwordPepper: 'p'.repeat(32), sessionSecret: 's'.repeat(32) };
+    const pb = new Accounts({}, { ...cfg, kdf: 'pbkdf2', pbkdf2Iterations: 20000 }), sc = new Accounts({}, { ...cfg, scryptParams: { N: 1024, r: 8, p: 1, maxmem: 64 * 1024 * 1024 } });
+    const h = await pb.hash('Some-Password-1');
+    assert.match(h, /^pbkdf2\$1\$i=20000\$[A-Za-z0-9+/=]{24}\$[A-Za-z0-9+/=]{44}$/);
+    // reference value: PBKDF2-HMAC-SHA256(HMAC-SHA256(pepper, pw), salt, 20000, 32)
+    const [, , , salt, key] = h.split('$');
+    const ref = crypto.pbkdf2Sync(crypto.createHmac('sha256', 'p'.repeat(32)).update('Some-Password-1').digest(), Buffer.from(salt, 'base64'), 20000, 32, 'sha256').toString('base64');
+    assert.strictEqual(key, ref);
+    assert.ok((await pb.verifyHash('Some-Password-1', h)).ok); assert.ok(!(await pb.verifyHash('Some-Password-2', h)).ok);
+    const v = await sc.verifyHash('Some-Password-1', h); assert.ok(v.ok && v.outdated, 'Cloud Run accepts an Apps Script hash and upgrades it');
+    const hs = await sc.hash('Some-Password-1'); const v2 = await pb.verifyHash('Some-Password-1', hs); assert.ok(v2.ok && !v2.outdated, 'a PBKDF2-mode server on Node also verifies scrypt hashes');
+    assert.ok(!(await new Accounts({}, { ...cfg, passwordPepper: 'q'.repeat(32), kdf: 'pbkdf2' }).verifyHash('Some-Password-1', h)).ok, 'other pepper');
+    assert.ok(!(await pb.verifyHash('Some-Password-1', 'pbkdf2$1$i=10$AAAA$BBBB')).ok, 'too few iterations refused');
+  });
   await test('usernames are unique regardless of case; 8 sign-ups racing for one name → exactly one account', async () => {
     const d = await signup('ASHA.TRADERS', 'Another-Pass-77'); assert.strictEqual(d.status, 409); assert.strictEqual(d.json.error, 'username_taken');
     const rs = await Promise.all(Array.from({ length: 8 }, () => signup('race.name', 'Race-Pass-1234')));

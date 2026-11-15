@@ -21,6 +21,8 @@ for (const k of ['FAVICON', 'LOGO_ICON', 'LOGO_FULL']) html = html.split(`{{${k}
 // CSP: the app may only talk to its own cloud sync service (Android: HGI_SYNC_URL; debug APK: local test service)
 const origins = new Set();
 for (const u of [process.env.HGI_SYNC_URL, process.env.HGI_WEB_SYNC_URL, process.env.HGI_DEBUG_SYNC_URL]) if (u) origins.add(new URL(u).origin);
+// Apps Script web app: script.google.com answers with a redirect to script.googleusercontent.com, which serves the JSON
+if (origins.has('https://script.google.com')) origins.add('https://script.googleusercontent.com');
 if (process.env.HGI_ANDROID_TEST_SYNC === '1') origins.add('http://127.0.0.1:8787');     // CI: the debug APK's test service (cleartext is blocked in release builds)
 html = html.split('{{SYNC_ORIGINS}}').join([...origins].map(o => ' ' + o).join(''));
 if (/\{\{[A-Z_]+\}\}/.test(html)) throw new Error('unresolved template placeholder');

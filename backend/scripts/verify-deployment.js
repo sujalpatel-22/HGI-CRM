@@ -23,6 +23,8 @@ const crypto = require('crypto');
 const fs = require('fs');
 const args = process.argv.slice(2);
 const base = String(args[0] || '').replace(/\/$/, '');
+// Google Apps Script web app (free server): every call is one POST with a text/plain JSON envelope → {status, body}
+const GAS = args.includes('--gas') || /^https:\/\/script\.google\.com\/macros\/s\//.test(base);
 const flag = (n) => { const i = args.indexOf(n); return i > 0 ? args[i + 1] : null; };
 const keepFile = flag('--keep'), resumeFile = flag('--resume'), cleanupFile = flag('--cleanup');
 if (!/^https?:\/\//.test(base) || (args.includes('--keep') && !keepFile) || (args.includes('--resume') && !resumeFile) || (args.includes('--cleanup') && !cleanupFile)) {
@@ -31,9 +33,22 @@ if (!/^https?:\/\//.test(base) || (args.includes('--keep') && !keepFile) || (arg
 let pass = 0, fail = 0;
 const ok = (c, m, extra = '') => { if (c) pass++; else fail++; console.log(`${c ? 'PASS' : 'FAIL'}  ${m}${!c && extra ? '\n      ' + extra : ''}`); return c; };
 const sha = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');
+async function send(method, p, body, token) {
+  if (!GAS) {
+    const r = await fetch(base + p, { method, headers: { ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(token ? { Authorization: 'Bearer ' + token } : {}) }, body: body !== undefined ? JSON.stringify(body) : undefined });
+    const text = await r.text(); let json = null; try { json = JSON.parse(text); } catch (e) { /* not json */ }
+    return { status: r.status, json, text };
+  }
+  const u = new URL(p, 'http://x');
+  const env = { m: method, p: u.pathname, ...(u.search ? { q: Object.fromEntries(u.searchParams) } : {}), ...(token ? { t: token } : {}), ...(body !== undefined ? { b: body } : {}) };
+  const r = await fetch(base, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(env), redirect: 'follow' });
+  const text = await r.text(); let j = null; try { j = JSON.parse(text); } catch (e) { /* not json */ }
+  if (!r.ok || !j || typeof j.status !== 'number') return { status: r.ok ? 502 : r.status, json: null, text: text.slice(0, 500) };
+  return { status: j.status, json: j.body, text: JSON.stringify(j.body) };
+}
 async function call(method, p, { body, token } = {}, waited = 0) {
-  const r = await fetch(base + p, { method, headers: { ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(token ? { Authorization: 'Bearer ' + token } : {}) }, body: body !== undefined ? JSON.stringify(body) : undefined });
-  const text = await r.text(); let json = null; try { json = JSON.parse(text); } catch (e) { /* not json */ }
+  const { status, json, text } = await send(method, p, body, token);
+  const r = { status };
   if (r.status === 429 && waited < 2) {          // the service's own per-network sign-up / log-in limit: wait, don't fail
     console.log('      (the service\'s rate limit answered "wait a minute" — waiting 65 s, as an app user would)');
     await new Promise(res => setTimeout(res, 65000)); return call(method, p, { body, token }, waited + 1);
@@ -140,7 +155,7 @@ async function resume() {
   try { st = JSON.parse(fs.readFileSync(resumeFile, 'utf8')); } catch (e) { console.error('cannot read ' + resumeFile + ': ' + e.message); process.exit(2); }
   if (st.base !== base) { console.error(`the state file is for ${st.base}, not ${base}`); process.exit(2); }
   const h = await health('after restart');
-  ok(h.startedAt && h.startedAt !== st.startedAt && h.startedAt > st.at, 'a NEW instance is serving (started after phase 1), so everything below comes from the spreadsheet',
+  ok(h.startedAt && h.startedAt !== st.startedAt && h.startedAt > st.at, GAS ? 'Apps Script: every request starts fresh and reads the spreadsheet (no memory between requests)' : 'a NEW instance is serving (started after phase 1), so everything below comes from the spreadsheet',
     `instance started ${h.startedAt}; phase 1 ran ${st.at} on an instance started ${st.startedAt} — restart the service first`);
   const li = await login(st.user, st.pw, 'verify-after-restart');
   if (ok(li.status === 200 && li.json.user && li.json.user.key === st.uid, 'log-in after the restart (password hash read back from the Users tab)', li.text.slice(0, 200))) {

@@ -54,6 +54,9 @@ jobs:
       - name: Cloud service tests (accounts, Google Sheets storage via the Sheets API stand-in, isolation, deletion)
         run: node backend/test/run-tests.js 2>&1 | tee logs/02-backend-tests.log
 
+      - name: Free server (Google Apps Script bundle, same modules) — simulated Apps Script, full live check
+        run: node backend/test/gas-tests.js 2>&1 | tee logs/02-gas-tests.log
+
       - name: Deployment scripts parse (bash -n)
         run: for f in backend/deploy/*.sh tools/*.sh; do bash -n "$f" || { echo "::error::syntax error in $f"; exit 1; }; done
 
@@ -71,6 +74,7 @@ jobs:
             || { echo "deps install timed out/failed — installing browser only" | tee -a logs/03-playwright-install.log; npx playwright install chromium >> logs/03-playwright-install.log 2>&1; }
           npm run test:web 2>&1 | tee logs/03-web-tests.log
           node tests/sync-e2e.mjs 2>&1 | tee logs/03-sync-e2e.log
+          node tests/gas-web.mjs 2>&1 | tee logs/03-gas-web.log
           node tests/v82-web.mjs 2>&1 | tee logs/03-v82-web.log
           node tests/picker-web.mjs 2>&1 | tee logs/03-picker-web.log
           node tests/v91-web.mjs 2>&1 | tee logs/03-v91-web.log

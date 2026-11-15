@@ -1,13 +1,14 @@
 # Privacy Policy — HGI Billing (Android)
 
-_Last updated: 6 November 2026 — applies from app version 9.4 (username and password accounts, data kept in Google Sheets)._
+_Last updated: 15 November 2026 — applies from app version 9.4 (username and password accounts, data kept in Google Sheets)._
 
 HGI Billing is published by HARIGURU INDUSTRIES, Ahmedabad, Gujarat, India ("HGI", "we").
 
 ## 1. Your account
 You create an account with a **username and password** of your choice. We store the username, a random account ID, the
 date the account was created, its status and the time of your last log-in. Your password itself is never stored: we keep
-only a one-way **scrypt** hash of it, made with a random salt and a secret key that exists only on our server. For each
+only a one-way hash of it (**scrypt** or **PBKDF2-HMAC-SHA256**, depending on the server), made with a random salt and a
+secret key that exists only on our server. For each
 device you log in on we keep a session record (a hashed session code, the device model, start and expiry time), so that
 logging out ends the session on our server too.
 
@@ -16,8 +17,8 @@ You enter business data: company profile (including GSTIN, bank and UPI details)
 invoices, quotations, credit/debit notes, payments and settings.
 
 - It is stored **on your phone**, so billing works without internet.
-- It is also stored in **your HGI cloud account**: a Google Sheets spreadsheet owned by HARIGURU INDUSTRIES and, for
-  invoice PDFs you create, a private file store (Google Cloud Storage), hosted by Google LLC as our service provider.
+- It is also stored in **your HGI cloud account**: a Google Sheets spreadsheet owned by HARIGURU INDUSTRIES and, where
+  HGI offers PDF copies, a private file store (Google Cloud Storage), hosted by Google LLC as our service provider.
   Every row is marked with your account ID. This lets you log in on any phone and get your data back, and keeps several
   phones in step.
 - Only our sync service can read or write this data, and only for the account that is signed in. Authorised HGI staff
@@ -25,11 +26,12 @@ invoices, quotations, credit/debit notes, payments and settings.
   do not share it with anyone else except where the law requires.
 
 ## 3. GSTIN look-up
-When you type a GSTIN for a buyer, the app can fetch that business's registration details (legal and trade name,
+Where HGI's server offers it, when you type a GSTIN for a buyer, the app can fetch that business's registration details (legal and trade name,
 address, registration status) from GST records. The GSTIN is sent through our server to our authorised GST data
 provider; nothing else about you or your buyers is sent. Results may be kept for up to 7 days to avoid repeat look-ups.
 
 ## 3a. E-invoice (IRN) and e-way bill
+This section applies only where HGI's server offers e-invoice and e-way bill; the app shows when they are not available.
 Only when you tap *Generate* (or check a status / cancel), the document's details — your business, the buyer and consignee,
 items, amounts and transport details — are sent through our server and our GST Suvidha Provider (GSP) to the government's
 e-invoice (IRP) and e-way bill systems, as the GST law requires. The answer (IRN, acknowledgement, signed QR code, e-way bill
@@ -48,8 +50,8 @@ code is sent anywhere for this.
 The app contains no advertising or analytics SDKs. Android's own Google cloud backup of the app is switched off.
 
 ## 5. Security
-Connections are encrypted (HTTPS). The app holds no database or storage keys: only our server, running on Google Cloud
-with its own service identity, writes to the spreadsheet and file store, and it checks the signed-in account on every
+Connections are encrypted (HTTPS). The app holds no database or storage keys: only our server (a Google Cloud Run service
+or a Google Apps Script web app operated by HARIGURU INDUSTRIES) writes to the spreadsheet and file store, and it checks the signed-in account on every
 request, so an account can only see and change its own rows. The spreadsheet is shared only with HGI staff who administer
 it; Google encrypts it at rest and keeps its version history. You can also protect the app with a PIN.
 

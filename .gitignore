@@ -9,3 +9,4 @@ tests/out-android/
 *.base64.txt
 .env
 backend/test/out/
+gas/dist/

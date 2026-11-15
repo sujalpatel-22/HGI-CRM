@@ -81,6 +81,8 @@
     // 'google' (builds before 9.4) is served by the same password sign-in now
     let auth = c.auth || 'off'; if (auth === 'google') auth = 'password';
     config = { auth, syncUrl: String(c.syncUrl || '').replace(/\/$/, '') };
+    // free server: a Google Apps Script web app (…/macros/s/…/exec) — every call goes as one POST envelope (see api())
+    config.transport = c.transport === 'gas' || /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(config.syncUrl) ? 'gas' : 'rest';
     if (config.auth !== 'off' && config.auth !== 'unavailable' && !config.syncUrl) config.auth = 'misconfigured';
     return config;
   }
@@ -91,11 +93,30 @@
     let r;
     const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
     const timer = setTimeout(() => ctrl && ctrl.abort(), 60000);
+    const gas = config.transport === 'gas';
     try {
-      r = await fetch(config.syncUrl + path, { method, signal: ctrl ? ctrl.signal : undefined, headers: { ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(session ? { Authorization: 'Bearer ' + session } : {}) }, body: body !== undefined ? JSON.stringify(body) : undefined });
+      if (gas) {
+        // Apps Script: a "simple" POST (text/plain, no Authorization header → no CORS pre-flight, which it cannot answer);
+        // method, path, query, session token and body travel inside; the answer is {status, body}
+        const [p, qs] = path.split('?');
+        const env = { m: method, p };
+        if (qs) { env.q = {}; qs.split('&').forEach(kv => { const [k, v] = kv.split('='); if (k) env.q[decodeURIComponent(k)] = decodeURIComponent(v || ''); }); }
+        if (session) env.t = session;
+        if (body !== undefined) env.b = body;
+        r = await fetch(config.syncUrl, { method: 'POST', redirect: 'follow', signal: ctrl ? ctrl.signal : undefined, headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(env) });
+      } else {
+        r = await fetch(config.syncUrl + path, { method, signal: ctrl ? ctrl.signal : undefined, headers: { ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(session ? { Authorization: 'Bearer ' + session } : {}) }, body: body !== undefined ? JSON.stringify(body) : undefined });
+      }
     } catch (e) { throw new ApiErr(t('No internet connection'), 0, 'offline'); }
     finally { clearTimeout(timer); }
     let j = {}; try { j = await r.json(); } catch (e) { /* empty */ }
+    if (gas) {
+      // Google answers 200 with an HTML page when the script itself could not run (quota, outage): not our JSON → retry later
+      if (!r.ok || !j || typeof j.status !== 'number') throw new ApiErr(t('The HGI cloud is busy right now. Your data is safe on this phone and will sync later.'), r.ok ? 503 : r.status, 'cloud_unavailable');
+      const st = j.status, b = j.body || {};
+      if (st < 200 || st >= 300) throw new ApiErr(b.message || ('HTTP ' + st), st, b.error || 'error', b);
+      return b;
+    }
     const renewed = r.headers.get('X-HGI-Session');
     if (renewed && account) { account.session = renewed; saveAccount(account); }
     if (!r.ok) throw new ApiErr(j.message || ('HTTP ' + r.status), r.status, j.error || 'error', j);
@@ -235,7 +256,7 @@
       if (first && !opts.noFocus) setTimeout(() => { try { if (!f.contains(document.activeElement) && first.isConnected) first.focus(); } catch (e2) { /* ignore */ } }, 50);
     }
     const rt = el.querySelector('#si-retry'); if (rt) rt.onclick = () => { try { sessionStorage.removeItem('hgi_cfg_retry'); } catch (e) { /* ignore */ } location.reload(); };
-    const pp = el.querySelector('#si-privacy'); if (pp) pp.onclick = e => { e.preventDefault(); openUrl(config.syncUrl + '/privacy'); };
+    const pp = el.querySelector('#si-privacy'); if (pp) pp.onclick = e => { e.preventDefault(); openUrl(config.syncUrl + (config.transport === 'gas' ? '?p=/privacy' : '/privacy')); };
     if (window.HGI_I18N && window.HGI_I18N.translateTree) window.HGI_I18N.translateTree(el);
     if (note && opts.error) msg(note, true);
   }
@@ -459,7 +480,7 @@
       saveStateQuiet();
       renderAll(); populateCustomerDropdown(); refreshProductDatalist(); refreshCompanyNames();
       const st = document.getElementById('tab-settings'); if (st && st.classList.contains('hidden')) loadSettingsForm();
-      const ob = document.getElementById('onboarding'); if (ob && !needsOnboarding()) ob.remove();
+      const ob = document.getElementById('onboarding'); if (ob && window.HGI_APP && typeof window.HGI_APP.needsOnboarding === 'function' && !window.HGI_APP.needsOnboarding()) ob.remove();
     } catch (e) { console.error('[HGI] refresh after sync', e); }
   }
   let quiet = false;

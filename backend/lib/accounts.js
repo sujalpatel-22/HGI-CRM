@@ -2,7 +2,8 @@
 /**
  * User accounts: sign-up, log-in, log-out, password change, account deletion — stored in the "Users" and "Sessions" tabs.
  *
- * Passwords: never stored. The "passwordHash" column holds  scrypt$1$N=32768,r=8,p=1$<salt>$<hash>  where the scrypt input
+ * Passwords: never stored. The "passwordHash" column holds  scrypt$1$N=32768,r=8,p=1$<salt>$<hash>  (Cloud Run) or
+ *   pbkdf2$1$i=<iterations>$<salt>$<hash>  (PBKDF2-HMAC-SHA256, used on Google Apps Script, which has no scrypt), where the input
  *   is HMAC-SHA256(PASSWORD_PEPPER, password). scrypt is Node's built-in implementation (OpenSSL) — a memory-hard function
  *   recommended by OWASP for password storage — with a 16-byte random salt per user. The pepper is a server secret (Secret
  *   Manager): somebody who can read or edit the spreadsheet can neither test guesses offline nor plant a hash of their own.
@@ -36,6 +37,9 @@ class Accounts {
     this.pepper = Buffer.from(cfg.passwordPepper); this.secret = Buffer.from(cfg.sessionSecret);
     this.days = cfg.sessionDays || 30;
     this.scrypt = cfg.scryptParams || SCRYPT;
+    // scrypt on Node (Cloud Run); PBKDF2-HMAC-SHA256 where scrypt does not exist (Google Apps Script). Both are verified.
+    this.kdf = cfg.kdf === 'pbkdf2' ? 'pbkdf2' : 'scrypt';
+    this.pbkdf2Iter = Math.max(1000, Number(cfg.pbkdf2Iterations) || 100000);
     this.tries = new Map();                       // usernameKey → {n, until}
     this.dummy = null;
     this.hashing = 0;
@@ -63,24 +67,40 @@ class Accounts {
   /* ------------------------------------------------------------ hashing */
   async hash(pw) {
     const salt = crypto.randomBytes(16);
+    if (this.kdf === 'pbkdf2') {
+      const key = crypto.pbkdf2Sync(this.peppered(pw), salt, this.pbkdf2Iter, 32, 'sha256');
+      return `pbkdf2$1$i=${this.pbkdf2Iter}$${salt.toString('base64')}$${key.toString('base64')}`;
+    }
     const { N, r, p, maxmem } = this.scrypt;
     const key = await this.derive(pw, salt, { N, r, p, maxmem });
     return `scrypt$1$N=${N},r=${r},p=${p}$${salt.toString('base64')}$${key.toString('base64')}`;
   }
+  peppered(pw) { return crypto.createHmac('sha256', this.pepper).update(String(pw).normalize('NFC')).digest(); }
   async derive(pw, salt, o) {
-    const input = crypto.createHmac('sha256', this.pepper).update(String(pw).normalize('NFC')).digest();
+    const input = this.peppered(pw);
     this.hashing++;
     try { return await scrypt(input, salt, 64, o); } finally { this.hashing--; }
   }
   async verifyHash(pw, stored) {
+    const k = /^pbkdf2\$1\$i=(\d+)\$([A-Za-z0-9+/=]+)\$([A-Za-z0-9+/=]+)$/.exec(String(stored || ''));
+    if (k) {
+      const iter = Number(k[1]);
+      if (iter < 1000 || iter > 5e6) return { ok: false };
+      const want = Buffer.from(k[3], 'base64');
+      const got = crypto.pbkdf2Sync(this.peppered(pw), Buffer.from(k[2], 'base64'), iter, want.length, 'sha256');
+      const ok = got.length === want.length && crypto.timingSafeEqual(got, want);
+      return { ok, outdated: ok && (this.kdf !== 'pbkdf2' || iter < this.pbkdf2Iter) };
+    }
     const m = /^scrypt\$1\$N=(\d+),r=(\d+),p=(\d+)\$([A-Za-z0-9+/=]+)\$([A-Za-z0-9+/=]+)$/.exec(String(stored || ''));
     if (!m) return { ok: false };
     const [N, r, p] = [Number(m[1]), Number(m[2]), Number(m[3])];
     if (N > 1 << 20 || r > 32 || p > 16) return { ok: false };
     const want = Buffer.from(m[5], 'base64');
-    const got = await this.derive(pw, Buffer.from(m[4], 'base64'), { N, r, p, maxmem: Math.max(this.scrypt.maxmem, 256 * N * r) });
+    let got;
+    try { got = await this.derive(pw, Buffer.from(m[4], 'base64'), { N, r, p, maxmem: Math.max(this.scrypt.maxmem, 256 * N * r) }); }
+    catch (e) { if (this.kdf === 'pbkdf2') return { ok: false, unsupported: true }; throw e; }   // Apps Script: no scrypt
     const ok = got.length === want.length && crypto.timingSafeEqual(got, want);
-    return { ok, outdated: ok && (N !== this.scrypt.N || r !== this.scrypt.r || p !== this.scrypt.p) };
+    return { ok, outdated: ok && (this.kdf === 'scrypt' && (N !== this.scrypt.N || r !== this.scrypt.r || p !== this.scrypt.p)) };
   }
   async dummyHash() { if (!this.dummy) this.dummy = await this.hash(crypto.randomBytes(16).toString('hex')); return this.dummy; }
 
@@ -156,11 +176,13 @@ class Accounts {
     if (!u || !v.ok) {
       this.noteFailure(key);
       if (u) {
-        await this.db.tx(async w => {
-          const cur = w.get('Users', { userId: u.userId }); if (!cur) return;
-          const n = (Number(cur.failedLogins) || 0) + 1;
-          w.put('Users', { ...cur, failedLogins: n, lockedUntil: n >= LOCK_AFTER ? new Date(Date.now() + LOCK_MS).toISOString() : cur.lockedUntil, updatedAt: new Date().toISOString() });
-        }).catch(e => this.log({ warn: true, event: 'failed_login_not_recorded', error: e.message }));
+        try {
+          await this.db.tx(async w => {
+            const cur = w.get('Users', { userId: u.userId }); if (!cur) return;
+            const n = (Number(cur.failedLogins) || 0) + 1;
+            w.put('Users', { ...cur, failedLogins: n, lockedUntil: n >= LOCK_AFTER ? new Date(Date.now() + LOCK_MS).toISOString() : cur.lockedUntil, updatedAt: new Date().toISOString() });
+          });
+        } catch (e) { this.log({ warn: true, event: 'failed_login_not_recorded', error: e.message }); }
         this.log({ event: 'login_failed', user: u.userId });
       }
       throw new AuthError('Username or password is incorrect.', 'bad_credentials', 401);
