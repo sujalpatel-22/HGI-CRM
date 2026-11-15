@@ -362,7 +362,7 @@ html.dark #app-container .panel-link { color: var(--saffron-2) !important; }
 #app-container .flow-read strong { font: 650 14px var(--f-display); color: var(--text); font-variant-numeric: tabular-nums; }
 #app-container .flow-read i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; vertical-align: 1px; }
 #app-container .flow-read .fr-b i { background: var(--bar); } #app-container .flow-read .fr-r i { background: var(--mint); border-radius: 50%; }
-#app-container .flow-read .fr-p { margin-left: auto; padding: 3px 10px; border-radius: 999px; background: var(--mint-soft); color: var(--mint); font-weight: 600; font-size: 12px; }
+#app-container .flow-read .fr-p { margin-left: auto; padding: 3px 10px; border-radius: 999px; background: var(--mint-soft); color: var(--mint-ink, var(--mint)); font-weight: 600; font-size: 12px; }
 #app-container .flow-plot { width: 100%; overflow: hidden; touch-action: pan-y; }
 #app-container svg.flow { display: block; max-width: 100%; height: auto; outline: none; cursor: crosshair; user-select: none; -webkit-user-select: none; }
 #app-container svg.flow:focus-visible { box-shadow: var(--ring); border-radius: 10px; }
