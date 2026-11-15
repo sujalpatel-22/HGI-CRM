@@ -1,0 +1,8 @@
+Starting: Intent { cmp=in.hariguru.billing/.MainActivity }
+Status: ok
+LaunchState: COLD
+Activity: in.hariguru.billing/.MainActivity
+TotalTime: 1073
+WaitTime: 1103
+Complete
+release APK running

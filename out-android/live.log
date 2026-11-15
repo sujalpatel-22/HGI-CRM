@@ -1,0 +1,19 @@
+▶ live-api36: sdk_gphone64_x86_64 · Android SDK 36 · service https://hgi-sync-yygobuu74a-el.a.run.app
+  ✓ app is configured for username + password accounts on the live service ({"auth":"password","syncUrl":"https://hgi-sync-yygobuu74a-el.a.run.app","webClientId":"","debug":true})
+  ✓ sign-in screen shown before the app opens
+  ✓ live service healthy, storage google-sheets
+  ✓ signed up in the app as livecheck-d841d1de (account's own data slot)
+  ✓ company set-up done
+  ✓ invoice saved in the app
+  ✓ GST computed: IGST ₹1800, total ₹11800 (invoice 01/26-27)
+  ✓ app reports everything uploaded (status ok, pending 0)
+  ✓ log-in from a second device (the CI runner) works
+  ✓ the invoice is stored in the cloud byte-for-byte (4 records for this account)
+  ✓ the company profile is stored in the cloud
+  ✓ after wiping the app, the sign-in screen is shown again
+  ✓ after logging in on a wiped app, invoice 01/26-27 is back exactly as saved
+  ✓ company profile restored
+  ✓ test account deleted from the live service
+  ✓ its session no longer works
+
+live-api36: 16 passed, 0 failed
