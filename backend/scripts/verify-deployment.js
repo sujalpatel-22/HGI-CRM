@@ -9,6 +9,7 @@
  *   (restart the service: a new revision — deploy/verify-live.sh does this for you)
  *   node scripts/verify-deployment.js https://… --resume /tmp/hgi-verify.json           phase 2: a NEW instance must
  *                                                   serve the same data from the spreadsheet; then deletes the account
+ *   node scripts/verify-deployment.js https://… --cleanup /tmp/hgi-verify.json          only deletes a kept test account
  *
  * Checks: sign-up; duplicate user name refused (in another letter case); weak password refused; wrong password refused;
  * log-in; upload of a company profile, settings, buyer, product and invoices with lines and payments, including texts
@@ -23,9 +24,9 @@ const fs = require('fs');
 const args = process.argv.slice(2);
 const base = String(args[0] || '').replace(/\/$/, '');
 const flag = (n) => { const i = args.indexOf(n); return i > 0 ? args[i + 1] : null; };
-const keepFile = flag('--keep'), resumeFile = flag('--resume');
-if (!/^https?:\/\//.test(base) || (args.includes('--keep') && !keepFile) || (args.includes('--resume') && !resumeFile)) {
-  console.error('usage: node scripts/verify-deployment.js https://<service url> [--keep <state file> | --resume <state file>]'); process.exit(2);
+const keepFile = flag('--keep'), resumeFile = flag('--resume'), cleanupFile = flag('--cleanup');
+if (!/^https?:\/\//.test(base) || (args.includes('--keep') && !keepFile) || (args.includes('--resume') && !resumeFile) || (args.includes('--cleanup') && !cleanupFile)) {
+  console.error('usage: node scripts/verify-deployment.js https://<service url> [--keep <state file> | --resume <state file> | --cleanup <state file>]'); process.exit(2);
 }
 let pass = 0, fail = 0;
 const ok = (c, m, extra = '') => { if (c) pass++; else fail++; console.log(`${c ? 'PASS' : 'FAIL'}  ${m}${!c && extra ? '\n      ' + extra : ''}`); return c; };
@@ -149,6 +150,14 @@ async function resume() {
   try { fs.unlinkSync(resumeFile); } catch (e) { /* already gone */ }
 }
 
-(keepFile && resumeFile ? Promise.reject(new Error('use --keep or --resume, not both')) : resumeFile ? resume() : fullRun())
+async function cleanup() {           // deletes a kept test account without the restart check (e.g. after inspecting its rows)
+  let st;
+  try { st = JSON.parse(fs.readFileSync(cleanupFile, 'utf8')); } catch (e) { console.error('cannot read ' + cleanupFile + ': ' + e.message); process.exit(2); }
+  const li = await login(st.user, st.pw, 'verify-cleanup');
+  if (ok(li.status === 200, `log-in as the kept test account ${st.user}`, li.text.slice(0, 200))) await deleteAccount(li.json.session, st.pw, 'test account');
+  try { fs.unlinkSync(cleanupFile); } catch (e) { /* already gone */ }
+}
+
+([keepFile, resumeFile, cleanupFile].filter(Boolean).length > 1 ? Promise.reject(new Error('use only one of --keep, --resume, --cleanup')) : resumeFile ? resume() : cleanupFile ? cleanup() : fullRun())
   .then(done).catch(e => { console.error('ERROR ' + e.message); fail++; done(); });
 function done() { console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0); }
