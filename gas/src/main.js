@@ -4,11 +4,15 @@
  * JSON envelope  {m: method, p: path, q: {query}, t: session token, b: body}  (a "simple" request: no CORS pre-flight,
  * which Apps Script cannot answer) and gets back  {status, body}.  GET ?p=/v1/health · ?p=/privacy · ?p=/delete-account.
  *
- * Storage: the bound spreadsheet ("HGI Billing data"), through the Sheets API advanced service, with exactly the storage
+ * Permission: ONLY https://www.googleapis.com/auth/drive.file — the script can open only spreadsheets it created itself.
+ * On its first run it creates its own private spreadsheet (title from Script Property SHEET_TITLE) and keeps its ID.
+ * Storage: that spreadsheet, through the Sheets API advanced service, with exactly the storage
  * engine of the Cloud Run server (backend/lib/sheet-db.js …). Apps Script keeps nothing between requests, so every request
  * reads the spreadsheet first; writes run under the script lock (one writer at a time) and are still one atomic
  * spreadsheets.batchUpdate each, checked against _Meta.writeCounter.
- * Secrets (session secret, password pepper) are created on the first request in Script Properties and never leave them.
+ * Secrets (session secret, password pepper) are created on the first request in Script Properties and never leave them;
+ * they can be replaced ONCE by the owner-armed import (hgiArmSecretImport) so both servers share them (see docs/FREE-SERVER.md).
+ * One server at a time: backend-guard.js (_Meta.activeBackend); switch with hgiActivateAppsScript / hgiActivateCloudRun.
  * Passwords: PBKDF2-HMAC-SHA256 with the pepper (Apps Script has no scrypt); iterations measured once, ~1 s per hash.
  * Not available here: e-invoice / e-way bill (needs RSA encryption), PDF cloud copies, GSTIN look-up.
  */
@@ -28,7 +32,11 @@ function __settings() {
       var crypto = __require('crypto');
       if (!all.SESSION_SECRET) set.SESSION_SECRET = crypto.randomBytes(48).toString('base64');
       if (!all.PASSWORD_PEPPER) set.PASSWORD_PEPPER = crypto.randomBytes(48).toString('base64');
-      if (!all.SHEETS_SPREADSHEET_ID) { var ss = SpreadsheetApp.getActiveSpreadsheet(); if (!ss) throw new Error('Script is not bound to a spreadsheet and SHEETS_SPREADSHEET_ID is not set'); set.SHEETS_SPREADSHEET_ID = ss.getId(); }
+      if (!all.SHEETS_SPREADSHEET_ID) {
+        // drive.file: the script may only open files it created — so it creates its own private spreadsheet
+        var created = Sheets.Spreadsheets.create({ properties: { title: all.SHEET_TITLE || 'HGI Billing data (Apps Script TEST)', locale: 'en_IN', timeZone: 'Asia/Kolkata' } });
+        set.SHEETS_SPREADSHEET_ID = created.spreadsheetId;
+      }
       if (!all.PBKDF2_ITER) {
         // how many PBKDF2 rounds take about one second here (between 10,000 and 600,000)
         var t0 = Date.now(); crypto.pbkdf2Sync('probe', 'saltsaltsaltsalt', 2000, 32, 'sha256'); var ms = Math.max(1, Date.now() - t0);
@@ -81,7 +89,8 @@ function __server() {
   var SheetDB = __require('sheet-db').SheetDB, TABLES = __require('sheets-schema').TABLES;
   var SheetsRecordStore = __require('sheets-record-store').SheetsRecordStore, SheetsDocStore = __require('sheets-doc-store').SheetsDocStore;
   var Accounts = __require('accounts').Accounts, createRouter = __require('router').createRouter;
-  var db = new SheetDB({ client: new GasSheetsClient(cfg.spreadsheetId), tables: TABLES, log: __log, reloadMs: 3600e3, missReloadMs: 3600e3 });
+  var guard = __require('backend-guard');
+  var db = new SheetDB({ client: new GasSheetsClient(cfg.spreadsheetId), tables: TABLES, log: __log, reloadMs: 3600e3, missReloadMs: 3600e3, writeGuard: guard.writeGuard('apps-script') });
   // one writer at a time across all running requests
   db.exclusive = function (fn) { var lock = LockService.getScriptLock(); lock.waitLock(30000); try { return fn(); } finally { lock.releaseLock(); } };
   var ready = function () {
@@ -114,8 +123,9 @@ function __server() {
     cache.put(k, String(n), 120);
     return n > perMin;
   };
-  var router = createRouter({ cfg: cfg, db: db, store: store, accounts: accounts, files: off, gst: gst, edoc: edoc, ready: ready, log: __log, startedAt: new Date().toISOString(), runtime: 'apps-script', page: page, limited: limited });
-  return { router: router, db: db, cfg: cfg };
+  cfg.retiredRecheckMs = 0;                                  // every request reads the spreadsheet anyway
+  var router = createRouter({ cfg: cfg, db: db, store: store, accounts: accounts, files: off, gst: gst, edoc: edoc, ready: ready, log: __log, startedAt: new Date().toISOString(), runtime: 'apps-script', backend: 'apps-script', page: page, limited: limited });
+  return { router: router, db: db, cfg: cfg, ready: ready, guard: guard };
 }
 
 function __json(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
@@ -133,6 +143,7 @@ function doPost(e) {
   if (raw.length > 25 * 1024 * 1024) return __json({ status: 413, body: { error: 'too_large', message: 'Data is too large to sync' } });
   var env;
   try { env = JSON.parse(raw || '{}'); } catch (x) { return __json({ status: 400, body: { error: 'bad_json', message: 'Request is not valid JSON' } }); }
+  if (env.p === '/v1/admin/import-secrets') { try { return __json(__importSecrets(env.b || {})); } catch (x) { __log({ error: 'import: ' + x.message }); return __json({ status: 500, body: { error: 'error', message: 'Import failed.' } }); } }
   var q = env.q && typeof env.q === 'object' ? env.q : {};
   var r = __handle({ method: String(env.m || 'POST').toUpperCase(), path: String(env.p || '/'), query: { get: function (k) { return q[k] === undefined ? null : String(q[k]); } },
     auth: typeof env.t === 'string' && env.t ? 'Bearer ' + env.t : '', ip: 'apps-script', readBody: function () { return env.b && typeof env.b === 'object' ? env.b : {}; } });
@@ -150,4 +161,103 @@ function doGet(e) {
 function hgiSetup() {
   var s = __server(); s.router.handle({ method: 'GET', path: '/v1/health', query: { get: function () { return null; } }, auth: '', ip: 'setup', readBody: function () { return {}; } });
   __log({ event: 'setup_done', quoteMode: s.db.quoteMode, pbkdf2Iterations: s.cfg.pbkdf2Iterations, cells: s.db.cellsUsed() });
+}
+
+
+/* ---------------------------------------------------------------- owner tools (run from the Apps Script editor) */
+
+/** which server serves the app now, the spreadsheet, the secrets' state (never their values) */
+function hgiStatus() {
+  var s = __server(); s.ready(); var P = __props().getProperties();
+  var users = s.db.t('Users').all().filter(function (u) { return u.status === 'active'; }).length;
+  __log({ event: 'status', spreadsheetId: s.cfg.spreadsheetId, activeBackend: s.guard.activeOf(s.db) || '(not set)', activeUsers: users,
+    secrets: { session: !!P.SESSION_SECRET, pepper: !!P.PASSWORD_PEPPER, imported: P.SECRETS_IMPORTED_AT || 'no' }, pbkdf2Iterations: s.cfg.pbkdf2Iterations });
+}
+/** cut-over: this Apps Script server serves the app; the Cloud Run server answers "install the update" */
+function hgiActivateAppsScript() { var s = __server(); s.ready(); s.guard.activate(s.db, 'apps-script', 'owner (Apps Script editor)'); __log({ event: 'activated', active: 'apps-script' }); }
+/** roll-back: the Cloud Run server serves the app again; this server answers "install the update" */
+function hgiActivateCloudRun() { var s = __server(); s.ready(); s.guard.activate(s.db, 'cloud-run', 'owner (Apps Script editor)'); __log({ event: 'activated', active: 'cloud-run' }); }
+
+/**
+ * Allows ONE import of the two secrets (so this server and the Cloud Run server accept the same passwords and sessions)
+ * during the next 15 minutes, with the one-time code shown in this execution's log. The import is refused when any
+ * active account exists (changing the pepper would lock those users out). Values travel only from Secret Manager to here.
+ */
+function hgiArmSecretImport() {
+  var code = __require('crypto').randomBytes(12).toString('base64url');
+  __props().setProperties({ IMPORT_CODE: code, IMPORT_UNTIL: String(Date.now() + 15 * 60e3), IMPORT_TRIES: '0' });
+  __log({ event: 'secret_import_armed', code: code, until: new Date(Date.now() + 15 * 60e3).toISOString() });
+}
+function __importSecrets(b) {
+  var P = __props(), all = P.getProperties();
+  var deny = function (msg) { return { status: 403, body: { error: 'import_refused', message: msg } }; };
+  if (!all.IMPORT_CODE || !(Number(all.IMPORT_UNTIL) > Date.now())) return deny('Import is not armed (run hgiArmSecretImport in the editor).');
+  var tries = Number(all.IMPORT_TRIES || 0) + 1;
+  if (typeof b.code !== 'string' || b.code !== all.IMPORT_CODE) {
+    if (tries >= 5) { P.deleteProperty('IMPORT_CODE'); P.deleteProperty('IMPORT_UNTIL'); } else P.setProperty('IMPORT_TRIES', String(tries));
+    return deny('Wrong import code.');
+  }
+  var ss = String(b.sessionSecret || ''), pp = String(b.passwordPepper || '');
+  if (ss.length < 32 || pp.length < 32 || ss === pp) return { status: 400, body: { error: 'bad_secrets', message: 'Both secrets must be at least 32 characters and different.' } };
+  var s = __server(); s.ready();
+  var active = s.db.t('Users').all().filter(function (u) { return u.status === 'active'; }).length;
+  if (active) return deny('There are ' + active + ' active accounts: replacing the password pepper now would lock them out.');
+  P.setProperties({ SESSION_SECRET: ss, PASSWORD_PEPPER: pp, SECRETS_IMPORTED_AT: new Date().toISOString() });
+  P.deleteProperty('IMPORT_CODE'); P.deleteProperty('IMPORT_UNTIL'); P.deleteProperty('IMPORT_TRIES');
+  __log({ event: 'secrets_imported' });
+  return { status: 200, body: { ok: true } };
+}
+
+/**
+ * Proves on the real deployment: the script can CREATE its spreadsheet, READ it, UPDATE it, that one spreadsheets.batchUpdate
+ * is applied completely or not at all, and that an invoice (document row + its lines + payment + number claim) is written
+ * by exactly ONE such call. Leaves no account behind.
+ */
+function hgiSelfTest() {
+  var out = { ok: true, checks: [] };
+  var check = function (c, m) { out.checks.push((c ? 'PASS ' : 'FAIL ') + m); if (!c) out.ok = false; };
+  var s = __server(); s.ready();
+  var id = s.cfg.spreadsheetId, db = s.db;
+  var meta = Sheets.Spreadsheets.get(id, { fields: 'properties.title,sheets.properties.title' });
+  check(!!meta.properties.title, 'create + read: the script opened its own spreadsheet "' + meta.properties.title + '" (' + meta.sheets.length + ' tabs)');
+  // update + read back through Google (not the in-memory copy)
+  var stamp = 'selftest ' + new Date().toISOString();
+  db.tx(function (w) { w.put('_Meta', { key: 'selfTest', value: stamp }); }, { bypassGuard: true });
+  var T = db.t('_Meta'), e = T.byKey.get(T.keyOf({ key: 'selfTest' })), vi = T.colAt.get('value');
+  var cell = "'_Meta'!" + __require('sheets-client').colLetter(vi) + (e.r + 2);
+  var readBack = Sheets.Spreadsheets.Values.get(id, cell, { valueRenderOption: 'UNFORMATTED_VALUE' }).values[0][0];
+  check(readBack === stamp, 'update + read: wrote and read back ' + cell);
+  // all-or-nothing: a valid change + an invalid request in ONE batchUpdate → Google must apply neither
+  var counterBefore = db.readCounter(), failed = false;
+  try {
+    Sheets.Spreadsheets.batchUpdate({ requests: [
+      { updateCells: { range: { sheetId: T.sheetId, startRowIndex: e.r + 1, endRowIndex: e.r + 2, startColumnIndex: vi, endColumnIndex: vi + 1 }, rows: [{ values: [{ userEnteredValue: { stringValue: 'MUST-NOT-APPEAR' } }] }], fields: 'userEnteredValue' } },
+      { updateCells: { range: { sheetId: 987654321, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: 1 }, rows: [{ values: [{ userEnteredValue: { stringValue: 'x' } }] }], fields: 'userEnteredValue' } }
+    ] }, id);
+  } catch (x) { failed = true; }
+  var after = Sheets.Spreadsheets.Values.get(id, cell, { valueRenderOption: 'UNFORMATTED_VALUE' }).values[0][0];
+  check(failed && after === stamp && db.readCounter() === counterBefore, 'all-or-nothing: a batch with one bad request was rejected and its valid part was NOT applied');
+  // an invoice with 2 lines + 1 payment through the real API path: one write (writeCounter +1), rows in 4 tabs
+  var r = function (m, p, b, t) { return s.router.handle({ method: m, path: p, query: { get: function () { return null; } }, auth: t ? 'Bearer ' + t : '', ip: 'selftest', readBody: function () { return b || {}; } }); };
+  var user = 'selftest-' + __require('crypto').randomBytes(3).toString('hex'), pw = 'Self-' + __require('crypto').randomBytes(9).toString('base64url');
+  var su = r('POST', '/v1/auth/signup', { username: user, password: pw, device: 'selftest' });
+  check(su.status === 201, 'sign-up of a temporary account (' + su.status + ')');
+  if (su.status === 201) {
+    var tok = su.body.session, uid = su.body.user.key;
+    var doc = { id: 'ST1', docType: 'INV', num: 'ST/1', date: '2026-11-16', buyerName: 'Self Test Buyer', items: [{ desc: 'Line one', qty: 2, rate: 100, gst: 18 }, { desc: 'Line two', qty: 1, rate: 50, gst: 5 }], payments: [{ id: 'P1', date: '2026-11-16', amount: 100, mode: 'UPI' }], grandTotal: 288.5 };
+    var c0 = db.readCounter();
+    var p = r('POST', '/v1/sync/push', { device: 'selftest', records: [{ kind: 'invoice', id: 'ST1', baseRev: 0, data: JSON.stringify(doc) }] }, tok);
+    var c1 = db.readCounter();
+    check(p.status === 200 && p.body.results[0].status === 'ok', 'invoice upload accepted');
+    check(c1 === c0 + 1, 'the invoice, its 2 lines, its payment and its number were written by ONE all-or-nothing batch (writeCounter ' + c0 + ' → ' + c1 + ')');
+    db.load();
+    var rows = function (tab) { return db.t(tab).all().filter(function (x) { return x.userId === uid; }).length; };
+    check(rows('Invoices') === 1 && rows('InvoiceItems') === 2 && rows('Payments') === 1 && rows('DocNumbers') === 1, 'rows: Invoices 1, InvoiceItems 2, Payments 1, DocNumbers 1');
+    var back = r('GET', '/v1/sync/pull', null, tok);
+    check(back.status === 200 && back.body.records.some(function (x) { return x.id === 'ST1' && x.data === JSON.stringify(doc); }), 'read back byte-for-byte');
+    var del = r('DELETE', '/v1/account', { password: pw }, tok);
+    check(del.status === 200, 'temporary account deleted (' + del.status + ')');
+  }
+  __log({ event: 'selftest', ok: out.ok, checks: out.checks });
+  return out;
 }

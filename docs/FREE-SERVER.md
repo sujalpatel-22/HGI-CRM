@@ -7,7 +7,8 @@ tabs and columns, so data can move between them.
 |---|---|---|
 | Cost | ₹0, and no billing account or card | Billing account needed. Usually ₹0 within the free tier. |
 | Code | `gas/dist/Code.js`, built from the **same** `backend/lib/*.js` storage and account code | `backend/server.js` |
-| Passwords | PBKDF2-HMAC-SHA256 with a secret pepper, about 1 s per hash. Apps Script has no scrypt. | scrypt (memory-hard) with a secret pepper |
+| Passwords | PBKDF2-HMAC-SHA256 with a secret pepper, about 1 s per hash. Apps Script has no scrypt. | scrypt (memory-hard) with a secret pepper, or PBKDF2 with `KDF=pbkdf2` (needed while a switch to Apps Script is possible) |
+| Spreadsheet access | **only spreadsheets the script created** (`drive.file`) | the spreadsheets shared with its service account |
 | Secrets | Script Properties of the script, created on the first request and never shown | Secret Manager |
 | E-invoice / e-way bill | **Not available.** Generate the IRN on the NIC portal. | Available once a GSP is contracted |
 | PDF cloud copies, GSTIN look-up | Off | Available |
@@ -30,27 +31,61 @@ Pages:
 - `…/exec?p=/privacy`
 - `…/exec?p=/delete-account`
 
-## Set-up (once, as the owner of the spreadsheet)
-1. Turn on **Google Apps Script API** at script.google.com/home/usersettings. This is needed by `clasp`.
-2. In Cloud Shell:
-   ```
-   npm i -g @google/clasp@2.4.2 && clasp login --no-localhost
-   cd HGI-CRM && node tools/build-gas.mjs && cd gas/dist
-   clasp create --type sheets --title "HGI Billing server" --parentId <spreadsheet ID> --rootDir .
-   clasp push -f
-   ```
-   `clasp create` binds the script to the spreadsheet.
-3. Open the script (`clasp open`), choose `hgiSetup` and click **Run**. Approve the access request: the script reads
-   and writes the spreadsheet. This creates the secrets, tabs and columns and measures the PBKDF2 speed.
-4. Deploy: `clasp deploy -d "HGI Billing 9.4"`. The web app URL is
-   `https://script.google.com/macros/s/<deploymentId>/exec`. The manifest sets it to run as the owner, with access for
-   anyone.
-5. Live check: `node backend/scripts/verify-deployment.js https://script.google.com/macros/s/<id>/exec`.
-   Every line must say PASS.
-6. Set the GitHub variable `HGI_SYNC_URL` to that address and build the app.
+## Permissions and who can reach what
+- **Manifest scope: only `https://www.googleapis.com/auth/drive.file`.** The script can open only files it created itself.
+  On its first run it creates its own private spreadsheet (title from Script Property `SHEET_TITLE`), and it cannot see
+  any other spreadsheet or Drive file.
+  - The build refuses code that uses an Apps Script service needing another permission (SpreadsheetApp, DriveApp,
+    UrlFetchApp …).
+- **The project is a standalone Apps Script project** owned by the HGI Google account, not bound to a spreadsheet. A
+  bound project would be editable by everyone who can edit that spreadsheet.
+  - Only the owner and people the project is explicitly shared with can open it. Only they can see the Script
+    Properties, which hold the two secrets, and the execution logs.
+  - Do not share the project.
+- **The web app runs as the owner.** Anyone with the URL can call it, but they get only what the API allows: their own
+  account's data after logging in.
+- **The spreadsheet is private to the owner.** To let the Cloud Run server use it (for a rollback), share it with
+  `hgi-sync@<project>.iam.gserviceaccount.com` as Editor.
 
-**Updating the code:** rebuild, run `clasp push -f`, then `clasp deploy -i <deploymentId> -d "…"`. This keeps the same
-URL, so installed apps keep working.
+## One server at a time: cut-over and roll-back
+`_Meta.activeBackend` (`cloud-run` or `apps-script`) names the server that serves the app; `backend/lib/backend-guard.js`
+enforces it.
+- The other server answers every request with **410 `backend_retired`**. The app then says *install the latest update*,
+  keeps all data and unsent changes on the phone, and checks again every 6 hours.
+- Writes are refused inside the write transaction itself, after the copy was re-checked. A request that started just
+  before the switch therefore cannot slip through.
+- So an old APK (Cloud Run URL) and a new APK (Apps Script URL) can never both write to the live spreadsheet.
+
+**Switching:** in the Apps Script editor, run `hgiActivateAppsScript` (cut-over) or `hgiActivateCloudRun` (roll-back).
+Both are ordinary writes, so Cloud Run notices at its next write, and before refusing it re-reads the sheet at most every
+15 s. If the Apps Script editor is unusable, the owner can type `cloud-run` into `_Meta!activeBackend` and restart the
+Cloud Run service.
+
+**Both servers must share the secrets and a hash both can check:**
+- Copy the two secrets with `hgiArmSecretImport` plus `node backend/scripts/import-secrets-to-gas.js <url> <code>` in
+  Cloud Shell. It works only once, within 15 minutes, and only while the Apps Script server has no active account.
+- Deploy Cloud Run with `KDF=pbkdf2`, because Apps Script cannot compute scrypt.
+  - Existing scrypt hashes are converted at each user's next log-in on Cloud Run.
+  - Users who do not log in before the cut-over cannot log in on Apps Script and need their account reset.
+
+## Set-up (once, as the HGI Google account)
+1. Create a new standalone project at script.google.com, named "HGI Billing server". Paste `gas/dist/Code.js` into
+   `Code.gs` and `gas/dist/appsscript.json` into the manifest. To show the manifest, open Project Settings and tick
+   "Show appsscript.json".
+2. Optional: set Script Property `SHEET_TITLE`.
+3. Run **`hgiSelfTest`** and approve the access request. It asks only to "see, edit, create and delete only the
+   specific Google Drive files that you use with this app". The run creates the spreadsheet, the secrets and the tabs,
+   then proves:
+   - create, read and update;
+   - an all-or-nothing batch;
+   - a one-batch invoice write.
+4. **Deploy → New deployment → Web app**: execute as *Me*, access *Anyone*. The URL is
+   `https://script.google.com/macros/s/<deploymentId>/exec`.
+5. Run the live check: `node backend/scripts/verify-deployment.js https://script.google.com/macros/s/<id>/exec`.
+6. Only after the cut-over plan above: set the GitHub variable `HGI_SYNC_URL` to that address and build the app.
+
+**Updating the code:** paste the new `Code.js`, then **Deploy → Manage deployments → edit → New version**. The URL stays
+the same.
 
 ## Operating it
 - **Settings** are in the Script Properties (Project Settings):

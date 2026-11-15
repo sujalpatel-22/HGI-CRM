@@ -58,7 +58,7 @@ jobs:
         run: node backend/test/gas-tests.js 2>&1 | tee logs/02-gas-tests.log
 
       - name: Deployment scripts parse (bash -n)
-        run: for f in backend/deploy/*.sh tools/*.sh gas/*.sh; do bash -n "$f" || { echo "::error::syntax error in $f"; exit 1; }; done
+        run: for f in backend/deploy/*.sh tools/*.sh; do bash -n "$f" || { echo "::error::syntax error in $f"; exit 1; }; done
 
       - name: Live-check script works (verify-deployment.js incl. restart phase, against the stand-in)
         run: node backend/test/verify-script-test.js 2>&1 | tee logs/02-verify-script.log

@@ -23,9 +23,10 @@ let failures = 0, passes = 0;
 const check = (cond, msg) => { if (cond) { passes++; console.log('   ✓', msg); } else { failures++; console.log('   ✗', msg); } };
 
 const fake = new FakeSheets();
-const sheetId = fake.create('HGI Billing data');
-const sim = new GasSim({ fake, spreadsheetId: sheetId, props: { PBKDF2_ITER: '20000' } });
+const sim = new GasSim({ fake, props: { PBKDF2_ITER: '20000' } });
 const gasSrv = await sim.listen();
+sim.post({ m: 'GET', p: '/v1/health' });                       // first run: the script creates its own spreadsheet
+const sheetId = sim.props.SHEETS_SPREADSHEET_ID;
 const preflights = [];
 gasSrv.prependListener('request', req => { if (req.method === 'OPTIONS') preflights.push(req.url); });
 
@@ -109,6 +110,16 @@ try {
     });
   await new Promise(r => setTimeout(r, 1500));
   check(sim.post({ m: 'GET', p: '/v1/me', t: tok }).status === 401, 'log-out on phone B ended its session on the server');
+  // this server switched off (cut-over to the other backend): the app keeps its data and asks for the update
+  sim.exec('hgiActivateCloudRun');
+  const before = await A.evaluate(() => state.invoices.length);
+  await A.evaluate(() => { state.invoices[0].notes = 'edited while switched off'; saveState(); });
+  const rs = await syncNow(A);
+  check(rs.status === 'error' && /install the latest HGI Billing update/.test(rs.error || ''), `switched-off server: the app says to install the update ("${(rs.error || '').slice(0, 60)}…")`);
+  check(await A.evaluate(() => state.invoices.length) === before && (await A.evaluate(() => HGI_SYNC.status().pending)) >= 1, 'the phone keeps its data and the unsent change');
+  sim.exec('hgiActivateAppsScript');
+  const rs2 = await syncNow(A);
+  check(rs2.status === 'ok' && rs2.pending === 0, 'switched back on: the waiting change uploads');
   await A.screenshot({ path: path.join(OUT, 'gas-web-A.png') });
 } catch (e) { failures++; console.log('   ✗ aborted:', String(e.stack || e).split('\n').slice(0, 16).join(' / ')); }
 check(!errors.length, 'no page errors' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));

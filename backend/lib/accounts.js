@@ -100,7 +100,7 @@ class Accounts {
     try { got = await this.derive(pw, Buffer.from(m[4], 'base64'), { N, r, p, maxmem: Math.max(this.scrypt.maxmem, 256 * N * r) }); }
     catch (e) { if (this.kdf === 'pbkdf2') return { ok: false, unsupported: true }; throw e; }   // Apps Script: no scrypt
     const ok = got.length === want.length && crypto.timingSafeEqual(got, want);
-    return { ok, outdated: ok && (this.kdf === 'scrypt' && (N !== this.scrypt.N || r !== this.scrypt.r || p !== this.scrypt.p)) };
+    return { ok, outdated: ok && (this.kdf !== 'scrypt' || N !== this.scrypt.N || r !== this.scrypt.r || p !== this.scrypt.p) };
   }
   async dummyHash() { if (!this.dummy) this.dummy = await this.hash(crypto.randomBytes(16).toString('hex')); return this.dummy; }
 

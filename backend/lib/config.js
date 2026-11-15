@@ -31,6 +31,11 @@ function load(env = process.env) {
     sessionSecret: env.SESSION_SECRET || '',
     passwordPepper: env.PASSWORD_PEPPER || '',
     sessionDays: Number(env.SESSION_DAYS) || 30,
+    backendName: env.BACKEND_NAME || 'cloud-run',          // see lib/backend-guard.js
+    retiredRecheckMs: env.RETIRED_RECHECK_MS === undefined ? 15000 : Number(env.RETIRED_RECHECK_MS),
+    // scrypt (default) or pbkdf2: use pbkdf2 while the Apps Script server may take over (it cannot compute scrypt);
+    // scrypt hashes are converted at each user's next log-in
+    kdf: env.KDF === 'pbkdf2' ? 'pbkdf2' : 'scrypt', pbkdf2Iterations: Number(env.PBKDF2_ITERATIONS) || 200000,
     allowSignup: env.ALLOW_SIGNUP !== '0',
     // per client IP and minute (Cloud Run passes the client address in X-Forwarded-For)
     signupPerMinute: Number(env.SIGNUP_PER_MINUTE) || 5,

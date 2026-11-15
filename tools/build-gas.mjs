@@ -13,7 +13,7 @@ import path from 'node:path';
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const lib = path.join(root, 'backend', 'lib');
 const out = path.join(root, 'gas', 'dist');
-const MODULES = ['sheets-client', 'sheet-db', 'sheets-schema', 'sheets-record-store', 'sheets-doc-store', 'accounts', 'router'];
+const MODULES = ['sheets-client', 'sheet-db', 'sheets-schema', 'sheets-record-store', 'sheets-doc-store', 'accounts', 'backend-guard', 'router'];
 const PAGES = ['index.html', 'privacy.html', 'delete-account.html'];
 
 export function deAsync(src, name) {
@@ -44,6 +44,11 @@ export function build() {
   parts.push(fs.readFileSync(path.join(root, 'gas', 'src', 'main.js'), 'utf8'));
   fs.mkdirSync(out, { recursive: true });
   const code = parts.join('\n\n');
+  // the manifest grants ONLY drive.file: no Apps Script service that needs another permission may appear in the code
+  const scopes = JSON.parse(fs.readFileSync(path.join(root, 'gas', 'src', 'appsscript.json'), 'utf8')).oauthScopes;
+  if (JSON.stringify(scopes) !== JSON.stringify(['https://www.googleapis.com/auth/drive.file'])) throw new Error('appsscript.json must request only drive.file, found ' + JSON.stringify(scopes));
+  const forbidden = /\b(SpreadsheetApp|DriveApp|DocumentApp|UrlFetchApp|GmailApp|MailApp|CalendarApp|FormApp|SlidesApp|ScriptApp\.newTrigger|Session\.getActiveUser)\b/.exec(code.replace(/var __PAGES = .*;/, ''));
+  if (forbidden) throw new Error('Code uses ' + forbidden[1] + ', which needs a permission the manifest does not grant');
   fs.writeFileSync(path.join(out, 'Code.js'), code);
   fs.copyFileSync(path.join(root, 'gas', 'src', 'appsscript.json'), path.join(out, 'appsscript.json'));
   return { bytes: code.length, file: path.join(out, 'Code.js') };

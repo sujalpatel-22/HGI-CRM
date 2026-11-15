@@ -9,6 +9,8 @@
  * deps: { cfg, db, store, accounts, files, gst, edoc, ready, log, startedAt, page(name) → html, limited(key, perMin),
  *         UpstreamError, ApiError }  (the two error classes are optional: matched by name when not given)
  */
+const guard = require('./backend-guard');
+
 function createRouter(d) {
   const { cfg, db, store, accounts, files, gst, edoc, log } = d;
   const isUpstream = e => (d.UpstreamError ? e instanceof d.UpstreamError : false) || (e && e.name === 'UpstreamError');
@@ -28,13 +30,18 @@ function createRouter(d) {
     const p = req.path, M = req.method;
     if (M === 'GET' && (p === '/v1/health' || p === '/healthz')) {
       try { await d.ready(); } catch (e) { return ok(503, { ok: false, error: 'sheets_unavailable', message: e.message }); }
-      const cells = db.cellsUsed();
-      return ok(200, { ok: true, storage: 'google-sheets', runtime: d.runtime || 'node', startedAt: d.startedAt, quoteMode: db.quoteMode, cells, cellLimit: 10e6, ...(cells > 7e6 ? { warning: 'The spreadsheet is above 70 % of Google\'s 10 million cell limit.' } : {}) });
+      const cells = db.cellsUsed(), active = guard.activeOf(db);
+      return ok(200, { ok: true, storage: 'google-sheets', runtime: d.runtime || 'node', backend: d.backend, activeBackend: active || null, serving: !active || active === d.backend, startedAt: d.startedAt, quoteMode: db.quoteMode, cells, cellLimit: 10e6, ...(cells > 7e6 ? { warning: 'The spreadsheet is above 70 % of Google\'s 10 million cell limit.' } : {}) });
     }
     if (M === 'GET' && (p === '/' || p === '/privacy')) return { status: 200, html: d.page(p === '/' ? 'index.html' : 'privacy.html') };
     if (M === 'GET' && p === '/delete-account') return { status: 200, html: d.page('delete-account.html') };
     if (!p.startsWith('/v1/')) return ok(404, { error: 'not_found' });
     await d.ready();
+    if (d.backend) {                                       // the switched-off server answers "install the update"
+      const a = guard.activeOf(db);
+      if (a && a !== d.backend) await db.refreshIfOlder(cfg.retiredRecheckMs == null ? 15000 : cfg.retiredRecheckMs);   // switched back since?
+      guard.checkActive(db, d.backend);
+    }
 
     if (M === 'POST' && p === '/v1/auth/signup') {
       if (!cfg.allowSignup) return ok(403, { error: 'signup_closed', message: 'New accounts are not being accepted right now.' });

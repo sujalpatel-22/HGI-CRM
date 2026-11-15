@@ -22,7 +22,7 @@ class GasSim {
     this.fake = fake; this.spreadsheetId = spreadsheetId;
     this.code = new vm.Script(fs.readFileSync(codePath || path.join(__dirname, '..', '..', 'gas', 'dist', 'Code.js'), 'utf8'), { filename: 'Code.js' });
     this.props = { ...props }; this.cache = new Map(); this.locked = false; this.url = '';
-    this.logs = []; this.executions = 0; this.hmacCalls = 0;
+    this.logs = []; this.executions = 0; this.hmacCalls = 0; this.createdSheets = [];
   }
   globals() {
     const sim = this, fake = this.fake;
@@ -48,6 +48,7 @@ class GasSim {
       },
       Sheets: {
         Spreadsheets: {
+          create: body => { const id = fake.create((body.properties || {}).title || 'Untitled'); sim.createdSheets.push(id); return { spreadsheetId: id, properties: body.properties }; },
           get: (id, o = {}) => sheetsCall(id, '', 'GET', o.fields ? qs({ fields: o.fields }) : ''),
           batchUpdate: (body, id) => sheetsCall(id, ':batchUpdate', 'POST', '', body),
           Values: {
@@ -56,9 +57,8 @@ class GasSim {
           }
         }
       },
-      SpreadsheetApp: { getActiveSpreadsheet: () => ({ getId: () => sim.spreadsheetId }) },
       PropertiesService: { getScriptProperties: () => ({
-        getProperties: () => ({ ...sim.props }), getProperty: k => (k in sim.props ? sim.props[k] : null),
+        getProperties: () => ({ ...sim.props }), getProperty: k => (k in sim.props ? sim.props[k] : null), deleteProperty: k => { delete sim.props[k]; },
         setProperties: o => { for (const [k, v] of Object.entries(o)) sim.props[k] = String(v); }, setProperty: (k, v) => { sim.props[k] = String(v); }
       }) },
       LockService: { getScriptLock: () => lock },

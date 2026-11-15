@@ -65,6 +65,8 @@ class SheetDB {
     this.log = o.log || (() => {});
     this.reloadMs = o.reloadMs == null ? 10 * 60e3 : o.reloadMs;
     this.missReloadMs = o.missReloadMs == null ? 60000 : o.missReloadMs;
+    // checked inside every write, after the copy is known to be current (see backend-guard.js): one server at a time
+    this.writeGuard = o.writeGuard || null;
     this.tables = new Map();
     for (const def of [...o.tables, META, BLOBS]) this.tables.set(def.name, new Table(def));
     this.queue = Promise.resolve();
@@ -196,6 +198,11 @@ class SheetDB {
     await this.exclusive(async () => { if (Date.now() - this.loadedAt >= this.missReloadMs) await this.load(); });
     return true;
   }
+  /** reload when the copy is older than ms (used before refusing a request as "switched off": the switch may be undone) */
+  async refreshIfOlder(ms) {
+    if (this.inTx || Date.now() - this.loadedAt < ms) return;
+    await this.exclusive(async () => { if (Date.now() - this.loadedAt >= ms) await this.load(); });
+  }
   async fresh() {
     if (this.inTx) return;                     // inside a write: the copy was checked when the write began
     if (!this.dirty && Date.now() - this.loadedAt < this.reloadMs) return;
@@ -207,7 +214,7 @@ class SheetDB {
    * fn(w) reads through w.get / table methods and stages changes with w.put / w.remove; its result is returned once
    * Google confirmed the write. fn may run more than once (after a reload) — it must not have side effects of its own.
    */
-  async tx(fn) {
+  async tx(fn, opts = {}) {
     return this.exclusive(async () => {
       for (let attempt = 0; ; attempt++) {
         if (this.dirty || Date.now() - this.loadedAt >= this.reloadMs) await this.load();
@@ -225,6 +232,7 @@ class SheetDB {
           if (attempt >= 2) throw Object.assign(new SheetConflict('The spreadsheet is being changed by someone else. Try again in a moment.'), { status: 503 });
           continue;
         }
+        if (this.writeGuard && !opts.bypassGuard) { const refusal = this.writeGuard(this); if (refusal) throw refusal; }
         const plan = w.plan(this.counter + 1);
         try {
           await this.client.batchUpdate(plan.requests);

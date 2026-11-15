@@ -573,6 +573,15 @@
         return;
       }
       if (e.status === 403 && e.code === 'account_disabled') { setStatus('error', e.message); return; }
+      if (e.status === 410 && e.code === 'backend_retired') {
+        // this app version's server was switched off (moved to a new server): keep everything on the phone, ask for the update,
+        // and only look again every 6 hours (a roll-back would make this server serve again)
+        const was = status;
+        setStatus('error', e.message);
+        if (was !== 'error') toast(e.message, 'error');
+        kick(6 * 3600e3);
+        return;
+      }
       backoff = Math.min(backoff ? backoff * 2 : 15000, 10 * 60000);
       const wasErr = status === 'error';
       setStatus(e.code === 'offline' ? 'offline' : 'error', e.code === 'offline' ? t('Offline — billing works normally; changes upload automatically when the internet is back.') : e.message);

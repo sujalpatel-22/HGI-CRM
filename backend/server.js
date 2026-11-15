@@ -45,6 +45,7 @@ const { CredentialVault } = require('./lib/credentials');
 const { EdocStore } = require('./lib/edoc-store');
 const { EdocService } = require('./lib/edoc-service');
 const { createRouter, memoryLimiter } = require('./lib/router');
+const { writeGuard } = require('./lib/backend-guard');
 
 const log = e => console.log(JSON.stringify({ severity: e.warn ? 'WARNING' : e.error ? 'ERROR' : 'INFO', at: new Date().toISOString(), ...e }));
 
@@ -52,7 +53,7 @@ function createServer(cfg, deps = {}) {
   const startedAt = new Date().toISOString();   // /healthz: lets the live check prove a NEW instance re-read the spreadsheet
   const access = deps.access || new GoogleAccess(cfg);
   const client = deps.sheets || new SheetsClient({ spreadsheetId: cfg.spreadsheetId, endpoint: cfg.endpoints.sheets, access });
-  const db = new SheetDB({ client, tables: TABLES, log: deps.log || log, reloadMs: cfg.sheetsReloadMinutes * 60e3, missReloadMs: cfg.sheetsMissReloadMs });
+  const db = new SheetDB({ client, tables: TABLES, log: deps.log || log, reloadMs: cfg.sheetsReloadMinutes * 60e3, missReloadMs: cfg.sheetsMissReloadMs, writeGuard: writeGuard(cfg.backendName) });
   const fsdb = new SheetsDocStore(db);
   const store = new SheetsRecordStore(db, fsdb, log);
   const accounts = new Accounts(db, cfg, log);
@@ -65,7 +66,7 @@ function createServer(cfg, deps = {}) {
   if (edoc.keyError) log({ warn: edoc.keyError });
   const pub = f => fs.readFileSync(path.join(__dirname, 'public', f), 'utf8');
 
-  const router = createRouter({ cfg, db, store, accounts, files, gst, edoc, ready, log, startedAt, runtime: 'cloud-run',
+  const router = createRouter({ cfg, db, store, accounts, files, gst, edoc, ready, log, startedAt, runtime: 'cloud-run', backend: cfg.backendName,
     page: f => pub(f).replace(/\{\{SUPPORT_EMAIL\}\}/g, cfg.supportEmail || (f === 'delete-account.html' ? '' : 'the e-mail shown in the app listing')).replace(/\{\{API\}\}/g, ''),
     limited: memoryLimiter(), UpstreamError, ApiError });
 

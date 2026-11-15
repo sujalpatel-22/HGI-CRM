@@ -34,7 +34,7 @@ const quiet = () => {};
   const G1 = gstin('27AAPFU0939F1Z'), G2 = gstin('24AAACR5055K1Z'), GX = gstin('29AABCT1332L1Z');
   g.gstRecords.set(G1, tp(G1));
   g.gstRecords.set(G2, tp(G2, { lgnm: 'CANCELLED TRADERS', tradeNam: '', sts: 'Cancelled', cxdt: '31/03/2023', pradr: { addr: { bno: '5', st: 'Station Road', loc: 'Mehsana', dst: 'Mehsana', stcd: 'Gujarat', pncd: '384002' } } }));
-  const env = { PORT: '0', SHEETS_SPREADSHEET_ID: SHEET, SESSION_SECRET: crypto.randomBytes(32).toString('hex'), PASSWORD_PEPPER: crypto.randomBytes(32).toString('hex'), GCP_AUTH: 'metadata',
+  const env = { PORT: '0', SHEETS_SPREADSHEET_ID: SHEET, SESSION_SECRET: crypto.randomBytes(32).toString('hex'), PASSWORD_PEPPER: crypto.randomBytes(32).toString('hex'), GCP_AUTH: 'metadata', RETIRED_RECHECK_MS: '0',
     FILES_BUCKET: 'hgi-files-test', GST_API_URL: 'http://placeholder/{gstin}', GST_API_HEADERS: JSON.stringify({ 'x-api-key': g.gstKey }), GST_API_NAME: 'Test GSP', SUPPORT_EMAIL: 'info@hariguru.com',
     HGI_ALLOW_TEST_LOGIN: '1', SHEETS_MISS_RELOAD_MS: '0', SIGNUP_PER_MINUTE: '10000', LOGIN_PER_MINUTE: '10000' };
   const mk = (over = {}) => {
@@ -125,7 +125,7 @@ const quiet = () => {};
     assert.strictEqual(key, ref);
     assert.ok((await pb.verifyHash('Some-Password-1', h)).ok); assert.ok(!(await pb.verifyHash('Some-Password-2', h)).ok);
     const v = await sc.verifyHash('Some-Password-1', h); assert.ok(v.ok && v.outdated, 'Cloud Run accepts an Apps Script hash and upgrades it');
-    const hs = await sc.hash('Some-Password-1'); const v2 = await pb.verifyHash('Some-Password-1', hs); assert.ok(v2.ok && !v2.outdated, 'a PBKDF2-mode server on Node also verifies scrypt hashes');
+    const hs = await sc.hash('Some-Password-1'); const v2 = await pb.verifyHash('Some-Password-1', hs); assert.ok(v2.ok && v2.outdated, 'a PBKDF2-mode server on Node verifies a scrypt hash and converts it at log-in');
     assert.ok(!(await new Accounts({}, { ...cfg, passwordPepper: 'q'.repeat(32), kdf: 'pbkdf2' }).verifyHash('Some-Password-1', h)).ok, 'other pepper');
     assert.ok(!(await pb.verifyHash('Some-Password-1', 'pbkdf2$1$i=10$AAAA$BBBB')).ok, 'too few iterations refused');
   });
@@ -573,6 +573,32 @@ const quiet = () => {};
   await test('sign-up can be closed by the operator (ALLOW_SIGNUP=0)', async () => {
     const s5 = await start({ ALLOW_SIGNUP: '0' }); const r = await signup('closed.door', 'Closed-Pass-1', s5.url); s5.s.close();
     assert.strictEqual(r.status, 403); assert.strictEqual(r.json.error, 'signup_closed');
+  });
+
+  console.log('One server at a time (cut-over between Cloud Run and Apps Script)');
+  await test('the switched-off server refuses everything with 410 backend_retired, including a write that began before the switch', async () => {
+    const guard = require('../lib/backend-guard');
+    const A = await signup('cutover.case', PW); assert.strictEqual(A.status, 201, A.text);
+    const T = A.json.session;
+    assert.strictEqual((await push(T, [rec('invoice', 'CUT1', inv('CUT1', 'CUT/1'))])).json.results[0].status, 'ok');
+    // a second server process on the same spreadsheet plays "the other backend": it switches to apps-script
+    const other = await start(); await call('GET', '/v1/health', { srv: other.url });
+    await guard.activate(other.s.db, 'apps-script', 'test');
+    // the first server's copy is stale (no reload yet) — its write must still be refused, inside the transaction
+    const w = await push(T, [rec('invoice', 'CUT2', inv('CUT2', 'CUT/2'))]);
+    assert.strictEqual(w.status, 410, w.text); assert.strictEqual(w.json.error, 'backend_retired'); assert.match(w.json.message, /install the latest HGI Billing update/);
+    assert.ok(!tab('Invoices').some(r => r.includes('CUT/2')), 'nothing written');
+    for (const [m, p, body] of [['GET', '/v1/me'], ['GET', '/v1/sync/pull?since=0'], ['POST', '/v1/auth/login', { username: 'cutover.case', password: PW }], ['POST', '/v1/auth/signup', { username: 'late.comer', password: PW }]]) {
+      const r = await call(m, p, { token: T, body }); assert.strictEqual(r.status, 410, `${m} ${p}: ${r.text}`);
+    }
+    const h = await call('GET', '/v1/health'); assert.strictEqual(h.json.serving, false); assert.strictEqual(h.json.activeBackend, 'apps-script');
+    // switch back (roll-back): served again, the data from before is all there
+    await guard.activate(other.s.db, 'cloud-run', 'test'); other.s.close();
+    await call('GET', '/v1/health');
+    const again = await login('cutover.case', PW); assert.strictEqual(again.status, 200, again.text);
+    assert.ok((await pullAll(again.json.session)).some(r => r.id === 'CUT1'));
+    assert.strictEqual((await push(again.json.session, [rec('invoice', 'CUT3', inv('CUT3', 'CUT/3'))])).json.results[0].status, 'ok');
+    assert.strictEqual((await call('GET', '/v1/health')).json.serving, true);
   });
 
   main.s.close(); await g.stop();
