@@ -1,0 +1,62 @@
+
+▶ Bill-to / ship-to (IGST Act s.10(1)(a) vs 10(1)(b)) — the 62/26-27 scenario
+   ✓ delivery state ≠ buyer state → the editor asks who receives the goods; no place of supply is guessed
+   ✓ saving is refused while the fact is missing (no "save anyway")
+   ✓ bill-to/ship-to → POS 24, CGST 9,674.91 + SGST 9,674.91, total 1,26,849 (24 9674.91/9674.91/0/126849)
+   ✓ invoice saves once the fact is recorded
+   ✓ saved record keeps the fact, the rule applied and the rule-book version
+   ✓ printed invoice: CGST + SGST and the Section 10(1)(b) bill-to/ship-to note
+   ✓ buyer's own site → POS 08, IGST 19,349.82 (08 19349.82)
+   ✓ warns that a Gujarat-registered buyer will not get ITC of IGST with POS Rajasthan
+   ✓ no bill-to/ship-to note when it does not apply
+   ✓ ship-to in the buyer's state: no question asked, no note printed
+   ✓ consignee GSTIN state ≠ delivery state is a blocking contradiction
+   ✓ manual POS against the rule blocks and asks for a reason
+   ✓ with a recorded reason it is a warning, and the reason is kept
+   ✓ services: POS = recipient's state 27 (Sec 12(2)) → IGST 1,800
+
+▶ UTGST (Union territory without legislature)
+   ✓ Chandigarh → Chandigarh: CGST 90 + UTGST 90
+   ✓ invoice and editor say UTGST, not SGST
+
+▶ Composition taxpayer (Sec 10 CGST, Rule 5)
+   ✓ charging GST under composition is blocked
+   ✓ bill of supply without tax is accepted (total 1,000)
+   ✓ prints "BILL OF SUPPLY" with the composition declaration
+   ✓ inter-state sale of goods under composition is blocked (Sec 10(2)(d))
+
+▶ Rates (GST 2.0), cess, HSN, numbering, credit notes, 0 % lines
+   ✓ 12 % on a document dated after 22-09-2025 is blocked
+   ✓ credit note against a pre-GST-2.0 invoice may use the original 12 %
+   ✓ credit note after 30-11-2026 for an FY 2025-26 invoice is blocked (Sec 34(2))
+   ✓ credit note at a different rate from its invoice is blocked
+   ✓ cess-attracting HSN is refused (no cess engine)
+   ✓ B2B with a 2-digit HSN is blocked (Notfn 78/2020)
+   ✓ B2C under ₹5 cr: HSN optional on the invoice, but flagged for GSTR-1
+   ✓ invoice number over 16 characters is blocked (Rule 46(b))
+   ✓ rate list offers 0 % nil-rated / exempt / non-GST
+
+▶ GSTR-1: B2CL threshold by date, Table 8, UTGST column
+   ✓ ₹2.36 lakh inter-state B2C: B2CS in July 2024, B2CL from August 2024 ({"jb2cl":0,"jb2cs":1,"ab2cl":1,"nil":{"interReg":{"nil":0,"exempt":0,"nongst":0})
+   ✓ exempt line reported in Table 8 (intra-state, registered: ₹5,000) and not in Table 4
+   ✓ returns screen shows Table 8 and the SGST/UTGST column
+
+▶ Audit of saved invoices — flagged, not changed; correction history
+   ✓ loading does not silently recompute stored totals (v9.2 did)
+   ✓ audit leaves every saved document byte-for-byte unchanged
+   ✓ audit flags the bill-to/ship-to record and the total drift, passes the clean one (2/3)
+   ✓ findings say what is wrong and what to do
+   ✓ Returns screen lists the flagged documents with an Open button
+   ✓ opening a flagged saved invoice shows an on-screen review flag (not printed, record unchanged)
+   ✓ corrected invoice saves
+   ✓ correction history keeps the version as issued (POS 08, IGST 19,349.82) and what changed
+   ✓ advice for an already-issued invoice is credit note + fresh invoice (taken with the adviser)
+
+▶ Draft marking, e-way bill age, export / LUT
+   ✓ preview of an unresolved draft is watermarked "DRAFT — not a valid tax invoice"
+   ✓ goods invoice > ₹50,000 dated 200 days ago: warns the e-way bill portal will refuse it
+   ✓ export under LUT without an LUT ARN is blocked (Rule 96A)
+   ✓ CSV export: formula-like text neutralised, numbers untouched
+   ✓ no page errors
+
+46 passed, 0 failed

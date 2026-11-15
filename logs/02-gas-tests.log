@@ -1,0 +1,33 @@
+▶ Apps Script bundle 120 KB
+▶ quote mode literal · http://127.0.0.1:36727/exec
+  ✓ first request creates ITS OWN spreadsheet (drive.file), the secrets, the tabs and the columns; health says apps-script
+  ✓ scripts/verify-deployment.js --gas: the complete live check passes
+  ✓ keep → resume: a kept account logs in and reads its data byte-for-byte in later executions
+  ✓ the Cloud Run server and the Apps Script server read each other's data (same spreadsheet layout)
+  ✓ features switched off on Apps Script: e-invoice 503 EDOC_NOT_CONFIGURED (nothing sent), PDF copies and GST look-up off
+  ✓ pages: privacy and delete-account served by doGet, links point back to the web app; bad envelope → 400
+  ✓ hgiSelfTest: create, read, update, all-or-nothing batch, one-batch invoice write — all PASS
+  ✓ secret import: refused unless armed, with the wrong code, or while active accounts exist; once armed → imported, never logged
+{"severity":"INFO","at":"2026-11-15T18:47:46.443Z","event":"signup","user":"7c9212ee7289b30ed4372ba9"}
+{"severity":"INFO","at":"2026-11-15T18:47:46.453Z","event":"push","user":"7c9212ee7289b30ed4372ba9","ok":1}
+{"severity":"INFO","at":"2026-11-15T18:47:46.708Z","event":"login","user":"7c9212ee7289b30ed4372ba9"}
+{"severity":"INFO","at":"2026-11-15T18:47:46.714Z","event":"login","user":"806692cc14946905daebaaff"}
+  ✓ cut-over + roll-back between a Cloud Run (Node) server and this Apps Script server on one spreadsheet, same secrets
+  ✓ each request is a fresh execution (nothing kept in memory) and no execution ends holding the lock
+▶ quote mode prefix · http://127.0.0.1:34339/exec
+  ✓ first request creates ITS OWN spreadsheet (drive.file), the secrets, the tabs and the columns; health says apps-script
+  ✓ scripts/verify-deployment.js --gas: the complete live check passes
+  ✓ keep → resume: a kept account logs in and reads its data byte-for-byte in later executions
+  ✓ the Cloud Run server and the Apps Script server read each other's data (same spreadsheet layout)
+  ✓ features switched off on Apps Script: e-invoice 503 EDOC_NOT_CONFIGURED (nothing sent), PDF copies and GST look-up off
+  ✓ pages: privacy and delete-account served by doGet, links point back to the web app; bad envelope → 400
+  ✓ hgiSelfTest: create, read, update, all-or-nothing batch, one-batch invoice write — all PASS
+  ✓ secret import: refused unless armed, with the wrong code, or while active accounts exist; once armed → imported, never logged
+{"severity":"INFO","at":"2026-11-15T18:47:49.625Z","event":"signup","user":"a01266daaaa36cfe8e21ff5e"}
+{"severity":"INFO","at":"2026-11-15T18:47:49.631Z","event":"push","user":"a01266daaaa36cfe8e21ff5e","ok":1}
+{"severity":"INFO","at":"2026-11-15T18:47:49.858Z","event":"login","user":"a01266daaaa36cfe8e21ff5e"}
+{"severity":"INFO","at":"2026-11-15T18:47:49.864Z","event":"login","user":"4aca75a16e829151cfb22013"}
+  ✓ cut-over + roll-back between a Cloud Run (Node) server and this Apps Script server on one spreadsheet, same secrets
+  ✓ each request is a fresh execution (nothing kept in memory) and no execution ends holding the lock
+
+Apps Script (simulated): 20 passed, 0 failed

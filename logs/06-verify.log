@@ -1,0 +1,36 @@
+Verifies
+Verified using v1 scheme (JAR signing): false
+Verified using v2 scheme (APK Signature Scheme v2): true
+Verified using v3 scheme (APK Signature Scheme v3): false
+Verified using v3.1 scheme (APK Signature Scheme v3.1): false
+Verified using v3.2 scheme (APK Signature Scheme v3.2): false
+Verified using v4 scheme (APK Signature Scheme v4): false
+Verified for SourceStamp: false
+Number of signers: 1
+V2 Signer: certificate DN: CN=HGI Billing TEST, O=HARIGURU INDUSTRIES, C=IN
+V2 Signer: certificate SHA-256 digest: de4f68a5d3eefe79bc0b56543fa60eaa52852c84dce8eba7590b084dfdad37f8
+V2 Signer: certificate SHA-1 digest: 47a778f2caab6d2bafa752da3af20412632a26a9
+V2 Signer: certificate MD5 digest: 6ff4ba4d86abe281c2b477298b34f22e
+V2 Signer: key algorithm: RSA
+V2 Signer: key size (bits): 2048
+V2 Signer: public key SHA-256 digest: d5b531a3d951670ff73dbf1249b6d1161f5a8d7821cc31c5f31291ddaae705f2
+V2 Signer: public key SHA-1 digest: 4b95142af2eb84c129772b3e9e18f154154ccc86
+V2 Signer: public key MD5 digest: 999b2be34c20d6dffbe478ec56b9d112
+Re-run with the -verbose and -certs options for more details.
+
+The signer certificate will expire on 2027-11-15.
+package: name='in.hariguru.billing' versionCode='182' versionName='9.4.0' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'
+targetSdkVersion:'36'
+uses-permission: name='android.permission.INTERNET'
+uses-permission: name='in.hariguru.billing.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'
+application-label:'HGI Billing'
+        A: http://schemas.android.com/apk/res/android:allowBackup(0x01010280)=true
+        A: http://schemas.android.com/apk/res/android:fullBackupContent(0x010104eb)=@0x7f100000
+        A: http://schemas.android.com/apk/res/android:usesCleartextTraffic(0x010104ec)=false
+        A: http://schemas.android.com/apk/res/android:dataExtractionRules(0x0101063e)=@0x7f100002
+Signing certificate: CN=HGI Billing TEST, O=HARIGURU INDUSTRIES, C=IN  SHA-256 DE4F68A5D3EEFE79BC0B56543FA60EAA52852C84DCE8EBA7590B084DFDAD37F8  (mode: test-key)
+    resource 0x7f0d0039 string/hgi_auth
+      () "password"
+    resource 0x7f0d003a string/hgi_sync_url
+      () "https://hgi-sync-yygobuu74a-el.a.run.app"
+release APK: password accounts on https://hgi-sync-yygobuu74a-el.a.run.app

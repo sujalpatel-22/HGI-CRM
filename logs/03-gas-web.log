@@ -1,0 +1,17 @@
+▶ Free server (Apps Script stand-in): sign-up, invoice, second phone
+   ✓ sign-in screen shown
+   ✓ account created through the Apps Script server
+   ✓ phone A uploaded everything (status ok, pending 0)
+   ✓ the invoice is a row in the Invoices tab
+   ✓ Users tab: PBKDF2 hash only, no password text
+   ✓ phone B got the invoice with every field exactly as saved on phone A
+   ✓ buyer (formula-like, apostrophes, unicode) and company profile came back unchanged
+   ✓ an edit on phone B reaches phone A
+   ✓ no CORS pre-flight requests (Apps Script cannot answer them): 0
+   ✓ log-out on phone B ended its session on the server
+   ✓ switched-off server: the app says to install the update ("This version of HGI Billing uses a server that has been swit…")
+   ✓ the phone keeps its data and the unsent change
+   ✓ switched back on: the waiting change uploads
+   ✓ no page errors
+
+14 passed, 0 failed
